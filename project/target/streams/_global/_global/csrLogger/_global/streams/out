@@ -1,0 +1,6 @@
+[debug] downloaded https://repo1.maven.org/maven2/com/typesafe/sbt/sbt-native-packager_2.12_1.0/1.5.1/sbt-native-packager-1.5.1.pom
+[debug] downloaded https://repo1.maven.org/maven2/com/typesafe/sbt/sbt-native-packager_2.12_1.0/1.5.1/sbt-native-packager-1.5.1.pom.sha1
+[debug] downloaded https://repo.scala-sbt.org/scalasbt/sbt-plugin-releases/com.typesafe.sbt/sbt-native-packager/scala_2.12/sbt_1.0/1.5.1/ivys/ivy.xml
+[debug] downloaded https://repo.scala-sbt.org/scalasbt/sbt-plugin-releases/com.typesafe.sbt/sbt-native-packager/scala_2.12/sbt_1.0/1.5.1/srcs/sbt-native-packager-sources.jar
+[debug] downloaded https://repo.scala-sbt.org/scalasbt/sbt-plugin-releases/com.typesafe.sbt/sbt-native-packager/scala_2.12/sbt_1.0/1.5.1/jars/sbt-native-packager.jar
+[debug] downloaded https://repo.scala-sbt.org/scalasbt/sbt-plugin-releases/com.typesafe.sbt/sbt-native-packager/scala_2.12/sbt_1.0/1.5.1/docs/sbt-native-packager-javadoc.jar
