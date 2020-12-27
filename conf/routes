@@ -3,14 +3,14 @@
 # ~~~~
 
 # Home page
-GET     /                           controllers.WidgetController.index
+GET     /                           controllers.Controller.index
 
 # Widgets
-GET     /widgets                    controllers.WidgetController.listWidgets
-POST    /widgets                    controllers.WidgetController.createRequest
+GET     /widgets                    controllers.Controller.listWidgets
+POST    /widgets                    controllers.Controller.createRequest
 
-GET    /invoice                     controllers.WidgetController.invoice(invoice)
-GET    /success                     controllers.WidgetController.success(txId)
+GET    /invoice                     controllers.Controller.invoice(invoice)
+GET    /success                     controllers.Controller.success(txId)
 
 # Map static resources from the /public folder to the /assets URL path
 GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)

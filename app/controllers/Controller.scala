@@ -1,6 +1,6 @@
 package controllers
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, Cancellable}
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
@@ -33,7 +33,7 @@ import scala.util.{Failure, Success, Try}
   * See https://www.playframework.com/documentation/2.8.x/ScalaForms#passing-messagesprovider-to-form-helpers
   * for details.
   */
-class WidgetController @Inject() (cc: MessagesControllerComponents)
+class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
     with Logging {
   import controllers.Forms._
@@ -61,7 +61,7 @@ class WidgetController @Inject() (cc: MessagesControllerComponents)
   // The URL to the widget.  You can call this directly from the template, but it
   // can be more convenient to leave the template completely stateless i.e. all
   // of the "WidgetController" references are inside the .scala file.
-  private val postUrl = routes.WidgetController.createRequest()
+  private val postUrl = routes.Controller.createRequest()
 
   def index: Action[AnyContent] =
     Action {
@@ -84,9 +84,11 @@ class WidgetController @Inject() (cc: MessagesControllerComponents)
         case Success(invoice) =>
           val resultF = invoiceDAO.read(invoice).map {
             case None =>
+              throw new RuntimeException("Invoice not from OP_RETURN Bot")
+            case Some(InvoiceDb(_, _, None)) =>
               Ok(views.html.showInvoice(invoice))
-            case Some(InvoiceDb(_, tx, _)) =>
-              Ok(views.html.success(tx))
+            case Some(InvoiceDb(_, _, Some(txId))) =>
+              Redirect(routes.Controller.success(txId.hex))
           }
 
           Await.result(resultF, 30.seconds)
@@ -106,8 +108,10 @@ class WidgetController @Inject() (cc: MessagesControllerComponents)
               BadRequest(
                 views.html
                   .listWidgets(widgets.toSeq, opReturnRequestForm, postUrl))
-            case Some(InvoiceDb(_, tx, _)) =>
+            case Some(InvoiceDb(_, Some(tx), _)) =>
               Ok(views.html.success(tx))
+            case Some(InvoiceDb(invoice, None, _)) =>
+              throw new RuntimeException(s"This is impossible, $invoice")
           }
 
           Await.result(resultF, 30.seconds)
@@ -127,6 +131,7 @@ class WidgetController @Inject() (cc: MessagesControllerComponents)
             views.html.listWidgets(widgets.toSeq, formWithErrors, postUrl))
       }
 
+      // This is the good case, where the form was successfully parsed as an OpReturnRequest
       val successFunction: OpReturnRequest => Result = {
         data: OpReturnRequest =>
           val OpReturnRequest(message, hashMessage) = data
@@ -140,44 +145,21 @@ class WidgetController @Inject() (cc: MessagesControllerComponents)
           val messageSats = if (hashMessage) 32 else message.length
 
           val sats = Satoshis(baseSats + messageSats)
+          val expiry = 60 * 5 // 5 minutes
 
           val result = eclairRpc
             .createInvoice(s"OP_RETURN Bot: $message",
                            MilliSatoshis(sats),
-                           expireIn = 300.seconds)
-            .map { invoice =>
-              system.scheduler.scheduleOnce(5.seconds)(
-                eclairRpc.monitorInvoice(invoice, 1.second, 300).flatMap { payment =>
-                  payment.status match {
-                    case Pending | Expired =>
-                      FutureUtil.unit
-                    case _: Received =>
-                      ConsoleCli.exec(CliCommand.OpReturnCommit(
-                                        message,
-                                        hashMessage,
-                                        Some(SatoshisPerVirtualByte.one)),
-                                      Config.empty) match {
-                        case Failure(exception) =>
-                          logger.error(
-                            s"Error: on server creating transaction $exception")
-                          Future.failed(exception)
-                        case Success(txIdStr) =>
-                          logger.info(s"Successfully created tx: $txIdStr")
-                          val txId = DoubleSha256DigestBE(txIdStr)
-                          val txHex = ConsoleCli
-                            .exec(CliCommand.GetTransaction(txId), Config.empty)
-                            .get
+                           expireIn = expiry.seconds)
+            .flatMap { invoice =>
+              val db: InvoiceDb = InvoiceDb(invoice, None, None)
 
-                          val db = InvoiceDb(invoice, Transaction(txHex), txId)
-                          invoiceDAO.upsert(db)
-                      }
-                  }
-                }
-              )
+              startMonitor(invoice, message, hashMessage, expiry)
 
-              // This is the good case, where the form was successfully parsed as a Data object.
-              widgets += data
-              Ok(views.html.showInvoice(invoice))
+              invoiceDAO.create(db).map { _ =>
+                widgets += data
+                Redirect(routes.Controller.invoice(invoice.toString()))
+              }
             }
 
           Await.result(result, 30.seconds)
@@ -186,4 +168,43 @@ class WidgetController @Inject() (cc: MessagesControllerComponents)
       val formValidationResult = opReturnRequestForm.bindFromRequest()
       formValidationResult.fold(errorFunction, successFunction)
     }
+
+  private def startMonitor(
+      invoice: LnInvoice,
+      message: String,
+      hashMessage: Boolean,
+      expiry: Int): Cancellable = {
+    system.scheduler.scheduleOnce(2.seconds) {
+      logger.info(s"Starting monitor for invoice ${invoice.toString()}")
+      println(s"Starting monitor for invoice ${invoice.toString()}")
+      eclairRpc.monitorInvoice(invoice, 1.second, expiry).flatMap { payment =>
+        println(payment.status)
+        payment.status match {
+          case Pending | Expired => FutureUtil.unit
+          case recv: Received =>
+            logger.info(s"Received ${recv.amount.toSatoshis}!")
+            ConsoleCli.exec(
+              CliCommand.OpReturnCommit(message,
+                                        hashMessage,
+                                        Some(SatoshisPerVirtualByte.one)),
+              Config.empty) match {
+              case Failure(exception) =>
+                logger.error(
+                  s"Error: on server creating transaction $exception")
+                Future.failed(exception)
+              case Success(txIdStr) =>
+                logger.info(s"Successfully created tx: $txIdStr")
+                val txId = DoubleSha256DigestBE(txIdStr)
+                val txHex = ConsoleCli
+                  .exec(CliCommand.GetTransaction(txId), Config.empty)
+                  .get
+
+                val dbWithTx: InvoiceDb =
+                  InvoiceDb(invoice, Some(Transaction(txHex)), Some(txId))
+                invoiceDAO.upsert(dbWithTx)
+            }
+        }
+      }
+    }
+  }
 }

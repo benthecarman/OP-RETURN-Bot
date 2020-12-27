@@ -21,7 +21,7 @@ import scala.util.Properties
 /** Configuration for the Bitcoin-S wallet
   *
   * @param directory The data directory of the wallet
-  * @param conf Optional sequence of configuration overrides
+  * @param conf      Optional sequence of configuration overrides
   */
 case class OpReturnBotAppConfig(
     private val directory: Path,
@@ -71,8 +71,8 @@ case class OpReturnBotAppConfig(
   override def start(): Future[Unit] = {
     logger.debug(s"Initializing setup")
 
-    if (Files.notExists(datadir)) {
-      Files.createDirectories(datadir)
+    if (Files.notExists(baseDatadir)) {
+      Files.createDirectories(baseDatadir)
     }
 
     if (Files.notExists(eclairDataDir)) {
@@ -93,6 +93,8 @@ case class OpReturnBotAppConfig(
   }
 
   override def stop(): Future[Unit] = FutureUtil.unit
+
+  override lazy val dbPath: Path = baseDatadir
 
   lazy val eclairBitcoindPair: EclairBitcoindPair =
     EclairBitcoindPair.fromConfig(this)

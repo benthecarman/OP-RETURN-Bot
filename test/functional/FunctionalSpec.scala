@@ -1,6 +1,6 @@
 package functional
 
-import controllers.{routes, WidgetController}
+import controllers.{routes, Controller}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatestplus.play.PlaySpec
 import org.scalatestplus.play.guice.GuiceOneAppPerSuite
@@ -32,11 +32,11 @@ class FunctionalSpec
 
     "process a POST request successfully" in {
       // Pull the controller from the already running Play application, using Injecting
-      val controller = inject[WidgetController]
+      val controller = inject[Controller]
 
       // Call using the FakeRequest and the correct body information and CSRF token
-      val request = FakeRequest(routes.WidgetController.createWidget())
-        .withFormUrlEncodedBody("name" -> "foo", "hash" -> "false")
+      val request = FakeRequest(routes.Controller.createRequest())
+        .withFormUrlEncodedBody("Message" -> "foo", "hash" -> "false")
         .withCSRFToken
       val futureResult: Future[Result] =
         controller.createRequest().apply(request)
@@ -44,16 +44,16 @@ class FunctionalSpec
       // And we can get the results out using Scalatest's "Futures" trait, which gives us whenReady
       whenReady(futureResult) { result =>
         result.header.headers(LOCATION) must equal(
-          routes.WidgetController.listWidgets().url)
+          routes.Controller.listWidgets().url)
       }
     }
 
     "reject a POST request when given bad input" in {
-      val controller = inject[WidgetController]
+      val controller = inject[Controller]
 
       // Call the controller with negative price...
-      val request = FakeRequest(routes.WidgetController.createWidget())
-        .withFormUrlEncodedBody("name" -> "foo", "price" -> "-100")
+      val request = FakeRequest(routes.Controller.createRequest())
+        .withFormUrlEncodedBody("Message" -> "foo", "hash" -> "-100")
         .withCSRFToken
       val futureResult: Future[Result] =
         controller.createRequest().apply(request)
