@@ -1,0 +1,11 @@
+@import org.bitcoins.core.protocol.transaction.Transaction
+@(tx: Transaction)(implicit request: MessagesRequestHeader)
+
+@main("Success") {
+
+    <h1>Success!</h1>
+
+    <label>TxId: @tx.txIdBE.hex</label>
+
+    <hr/>
+}

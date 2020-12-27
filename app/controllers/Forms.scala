@@ -1,0 +1,38 @@
+package controllers
+
+import org.bitcoins.core.protocol.ln.LnInvoice
+import org.bitcoins.crypto.CryptoUtil
+
+object Forms {
+  import play.api.data.Form
+  import play.api.data.Forms._
+
+  case class WrappedInvoice(invoice: LnInvoice)
+
+  case class OpReturnRequest(message: String, hash: Boolean) {
+
+    lazy val usedMessage: String =
+      if (hash)
+        CryptoUtil.sha256(message).hex
+      else message
+  }
+
+  /**
+    * The form definition for the "create a widget" form.
+    * It specifies the form fields and their types,
+    * as well as how to convert from a Data to form data and vice versa.
+    */
+  val opReturnRequestForm: Form[OpReturnRequest] = Form(
+    mapping(
+      "Message" -> nonEmptyText,
+      "Hash" -> boolean
+    )(OpReturnRequest.apply)(OpReturnRequest.unapply)
+  )
+
+  val invoiceForm: Form[WrappedInvoice] = Form(
+    mapping(
+      "invoice" -> text.verifying(str => LnInvoice.fromStringT(str).isSuccess)
+    )(str => WrappedInvoice(LnInvoice.fromString(str)))(wi =>
+      WrappedInvoice.unapply(wi).map(_.toString()))
+  )
+}
