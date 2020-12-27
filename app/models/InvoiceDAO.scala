@@ -11,8 +11,8 @@ import scala.concurrent.{ExecutionContext, Future}
 
 case class InvoiceDb(
     invoice: LnInvoice,
-    tx: Transaction,
-    txId: DoubleSha256DigestBE)
+    txOpt: Option[Transaction],
+    txIdOpt: Option[DoubleSha256DigestBE])
 
 case class InvoiceDAO()(implicit
     val ec: ExecutionContext,
@@ -43,7 +43,7 @@ case class InvoiceDAO()(implicit
     findByPrimaryKeys(ts.map(_.invoice))
 
   def findByTxId(txId: DoubleSha256DigestBE): Future[Option[InvoiceDb]] = {
-    val query = table.filter(_.txId === txId)
+    val query = table.filter(_.txIdOpt === txId)
 
     safeDatabase.run(query.result).map(_.headOption)
   }
@@ -53,11 +53,11 @@ case class InvoiceDAO()(implicit
 
     def invoice: Rep[LnInvoice] = column("invoice", O.PrimaryKey)
 
-    def transaction: Rep[Transaction] = column("transaction")
+    def transactionOpt: Rep[Option[Transaction]] = column("transaction")
 
-    def txId: Rep[DoubleSha256DigestBE] = column("txid")
+    def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
 
     def * : ProvenShape[InvoiceDb] =
-      (invoice, transaction, txId).<>(InvoiceDb.tupled, InvoiceDb.unapply)
+      (invoice, transactionOpt, txIdOpt).<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }
