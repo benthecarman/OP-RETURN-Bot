@@ -5,5 +5,10 @@
 
     <h1>Success!</h1>
 
-    <label>TxId: @tx.txIdBE.hex</label>
+    <label><a href="https://blockstream.info/tx/@tx.txIdBE.hex">@tx.txIdBE.hex</a></label>
+
+    <h3>Raw Transaction:</h3>
+    <div class="jumbotron">
+        <code>@tx.hex</code>
+    </div>
 }

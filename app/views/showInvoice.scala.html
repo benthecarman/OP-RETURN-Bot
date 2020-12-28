@@ -5,11 +5,10 @@
 
     <h1>Invoice</h1>
 
-    <body>
-        <img id='barcode' src="https://api.qrserver.com/v1/create-qr-code/?data=@{invoice.toString()}&amp;size=1000x1000" alt="" title="invoce" width="500" height="500" />
-        <br>
-        <textarea>@invoice.toString()</textarea>
-    </body>
+    <img id='barcode' src="https://api.qrserver.com/v1/create-qr-code/?data=@{invoice.toString()}&amp;size=1000x1000" alt="" title="invoce" width="300" height="300" />
+    <br>
+    <code>@invoice.toString()</code>
+    <br>
 
     <form method="get" action="invoice">
         <input type="text" id="invoice" name="invoice" hidden value="@invoice.toString()"/>
