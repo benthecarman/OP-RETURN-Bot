@@ -38,7 +38,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     with Logging {
   import controllers.Forms._
 
-  private val widgets = mutable.ArrayBuffer[OpReturnRequest]()
+  private val recentTransactions = mutable.ArrayBuffer[DoubleSha256DigestBE]()
 
   implicit lazy val system: ActorSystem = {
     val system = ActorSystem("op-return-bot")
@@ -64,14 +64,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   private val postUrl = routes.Controller.createRequest()
 
   def index: Action[AnyContent] =
-    Action {
-      Ok(views.html.index())
-    }
-
-  def listWidgets: Action[AnyContent] =
     Action { implicit request: MessagesRequest[AnyContent] =>
       // Pass an unpopulated form to the template
-      Ok(views.html.listWidgets(widgets.toSeq, opReturnRequestForm, postUrl))
+      Ok(
+        views.html
+          .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
     }
 
   def invoice(invoiceStr: String): Action[AnyContent] =
@@ -80,7 +77,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         case Failure(exception) =>
           logger.error(exception)
           BadRequest(
-            views.html.listWidgets(widgets.toSeq, opReturnRequestForm, postUrl))
+            views.html
+              .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
         case Success(invoice) =>
           val resultF = invoiceDAO.read(invoice).map {
             case None =>
@@ -101,13 +99,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         case Failure(exception) =>
           logger.error(exception)
           BadRequest(
-            views.html.listWidgets(widgets.toSeq, opReturnRequestForm, postUrl))
+            views.html
+              .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
         case Success(txId) =>
           val resultF = invoiceDAO.findByTxId(txId).map {
             case None =>
-              BadRequest(
-                views.html
-                  .listWidgets(widgets.toSeq, opReturnRequestForm, postUrl))
+              BadRequest(views.html
+                .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
             case Some(InvoiceDb(_, Some(tx), _)) =>
               Ok(views.html.success(tx))
             case Some(InvoiceDb(invoice, None, _)) =>
@@ -128,7 +126,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           // Let's show the user the form again, with the errors highlighted.
           // Note how we pass the form with errors to the template.
           BadRequest(
-            views.html.listWidgets(widgets.toSeq, formWithErrors, postUrl))
+            views.html
+              .index(recentTransactions.toSeq, formWithErrors, postUrl))
       }
 
       // This is the good case, where the form was successfully parsed as an OpReturnRequest
@@ -157,7 +156,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               startMonitor(invoice, message, hashMessage, expiry)
 
               invoiceDAO.create(db).map { _ =>
-                widgets += data
                 Redirect(routes.Controller.invoice(invoice.toString()))
               }
             }
@@ -195,6 +193,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               case Success(txIdStr) =>
                 logger.info(s"Successfully created tx: $txIdStr")
                 val txId = DoubleSha256DigestBE(txIdStr)
+
+                recentTransactions += txId
+                if (recentTransactions.size >= 5) {
+                  val old = recentTransactions.takeRight(5)
+                  recentTransactions.clear()
+                  recentTransactions ++= old
+                }
+
                 val txHex = ConsoleCli
                   .exec(CliCommand.GetTransaction(txId), Config.empty)
                   .get

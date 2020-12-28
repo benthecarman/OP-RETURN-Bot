@@ -1,9 +1,60 @@
-@()
+@import controllers.Forms.OpReturnRequest
 
-  @main("Welcome to Play") {
-    <div>
-      <ul>
-        <li>Please go to <a href="@routes.WidgetController.listWidgets()">@routes.WidgetController.listWidgets()</a></li>
-      </ul>
+@(recentTxs: Seq[org.bitcoins.crypto.DoubleSha256DigestBE], form: Form[OpReturnRequest], postUrl: Call)(implicit request: MessagesRequestHeader)
+
+@main("OP_Return Bot") {
+    @* Global errors are not tied to any particular form field *@
+    @if(form.hasGlobalErrors) {
+        @form.globalErrors.map { error: FormError =>
+            <div>
+                @error.key: @error.message
+            </div>
+        }
+    }
+
+    <h2>OP_RETURN Bot</h2>
+    <p>
+        An OP_RETURN is an provably prune-able output, these outputs do not need to be stored in the UTXO set
+        but will be permanently part of the blockchain. These outputs can be used to add arbitrary data to the blockchain,
+        creating a timestamp that it existed a given time.
+    </p>
+    <p>
+        OP_RETURN Bot will create an OP_RETURN output for you, you just need to pay the fees.
+    </p>
+    <hr/>
+
+    <h3>Create OP_RETURN</h3>
+    <div class="jumbotron">
+        <div class="row">
+            <div class="col-md-4"></div>
+            <div class="col-md-4">
+                <form method="post" action="createRequest">
+                    @helper.CSRF.formField
+                    <div class="form-group">
+                        <label for="Message">Message:</label>
+                        <input type="text" class="form-control" placeholder="Max 80 chars when not hashing" name="Message" id="Message">
+                    </div>
+                    <div class="form-group form-check" style="float: right">
+                        <label class="form-check-label">
+                            <input class="form-check-input" type="checkbox" name="Hash" id="Hash"> Hash message
+                        </label>
+                    </div>
+                    <br/>
+                    <button type="submit" class="btn btn-primary">Create Invoice</button>
+                </form>
+            </div>
+            <div class="col-md-4"></div>
+        </div>
     </div>
-  }
+
+    <h3>Recent Transactions</h3>
+    <table class="table table-hover">
+        <tbody>
+        @for(tx <- recentTxs) {
+            <tr>
+                <td><a href="https://blockstream.info/tx/@tx.hex">@tx.hex</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
