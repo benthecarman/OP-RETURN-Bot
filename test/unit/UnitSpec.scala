@@ -15,7 +15,7 @@ import play.api.test._
 class UnitSpec extends PlaySpec {
   import play.api.data.FormBinding.Implicits._
 
-  "WidgetForm" must {
+  "Form" must {
 
     "apply successfully from request" in {
       // The easiest way to test a form is by passing it a fake request.
@@ -26,7 +26,7 @@ class UnitSpec extends PlaySpec {
                                                  "FeeRate" -> "10")
       // A successful binding using an implicit request will give you a form with a value.
       val boundForm = Forms.opReturnRequestForm.bindFromRequest()
-      // You can then get the widget data out and test it.
+      // You can then get the data out and test it.
       val data = boundForm.value.get
 
       data.message must equal("foo")
@@ -39,7 +39,7 @@ class UnitSpec extends PlaySpec {
       val data = Map("Message" -> "foo", "Hash" -> "true", "FeeRate" -> "10")
       // A successful binding will give you a form with a value.
       val boundForm = Forms.opReturnRequestForm.bind(data)
-      // You can then get the widget data out and test it.
+      // You can then get the data out and test it.
       val request = boundForm.value.get
 
       request.message must equal("foo")
@@ -53,7 +53,7 @@ class UnitSpec extends PlaySpec {
 
       // ...and binding the form will show errors.
       val errorForm = Forms.opReturnRequestForm.bind(data)
-      // You can then get the widget data out and test it.
+      // You can then get the data out and test it.
       val listOfErrors = errorForm.errors
 
       // Note that the FormError's key is the field it was bound to.

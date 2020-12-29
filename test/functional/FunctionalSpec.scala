@@ -32,7 +32,7 @@ class FunctionalSpec
   val dummyInvoice: LnInvoice = LnInvoice.fromString(
     "lntb20500n1p074mmppp5kscnwh85l98ecyj78qsnsjw2f84kj49csm2ftudz9sv0gu6d7fpqdqafag975j92324yn3qgfhhgw3qvehk7xqzfv9qy9qsqsp5untk52hexrl86ep7qhexaexaswtutzrgehymfz3amvgcesegdxcq4zy422g4mrr4f965nql54qnsnxelhvs2xmyg2cyyp3z8cq2tjznpx8tqzqsrlm2alayxqcm0wdjwp206x0fqnevxp9m0f7904cfdjfqq9xy6uq")
 
-  "WidgetController" must {
+  "Controller" must {
 
     "process a POST request successfully" in {
       // Pull the controller from the already running Play application, using Injecting
