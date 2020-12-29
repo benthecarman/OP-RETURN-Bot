@@ -22,7 +22,7 @@ class BrowserSpec
   "The browser should" must {
     "successfully process a form" in {
       val listWidgetsURL = controllers.routes.Controller
-        .listWidgets()
+        .index()
         .absoluteURL(false, s"localhost:$port")
 
       go to listWidgetsURL

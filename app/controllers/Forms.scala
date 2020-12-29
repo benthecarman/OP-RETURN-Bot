@@ -1,6 +1,7 @@
 package controllers
 
 import org.bitcoins.core.protocol.ln.LnInvoice
+import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.CryptoUtil
 
 object Forms {
@@ -9,7 +10,10 @@ object Forms {
 
   case class WrappedInvoice(invoice: LnInvoice)
 
-  case class OpReturnRequest(message: String, hash: Boolean) {
+  case class OpReturnRequest(
+      message: String,
+      hash: Boolean,
+      feeRate: SatoshisPerVirtualByte) {
 
     lazy val usedMessage: String =
       if (hash)
@@ -25,7 +29,10 @@ object Forms {
   val opReturnRequestForm: Form[OpReturnRequest] = Form(
     mapping(
       "Message" -> nonEmptyText,
-      "Hash" -> boolean
+      "Hash" -> boolean,
+      "FeeRate" -> number(0).transform[SatoshisPerVirtualByte](
+        int => SatoshisPerVirtualByte.fromLong(int),
+        _.toLong.toInt)
     )(OpReturnRequest.apply)(OpReturnRequest.unapply)
   )
 

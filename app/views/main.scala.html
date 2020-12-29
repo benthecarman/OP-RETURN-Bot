@@ -15,23 +15,25 @@
     </head>
     <body>
         <nav class="navbar navbar-expand-lg navbar-light bg-dark">
-            <a class="navbar-brand" href="@routes.Controller.index()" style="padding: 4px;
+            <a class="navbar-brand pointer" href="@routes.Controller.index()" style="padding: 4px;
                 margin: 0;
                 width: 50px;
                 height: 50px; ">
-                <img src="@routes.Assets.versioned("images/logo.png")"
-                style="height: 100%; width: 100%;" title="logo" alt="OP_RETURN Bot"/>
+            <img src="@routes.Assets.versioned("images/op-return-bot.png")"
+                style="height: 100%;
+                width: 100%;" title="logo" alt="OP_RETURN Bot"/>
+            <label class="nav-item" style="color: white; cursor: pointer;">OP_RETURN Bot</label>
             </a>
-@*            <div class="collapse navbar-collapse" id="navbarSupportedContent">*@
-@*                <ul class="navbar-nav mr-auto">*@
-@*                    <li class="nav-item active">*@
-@*                        <a class="nav-link" href="@routes.Controller.index()"><span class="sr-only">(current)</span></a>*@
-@*                    </li>*@
-@*                </ul>*@
-@*            </div>*@
+            @* <div class="collapse navbar-collapse" id="navbarSupportedContent">*@
+            @* <ul class="navbar-nav mr-auto">*@
+            @* <li class="nav-item active">*@
+            @* <a class="nav-link" href="@routes.Controller.index()"><span class="sr-only">(current)</span></a>*@
+            @* </li>*@
+            @* </ul>*@
+            @* </div>*@
         </nav>
         <div class="container">
-        @content
+            @content
         </div>
     </body>
 </html>

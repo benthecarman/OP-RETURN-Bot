@@ -44,7 +44,7 @@ class FunctionalSpec
       // And we can get the results out using Scalatest's "Futures" trait, which gives us whenReady
       whenReady(futureResult) { result =>
         result.header.headers(LOCATION) must equal(
-          routes.Controller.listWidgets().url)
+          routes.Controller.index().url)
       }
     }
 
