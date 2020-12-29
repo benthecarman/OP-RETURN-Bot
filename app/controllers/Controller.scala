@@ -22,16 +22,6 @@ import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-/**
-  * The classic WidgetController using MessagesAbstractController.
-  *
-  * Instead of MessagesAbstractController, you can use the I18nSupport trait,
-  * which provides implicits that create a Messages instance from a request
-  * using implicit conversion.
-  *
-  * See https://www.playframework.com/documentation/2.8.x/ScalaForms#passing-messagesprovider-to-form-helpers
-  * for details.
-  */
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
     with Logging {
@@ -52,14 +42,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   config.start()
 
   val eclairBitcoindPair: EclairBitcoindPair = config.eclairBitcoindPair
-  eclairBitcoindPair.start()
+//  eclairBitcoindPair.start()
 
   val eclairRpc: EclairRpcClient = eclairBitcoindPair.eclair
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
-  // The URL to the widget.  You can call this directly from the template, but it
+  // The URL to the request.  You can call this directly from the template, but it
   // can be more convenient to leave the template completely stateless i.e. all
-  // of the "WidgetController" references are inside the .scala file.
+  // of the "Controller" references are inside the .scala file.
   private val postUrl = routes.Controller.createRequest()
 
   def index: Action[AnyContent] =
