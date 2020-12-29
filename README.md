@@ -11,9 +11,3 @@ Simply follow the instructions in [this short blog](https://www.scala-lang.org/2
 After having these installed you simply need to clone the repo, then run with `sbt run`.
 
 And open [http://localhost:9000/](http://localhost:9000/)
-
-### macOS install
-```
-brew install scala
-brew install sbt
-```
