@@ -1,6 +1,7 @@
 package unit
 
 import controllers.Forms
+import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.scalatestplus.play.PlaySpec
 import play.api.data.FormError
 import play.api.mvc._
@@ -21,7 +22,8 @@ class UnitSpec extends PlaySpec {
       val call = controllers.routes.Controller.createRequest()
       implicit val request: Request[_] =
         FakeRequest(call).withFormUrlEncodedBody("Message" -> "foo",
-                                                 "Hash" -> "true")
+                                                 "Hash" -> "true",
+                                                 "FeeRate" -> "10")
       // A successful binding using an implicit request will give you a form with a value.
       val boundForm = Forms.opReturnRequestForm.bindFromRequest()
       // You can then get the widget data out and test it.
@@ -29,11 +31,12 @@ class UnitSpec extends PlaySpec {
 
       data.message must equal("foo")
       data.hash must equal(true)
+      data.feeRate must equal(SatoshisPerVirtualByte.fromLong(10))
     }
 
     "apply successfully from map" in {
-      // You can also bind directy from a map, if you don't have a request handy.
-      val data = Map("Message" -> "foo", "Hash" -> "true")
+      // You can also bind directly from a map, if you don't have a request handy.
+      val data = Map("Message" -> "foo", "Hash" -> "true", "FeeRate" -> "10")
       // A successful binding will give you a form with a value.
       val boundForm = Forms.opReturnRequestForm.bind(data)
       // You can then get the widget data out and test it.
@@ -41,6 +44,7 @@ class UnitSpec extends PlaySpec {
 
       request.message must equal("foo")
       request.hash must equal(true)
+      request.feeRate must equal(SatoshisPerVirtualByte.fromLong(10))
     }
 
     "show errors when applied unsuccessfully" in {
