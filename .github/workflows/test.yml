@@ -1,4 +1,4 @@
-name: Test
+name: Compile Check
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ jobs:
             ~/.sbt
           key: ${{ runner.os }}-cache
       - name: Compile and Check Formatting
-        run: sbt scalafmtCheckAll test
+        run: sbt test:compile scalafmtCheckAll
 
   mac:
     runs-on: macos-latest
