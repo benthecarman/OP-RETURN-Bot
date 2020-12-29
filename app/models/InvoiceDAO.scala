@@ -3,6 +3,7 @@ package models
 import config.OpReturnBotAppConfig
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.transaction.Transaction
+import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
 import org.bitcoins.db.{CRUD, DbCommonsColumnMappers, SlickUtil}
 import slick.lifted.ProvenShape
@@ -11,6 +12,9 @@ import scala.concurrent.{ExecutionContext, Future}
 
 case class InvoiceDb(
     invoice: LnInvoice,
+    message: String,
+    hash: Boolean,
+    feeRate: SatoshisPerVirtualByte,
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE])
 
@@ -53,11 +57,19 @@ case class InvoiceDAO()(implicit
 
     def invoice: Rep[LnInvoice] = column("invoice", O.PrimaryKey)
 
+    def message: Rep[String] = column("message")
+
+    def hash: Rep[Boolean] = column("hash")
+
+    def feeRate: Rep[SatoshisPerVirtualByte] = column("fee_rate")
+
     def transactionOpt: Rep[Option[Transaction]] = column("transaction")
 
     def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
 
     def * : ProvenShape[InvoiceDb] =
-      (invoice, transactionOpt, txIdOpt).<>(InvoiceDb.tupled, InvoiceDb.unapply)
+      (invoice, message, hash, feeRate, transactionOpt, txIdOpt).<>(
+        InvoiceDb.tupled,
+        InvoiceDb.unapply)
   }
 }

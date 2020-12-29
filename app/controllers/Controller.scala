@@ -6,13 +6,12 @@ import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.cli.{CliCommand, Config, ConsoleCli}
 import org.bitcoins.commons.jsonmodels.eclair.IncomingPaymentStatus._
-import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
-import org.bitcoins.crypto.DoubleSha256DigestBE
+import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE}
 import org.bitcoins.eclair.rpc.client.EclairRpcClient
 import play.api.data._
 import play.api.mvc._
@@ -83,9 +82,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           val resultF = invoiceDAO.read(invoice).map {
             case None =>
               throw new RuntimeException("Invoice not from OP_RETURN Bot")
-            case Some(InvoiceDb(_, _, None)) =>
+            case Some(InvoiceDb(_, _, _, _, _, None)) =>
               Ok(views.html.showInvoice(invoice))
-            case Some(InvoiceDb(_, _, Some(txId))) =>
+            case Some(InvoiceDb(_, _, _, _, _, Some(txId))) =>
               Redirect(routes.Controller.success(txId.hex))
           }
 
@@ -106,9 +105,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
-            case Some(InvoiceDb(_, Some(tx), _)) =>
+            case Some(InvoiceDb(_, _, _, _, Some(tx), _)) =>
               Ok(views.html.success(tx))
-            case Some(InvoiceDb(invoice, None, _)) =>
+            case Some(InvoiceDb(invoice, _, _, _, None, _)) =>
               throw new RuntimeException(s"This is impossible, $invoice")
           }
 
@@ -133,27 +132,33 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       // This is the good case, where the form was successfully parsed as an OpReturnRequest
       val successFunction: OpReturnRequest => Result = {
         data: OpReturnRequest =>
-          val OpReturnRequest(message, hashMessage) = data
+          val OpReturnRequest(message, hashMessage, feeRate) = data
+          val usableMessage = CryptoUtil.normalize(message)
           require(
-            message.length <= 80 || hashMessage,
+            usableMessage.length <= 80 || hashMessage,
             "OP_Return message received was too long, must be less than 80 chars, or hash the message")
 
           // 100 app fee + 102 base tx fee
           val baseSats = 100 + 102
           // if we are hashing the message it is a fixed 32 size
-          val messageSats = if (hashMessage) 32 else message.length
+          val messageSats = if (hashMessage) 32 else usableMessage.length
 
-          val sats = Satoshis(baseSats + messageSats)
+          val sats = feeRate * (baseSats + messageSats)
           val expiry = 60 * 5 // 5 minutes
 
           val result = eclairRpc
-            .createInvoice(s"OP_RETURN Bot: $message",
+            .createInvoice(s"OP_RETURN Bot: $usableMessage",
                            MilliSatoshis(sats),
                            expireIn = expiry.seconds)
             .flatMap { invoice =>
-              val db: InvoiceDb = InvoiceDb(invoice, None, None)
+              val db: InvoiceDb = InvoiceDb(invoice,
+                                            usableMessage,
+                                            hashMessage,
+                                            feeRate,
+                                            None,
+                                            None)
 
-              startMonitor(invoice, message, hashMessage, expiry)
+              startMonitor(invoice, usableMessage, hashMessage, feeRate, expiry)
 
               invoiceDAO.create(db).map { _ =>
                 Redirect(routes.Controller.invoice(invoice.toString()))
@@ -171,6 +176,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       invoice: LnInvoice,
       message: String,
       hashMessage: Boolean,
+      feeRate: SatoshisPerVirtualByte,
       expiry: Int): Cancellable = {
     system.scheduler.scheduleOnce(2.seconds) {
       logger.info(s"Starting monitor for invoice ${invoice.toString()}")
@@ -205,8 +211,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                   .exec(CliCommand.GetTransaction(txId), Config.empty)
                   .get
 
-                val dbWithTx: InvoiceDb =
-                  InvoiceDb(invoice, Some(Transaction(txHex)), Some(txId))
+                val dbWithTx: InvoiceDb = InvoiceDb(invoice,
+                                                    message,
+                                                    hashMessage,
+                                                    feeRate,
+                                                    Some(Transaction(txHex)),
+                                                    Some(txId))
                 invoiceDAO.upsert(dbWithTx)
             }
         }
