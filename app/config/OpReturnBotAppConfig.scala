@@ -31,7 +31,7 @@ case class OpReturnBotAppConfig(
     with DbManagement
     with Logging {
   override val configOverrides: List[Config] = conf.toList
-  override val moduleName: String = "opreturnbot"
+  override val moduleName: String = OpReturnBotAppConfig.moduleName
   override type ConfigType = OpReturnBotAppConfig
 
   override val appConfig: OpReturnBotAppConfig = this
@@ -115,4 +115,6 @@ object OpReturnBotAppConfig extends AppConfigFactory[OpReturnBotAppConfig] {
   override def fromDatadir(datadir: Path, confs: Vector[Config])(implicit
       ec: ExecutionContext): OpReturnBotAppConfig =
     OpReturnBotAppConfig(datadir, confs: _*)
+
+  override val moduleName: String = "opreturnbot"
 }

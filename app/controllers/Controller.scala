@@ -42,7 +42,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   config.start()
 
   val eclairBitcoindPair: EclairBitcoindPair = config.eclairBitcoindPair
-//  eclairBitcoindPair.start()
+  eclairBitcoindPair.start()
 
   val eclairRpc: EclairRpcClient = eclairBitcoindPair.eclair
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
