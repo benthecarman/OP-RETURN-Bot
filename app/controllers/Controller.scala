@@ -39,8 +39,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   implicit lazy val config: OpReturnBotAppConfig =
     OpReturnBotAppConfig.fromDefaultDatadir()
 
-  config.start()
-
   val eclairBitcoindPair: EclairBitcoindPair = config.eclairBitcoindPair
   eclairBitcoindPair.start()
 
