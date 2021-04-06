@@ -1,7 +1,6 @@
 package config
 
 import com.typesafe.config.Config
-import controllers.EclairBitcoindPair
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
 import org.bitcoins.core.util.FutureUtil
@@ -11,6 +10,8 @@ import org.bitcoins.db.{
   DbManagement,
   JdbcProfileComponent
 }
+import org.bitcoins.lnd.rpc.LndRpcClient
+import org.bitcoins.lnd.rpc.config.LndInstance
 import org.bitcoins.rpc.client.common.BitcoindVersion
 
 import java.io.File
@@ -43,11 +44,14 @@ case class OpReturnBotAppConfig(
 
   val baseDatadir: Path = directory
 
-  lazy val eclairDataDir: Path =
-    Paths.get(config.getString(s"bitcoin-s.eclair.datadir"))
+  lazy val startBinaries: Boolean =
+    config.getBoolean(s"bitcoin-s.$moduleName.startBinaries")
 
-  lazy val eclairBinary: File =
-    Paths.get(config.getString(s"bitcoin-s.eclair.binary")).toFile
+  lazy val lndDataDir: Path =
+    Paths.get(config.getString(s"bitcoin-s.lnd.datadir"))
+
+  lazy val lndBinary: File =
+    Paths.get(config.getString(s"bitcoin-s.lnd.binary")).toFile
 
   lazy val bitcoindDataDir: Path =
     Paths.get(config.getString(s"bitcoin-s.bitcoind.datadir"))
@@ -56,17 +60,6 @@ case class OpReturnBotAppConfig(
     Paths.get(config.getString(s"bitcoin-s.bitcoind.binary")).toFile
 
   lazy val bitcoindVersion: BitcoindVersion = BitcoindVersion.newest
-  //  = {
-  //    val versionStr = config.getString(s"$moduleName.bitcoind.version")
-  //    val versionOpt = BitcoindVersion.fromString(versionStr)
-  //    versionOpt match {
-  //      case None =>
-  //        throw new RuntimeException(
-  //          s"$versionStr is not a valid bitcoind version")
-  //      case Some(version) =>
-  //        version
-  //    }
-  //  }
 
   override def start(): Future[Unit] = {
     logger.debug(s"Initializing setup")
@@ -75,9 +68,9 @@ case class OpReturnBotAppConfig(
       Files.createDirectories(baseDatadir)
     }
 
-    if (Files.notExists(eclairDataDir)) {
+    if (Files.notExists(lndDataDir)) {
       throw new RuntimeException(
-        s"Cannot find eclair data dir at ${eclairDataDir.toString}")
+        s"Cannot find lnd data dir at ${lndDataDir.toString}")
     }
 
     if (Files.notExists(bitcoindDataDir)) {
@@ -85,19 +78,22 @@ case class OpReturnBotAppConfig(
         s"Cannot find bitcoind data dir at ${bitcoindDataDir.toString}")
     }
 
-    logger.debug(s"Initializing eclair with bitcoind version $bitcoindVersion")
+    logger.debug(s"Initializing lnd with bitcoind version $bitcoindVersion")
 
     FutureUtil
       .sequentially(allTables)(table => createTable(table))
       .map(_ => ())
   }
 
-  override def stop(): Future[Unit] = FutureUtil.unit
+  override def stop(): Future[Unit] = Future.unit
 
   override lazy val dbPath: Path = baseDatadir
 
-  lazy val eclairBitcoindPair: EclairBitcoindPair =
-    EclairBitcoindPair.fromConfig(this)
+  lazy val lndInstance: LndInstance =
+    LndInstance.fromDataDir(lndDataDir.toFile)
+
+  lazy val lndRpcClient: LndRpcClient =
+    LndRpcClient(lndInstance, Some(lndBinary))
 
   override val allTables: List[TableQuery[Table[_]]] =
     List(InvoiceDAO()(ec, this).table)

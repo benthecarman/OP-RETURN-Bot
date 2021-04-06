@@ -10,10 +10,7 @@ object Forms {
 
   case class WrappedInvoice(invoice: LnInvoice)
 
-  case class OpReturnRequest(
-      message: String,
-      hash: Boolean,
-      feeRate: SatoshisPerVirtualByte) {
+  case class OpReturnRequest(message: String, hash: Boolean) {
 
     lazy val usedMessage: String =
       if (hash)
@@ -24,10 +21,7 @@ object Forms {
   val opReturnRequestForm: Form[OpReturnRequest] = Form(
     mapping(
       "Message" -> nonEmptyText,
-      "Hash" -> boolean,
-      "FeeRate" -> number(0).transform[SatoshisPerVirtualByte](
-        int => SatoshisPerVirtualByte.fromLong(int),
-        _.toLong.toInt)
+      "Hash" -> boolean
     )(OpReturnRequest.apply)(OpReturnRequest.unapply)
   )
 

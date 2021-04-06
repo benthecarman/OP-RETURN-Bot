@@ -4,17 +4,22 @@ import akka.actor.{ActorSystem, Cancellable}
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
-import org.bitcoins.cli.{CliCommand, Config, ConsoleCli}
-import org.bitcoins.commons.jsonmodels.eclair.IncomingPaymentStatus._
+import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
-import org.bitcoins.core.protocol.transaction.Transaction
-import org.bitcoins.core.util.FutureUtil
+import org.bitcoins.core.protocol.script.ScriptPubKey
+import org.bitcoins.core.protocol.transaction.TransactionOutput
+import org.bitcoins.core.script.constant.ScriptConstant
+import org.bitcoins.core.script.control.OP_RETURN
+import org.bitcoins.core.util.BitcoinScriptUtil
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
-import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE}
-import org.bitcoins.eclair.rpc.client.EclairRpcClient
+import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE, Sha256Digest}
+import org.bitcoins.feeprovider.MempoolSpaceProvider
+import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
+import org.bitcoins.lnd.rpc.LndRpcClient
 import play.api.data._
 import play.api.mvc._
+import scodec.bits.ByteVector
 
 import javax.inject.Inject
 import scala.collection._
@@ -25,6 +30,7 @@ import scala.util.{Failure, Success, Try}
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
     with Logging {
+
   import controllers.Forms._
 
   private val recentTransactions = mutable.ArrayBuffer[DoubleSha256DigestBE]()
@@ -39,10 +45,16 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   implicit lazy val config: OpReturnBotAppConfig =
     OpReturnBotAppConfig.fromDefaultDatadir()
 
-  val eclairBitcoindPair: EclairBitcoindPair = config.eclairBitcoindPair
-  eclairBitcoindPair.start()
+  val lnd: LndRpcClient = config.lndRpcClient
 
-  val eclairRpc: EclairRpcClient = eclairBitcoindPair.eclair
+  config.start()
+
+  if (config.startBinaries) {
+    lnd.start()
+  }
+
+  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(FastestFeeTarget)
+
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
   // The URL to the request.  You can call this directly from the template, but it
@@ -67,12 +79,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             views.html
               .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
         case Success(invoice) =>
-          val resultF = invoiceDAO.read(invoice).map {
+          val resultF = invoiceDAO.read(invoice.lnTags.paymentHash.hash).map {
             case None =>
               throw new RuntimeException("Invoice not from OP_RETURN Bot")
-            case Some(InvoiceDb(_, _, _, _, _, None)) =>
+            case Some(InvoiceDb(_, _, _, _, _, _, None)) =>
               Ok(views.html.showInvoice(invoice))
-            case Some(InvoiceDb(_, _, _, _, _, Some(txId))) =>
+            case Some(InvoiceDb(_, _, _, _, _, _, Some(txId))) =>
               Redirect(routes.Controller.success(txId.hex))
           }
 
@@ -93,9 +105,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
-            case Some(InvoiceDb(_, _, _, _, Some(tx), _)) =>
+            case Some(InvoiceDb(_, _, _, _, _, Some(tx), _)) =>
               Ok(views.html.success(tx))
-            case Some(InvoiceDb(invoice, _, _, _, None, _)) =>
+            case Some(InvoiceDb(_, invoice, _, _, _, None, _)) =>
               throw new RuntimeException(s"This is impossible, $invoice")
           }
 
@@ -120,39 +132,51 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       // This is the good case, where the form was successfully parsed as an OpReturnRequest
       val successFunction: OpReturnRequest => Result = {
         data: OpReturnRequest =>
-          val OpReturnRequest(message, hashMessage, feeRate) = data
+          val OpReturnRequest(message, hashMessage) = data
           val usableMessage = CryptoUtil.normalize(message)
           require(
             usableMessage.length <= 80 || hashMessage,
             "OP_Return message received was too long, must be less than 80 chars, or hash the message")
 
-          // 100 app fee + 102 base tx fee
-          val baseSats = 100 + 102
-          // if we are hashing the message it is a fixed 32 size
-          val messageSats = if (hashMessage) 32 else usableMessage.length
+          val result = feeProvider.getFeeRate
+            .map(_.asInstanceOf[SatoshisPerVirtualByte])
+            .flatMap { feeRate =>
+              // 102 base tx fee + 100 app fee
+              val baseSize = 102 + 100
+              // if we are hashing the message it is a fixed 32 size
+              val messageSize = if (hashMessage) 32 else usableMessage.length
 
-          val sats = feeRate * (baseSats + messageSats)
-          val expiry = 60 * 5 // 5 minutes
+              // tx fee + app fee (1337)
+              val sats = (feeRate * (baseSize + messageSize)) + Satoshis(1337)
+              val expiry = 60 * 5 // 5 minutes
 
-          val result = eclairRpc
-            .createInvoice(s"OP_RETURN Bot: $usableMessage",
-                           MilliSatoshis(sats),
-                           expireIn = expiry.seconds)
-            .flatMap { invoice =>
-              val db: InvoiceDb = InvoiceDb(invoice,
-                                            usableMessage,
-                                            hashMessage,
-                                            feeRate,
-                                            None,
-                                            None)
+              lnd
+                .addInvoice(s"OP_RETURN Bot: $usableMessage",
+                            MilliSatoshis(sats),
+                            expiry)
+                .flatMap { invoiceResult =>
+                  val invoice = invoiceResult.invoice
+                  val db: InvoiceDb =
+                    InvoiceDb(Sha256Digest(invoiceResult.rHash),
+                              invoice,
+                              usableMessage,
+                              hashMessage,
+                              feeRate,
+                              None,
+                              None)
 
-              startMonitor(invoice, usableMessage, hashMessage, feeRate, expiry)
+                  startMonitor(invoiceResult.rHash,
+                               invoice,
+                               usableMessage,
+                               hashMessage,
+                               feeRate,
+                               expiry)
 
-              invoiceDAO.create(db).map { _ =>
-                Redirect(routes.Controller.invoice(invoice.toString()))
-              }
+                  invoiceDAO.create(db).map { _ =>
+                    Redirect(routes.Controller.invoice(invoice.toString()))
+                  }
+                }
             }
-
           Await.result(result, 30.seconds)
       }
 
@@ -161,53 +185,65 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
 
   private def startMonitor(
+      rHash: ByteVector,
       invoice: LnInvoice,
       message: String,
       hashMessage: Boolean,
       feeRate: SatoshisPerVirtualByte,
       expiry: Int): Cancellable = {
     system.scheduler.scheduleOnce(2.seconds) {
-      logger.info(s"Starting monitor for invoice ${invoice.toString()}")
-      println(s"Starting monitor for invoice ${invoice.toString()}")
-      eclairRpc.monitorInvoice(invoice, 1.second, expiry).flatMap { payment =>
-        println(payment.status)
-        payment.status match {
-          case Pending | Expired => FutureUtil.unit
-          case recv: Received =>
-            logger.info(s"Received ${recv.amount.toSatoshis}!")
-            ConsoleCli.exec(
-              CliCommand.OpReturnCommit(message,
-                                        hashMessage,
-                                        Some(SatoshisPerVirtualByte.one)),
-              Config.empty) match {
-              case Failure(exception) =>
-                logger.error(
-                  s"Error: on server creating transaction $exception")
-                Future.failed(exception)
-              case Success(txIdStr) =>
-                logger.info(s"Successfully created tx: $txIdStr")
-                val txId = DoubleSha256DigestBE(txIdStr)
+      logger.info(s"Starting monitor for invoice ${rHash.toHex}")
 
-                recentTransactions += txId
-                if (recentTransactions.size >= 5) {
-                  val old = recentTransactions.takeRight(5)
-                  recentTransactions.clear()
-                  recentTransactions ++= old
-                }
+      lnd.monitorInvoice(rHash, 1.second, expiry).flatMap { invoiceResult =>
+        if (invoiceResult.state.isSettled) {
+          logger.info(s"Received ${invoiceResult.amtPaidSat} sats!")
 
-                val txHex = ConsoleCli
-                  .exec(CliCommand.GetTransaction(txId), Config.empty)
-                  .get
+          val output = {
+            val messageToUse =
+              if (hashMessage)
+                CryptoUtil.sha256(ByteVector(message.getBytes)).bytes
+              else ByteVector(message.getBytes)
 
-                val dbWithTx: InvoiceDb = InvoiceDb(invoice,
-                                                    message,
-                                                    hashMessage,
-                                                    feeRate,
-                                                    Some(Transaction(txHex)),
-                                                    Some(txId))
-                invoiceDAO.upsert(dbWithTx)
+            val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
+              messageToUse) :+ ScriptConstant(messageToUse)
+
+            val scriptPubKey = ScriptPubKey(asm.toVector)
+
+            TransactionOutput(Satoshis.zero, scriptPubKey)
+          }
+
+          val createTxF = for {
+            transaction <-
+              lnd.sendOutputs(Vector(output), feeRate, spendUnconfirmed = true)
+            _ <- lnd.publishTransaction(transaction)
+          } yield {
+            val txId = transaction.txIdBE
+            logger.info(s"Successfully created tx: ${txId.hex}")
+
+            recentTransactions += txId
+            if (recentTransactions.size >= 5) {
+              val old = recentTransactions.takeRight(5)
+              recentTransactions.clear()
+              recentTransactions ++= old
             }
-        }
+
+            val dbWithTx: InvoiceDb = InvoiceDb(Sha256Digest(rHash),
+                                                invoice,
+                                                message,
+                                                hashMessage,
+                                                feeRate,
+                                                Some(transaction),
+                                                Some(txId))
+            invoiceDAO.upsert(dbWithTx)
+          }
+
+          createTxF.failed.foreach { err =>
+            logger.error(
+              s"Failed to create tx for invoice ${invoice.lnTags.paymentHash.hash.hex}, got error $err")
+          }
+
+          createTxF
+        } else Future.unit
       }
     }
   }

@@ -11,6 +11,7 @@ import slick.lifted.ProvenShape
 import scala.concurrent.{ExecutionContext, Future}
 
 case class InvoiceDb(
+    rHash: Sha256Digest,
     invoice: LnInvoice,
     message: String,
     hash: Boolean,
@@ -21,8 +22,8 @@ case class InvoiceDb(
 case class InvoiceDAO()(implicit
     val ec: ExecutionContext,
     override val appConfig: OpReturnBotAppConfig)
-    extends CRUD[InvoiceDb, LnInvoice]
-    with SlickUtil[InvoiceDb, LnInvoice] {
+    extends CRUD[InvoiceDb, Sha256Digest]
+    with SlickUtil[InvoiceDb, Sha256Digest] {
 
   import profile.api._
 
@@ -39,12 +40,12 @@ case class InvoiceDAO()(implicit
     createAllNoAutoInc(ts, safeDatabase)
 
   override protected def findByPrimaryKeys(
-      ids: Vector[LnInvoice]): Query[InvoiceTable, InvoiceDb, Seq] =
-    table.filter(_.invoice.inSet(ids))
+      ids: Vector[Sha256Digest]): Query[InvoiceTable, InvoiceDb, Seq] =
+    table.filter(_.rHash.inSet(ids))
 
   override protected def findAll(
       ts: Vector[InvoiceDb]): Query[InvoiceTable, InvoiceDb, Seq] =
-    findByPrimaryKeys(ts.map(_.invoice))
+    findByPrimaryKeys(ts.map(_.rHash))
 
   def findByTxId(txId: DoubleSha256DigestBE): Future[Option[InvoiceDb]] = {
     val query = table.filter(_.txIdOpt === txId)
@@ -55,7 +56,9 @@ case class InvoiceDAO()(implicit
   class InvoiceTable(tag: Tag)
       extends Table[InvoiceDb](tag, schemaName, "invoices") {
 
-    def invoice: Rep[LnInvoice] = column("invoice", O.PrimaryKey)
+    def rHash: Rep[Sha256Digest] = column("r_hash", O.PrimaryKey)
+
+    def invoice: Rep[LnInvoice] = column("invoice")
 
     def message: Rep[String] = column("message")
 
@@ -68,7 +71,7 @@ case class InvoiceDAO()(implicit
     def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
 
     def * : ProvenShape[InvoiceDb] =
-      (invoice, message, hash, feeRate, transactionOpt, txIdOpt).<>(
+      (rHash, invoice, message, hash, feeRate, transactionOpt, txIdOpt).<>(
         InvoiceDb.tupled,
         InvoiceDb.unapply)
   }

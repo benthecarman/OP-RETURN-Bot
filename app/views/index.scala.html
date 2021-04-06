@@ -40,11 +40,6 @@
                             </label>
                         </div>
                         <br/>
-                        <div class="form-group">
-                            <label for="FeeRate">Fee rate:</label>
-                            <input type="text" class="form-control" placeholder="(sats/vbyte)" name="FeeRate" id="FeeRate">
-                        </div>
-                        <br/>
                         <button type="submit" class="btn btn-primary">Create Invoice</button>
                     </form>
                 </div>
@@ -55,9 +50,9 @@
         <h3>Recent Transactions</h3>
         <table class="table table-hover">
             <tbody>
-            @for(tx <- recentTxs) {
+            @for(txId <- recentTxs) {
                 <tr>
-                    <td><a href="https://blockstream.info/tx/@tx.hex">@tx.hex</a></td>
+                    <td><a href="https://blockstream.info/tx/@txId.hex">@txId.hex</a></td>
                 </tr>
             }
             </tbody>

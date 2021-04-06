@@ -1,4 +1,5 @@
-val bitcoinsV = "0.5.0"
+val bitcoinsV = "0.5.0-126-40ebc01c-SNAPSHOT"
+val akkaV = "2.6.13"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
@@ -15,12 +16,12 @@ lazy val root = (project in file("."))
       guice,
       "org.scalatestplus.play" %% "scalatestplus-play" % "5.0.0" % Test,
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-eclair-rpc" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-cli" % bitcoinsV withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-stream" % "2.6.11" withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-actor-typed" % "2.6.11" withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-serialization-jackson" % "2.6.11" withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-slf4j" % "2.6.11" withSources () withJavadoc ()
+      "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
+      "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
+      "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
+      "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
+      "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc ()
     ),
     scalacOptions ++= Seq(
       "-feature",
