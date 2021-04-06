@@ -53,9 +53,6 @@ case class OpReturnBotAppConfig(
   lazy val lndBinary: File =
     Paths.get(config.getString(s"bitcoin-s.lnd.binary")).toFile
 
-  lazy val bitcoindDataDir: Path =
-    Paths.get(config.getString(s"bitcoin-s.bitcoind.datadir"))
-
   lazy val bitcoindBinary: File =
     Paths.get(config.getString(s"bitcoin-s.bitcoind.binary")).toFile
 
@@ -71,11 +68,6 @@ case class OpReturnBotAppConfig(
     if (Files.notExists(lndDataDir)) {
       throw new RuntimeException(
         s"Cannot find lnd data dir at ${lndDataDir.toString}")
-    }
-
-    if (Files.notExists(bitcoindDataDir)) {
-      throw new RuntimeException(
-        s"Cannot find bitcoind data dir at ${bitcoindDataDir.toString}")
     }
 
     logger.debug(s"Initializing lnd with bitcoind version $bitcoindVersion")
