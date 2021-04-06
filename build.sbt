@@ -7,11 +7,12 @@ resolvers +=
   "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
 lazy val root = (project in file("."))
-  .enablePlugins(PlayScala)
+  .enablePlugins(PlayScala, DebianPlugin)
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
     scalaVersion := "2.13.4",
+    maintainer := "benthecarman",
     libraryDependencies ++= Seq(
       guice,
       "org.scalatestplus.play" %% "scalatestplus-play" % "5.0.0" % Test,
