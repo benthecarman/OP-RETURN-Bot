@@ -53,6 +53,12 @@ case class InvoiceDAO()(implicit
     safeDatabase.run(query.result).map(_.headOption)
   }
 
+  def lastFiveCompleted(): Future[Vector[DoubleSha256DigestBE]] = {
+    val query = table.filter(_.txIdOpt.isDefined).map(_.txIdOpt).take(5)
+
+    safeDatabase.runVec(query.result).map(_.flatten)
+  }
+
   class InvoiceTable(tag: Tag)
       extends Table[InvoiceDb](tag, schemaName, "invoices") {
 
@@ -68,7 +74,8 @@ case class InvoiceDAO()(implicit
 
     def transactionOpt: Rep[Option[Transaction]] = column("transaction")
 
-    def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
+    def txIdOpt: Rep[Option[DoubleSha256DigestBE]] =
+      column[Option[DoubleSha256DigestBE]]("txid")
 
     def * : ProvenShape[InvoiceDb] =
       (rHash, invoice, message, hash, feeRate, transactionOpt, txIdOpt).<>(

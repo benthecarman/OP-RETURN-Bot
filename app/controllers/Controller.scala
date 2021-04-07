@@ -23,6 +23,7 @@ import scodec.bits.ByteVector
 
 import javax.inject.Inject
 import scala.collection._
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -32,8 +33,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     with Logging {
 
   import controllers.Forms._
-
-  private val recentTransactions = mutable.ArrayBuffer[DoubleSha256DigestBE]()
 
   implicit lazy val system: ActorSystem = {
     val system = ActorSystem("op-return-bot")
@@ -61,6 +60,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   // can be more convenient to leave the template completely stateless i.e. all
   // of the "Controller" references are inside the .scala file.
   private val postUrl = routes.Controller.createRequest()
+
+  private val recentTransactions: ArrayBuffer[DoubleSha256DigestBE] = {
+    val f = invoiceDAO.lastFiveCompleted()
+    val res = Await.result(f, 15.seconds)
+    mutable.ArrayBuffer[DoubleSha256DigestBE]().addAll(res)
+  }
 
   def index: Action[AnyContent] =
     Action { implicit request: MessagesRequest[AnyContent] =>
