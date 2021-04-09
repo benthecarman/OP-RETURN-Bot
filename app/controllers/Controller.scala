@@ -15,7 +15,7 @@ import org.bitcoins.core.util.BitcoinScriptUtil
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.feeprovider.MempoolSpaceProvider
-import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
+import org.bitcoins.feeprovider.MempoolSpaceTarget._
 import org.bitcoins.lnd.rpc.LndRpcClient
 import play.api.data._
 import play.api.mvc._
@@ -52,7 +52,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     lnd.start()
   }
 
-  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(FastestFeeTarget)
+  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(HalfHourFeeTarget)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
