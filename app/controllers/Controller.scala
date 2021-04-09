@@ -52,7 +52,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     lnd.start()
   }
 
-  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(HalfHourFeeTarget)
+  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(
+    HalfHourFeeTarget)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
@@ -155,8 +156,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               val sats = (feeRate * (baseSize + messageSize)) + Satoshis(1337)
               val expiry = 60 * 5 // 5 minutes
 
+              val onChainMessage = if (hashMessage) {
+                CryptoUtil.sha256(ByteVector(usableMessage.getBytes)).hex
+              } else usableMessage
+
               lnd
-                .addInvoice(s"OP_RETURN Bot: $usableMessage",
+                .addInvoice(s"OP_RETURN Bot: $onChainMessage",
                             MilliSatoshis(sats),
                             expiry)
                 .flatMap { invoiceResult =>
