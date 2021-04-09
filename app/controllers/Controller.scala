@@ -141,7 +141,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           val OpReturnRequest(message, hashMessage) = data
           val usableMessage = CryptoUtil.normalize(message)
           require(
-            usableMessage.length <= 80 || hashMessage,
+            usableMessage.getBytes.length <= 80 || hashMessage,
             "OP_Return message received was too long, must be less than 80 chars, or hash the message")
 
           val result = feeProvider.getFeeRate
@@ -150,7 +150,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               // 102 base tx fee + 100 app fee
               val baseSize = 102 + 100
               // if we are hashing the message it is a fixed 32 size
-              val messageSize = if (hashMessage) 32 else usableMessage.length
+              val messageSize = if (hashMessage) 32 else usableMessage.getBytes.length
 
               // tx fee + app fee (1337)
               val sats = (feeRate * (baseSize + messageSize)) + Satoshis(1337)
