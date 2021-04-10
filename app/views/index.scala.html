@@ -32,15 +32,10 @@
                         @helper.CSRF.formField
                         <div class="form-group">
                             <label for="Message">Message:</label>
-                            <input type="text" class="form-control" placeholder="Max 80 characters when not hashing" name="Message" id="Message">
-                        </div>
-                        <div class="form-group form-check" style="float: right">
-                            <label class="form-check-label">
-                                <input class="form-check-input" type="checkbox" name="Hash" id="Hash"> Hash message
-                            </label>
+                            <input type="text" class="form-control" placeholder="Max 80 characters" name="Message" id="Message">
                         </div>
                         <br/>
-                        <button type="submit" class="btn btn-primary">Create Invoice</button>
+                        <button style="float: right" type="submit" class="btn btn-primary">Create Invoice</button>
                     </form>
                 </div>
                 <div class="col-md-4"></div>
@@ -50,7 +45,7 @@
         <h3>Recent Transactions</h3>
         <table class="table table-hover">
             <tbody>
-            @for(txId <- recentTxs) {
+            @for(txId <- recentTxs.reverse) {
                 <tr>
                     <td><a href="https://blockstream.info/tx/@txId.hex">@txId.hex</a></td>
                 </tr>

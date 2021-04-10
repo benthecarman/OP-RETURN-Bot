@@ -13,7 +13,7 @@ import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.BitcoinScriptUtil
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
-import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE, Sha256Digest}
+import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.feeprovider.MempoolSpaceProvider
 import org.bitcoins.feeprovider.MempoolSpaceTarget._
 import org.bitcoins.lnd.rpc.LndRpcClient
@@ -138,49 +138,42 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       // This is the good case, where the form was successfully parsed as an OpReturnRequest
       val successFunction: OpReturnRequest => Result = {
         data: OpReturnRequest =>
-          val OpReturnRequest(message, hashMessage) = data
-          val usableMessage = CryptoUtil.normalize(message)
+          val message = data.message
           require(
-            usableMessage.getBytes.length <= 80 || hashMessage,
-            "OP_Return message received was too long, must be less than 80 chars, or hash the message")
+            message.getBytes.length <= 80,
+            "OP_Return message received was too long, must be less than 80 chars")
 
           val result = feeProvider.getFeeRate
             .map(_.asInstanceOf[SatoshisPerVirtualByte])
             .flatMap { feeRate =>
               // 102 base tx fee + 100 app fee
               val baseSize = 102 + 100
-              // if we are hashing the message it is a fixed 32 size
-              val messageSize = if (hashMessage) 32 else usableMessage.getBytes.length
+              val messageSize = message.getBytes.length
 
               // tx fee + app fee (1337)
               val sats = (feeRate * (baseSize + messageSize)) + Satoshis(1337)
               val expiry = 60 * 5 // 5 minutes
 
-              val onChainMessage = if (hashMessage) {
-                CryptoUtil.sha256(ByteVector(usableMessage.getBytes)).hex
-              } else usableMessage
-
               lnd
-                .addInvoice(s"OP_RETURN Bot: $onChainMessage",
+                .addInvoice(s"OP_RETURN Bot: $message",
                             MilliSatoshis(sats),
                             expiry)
                 .flatMap { invoiceResult =>
                   val invoice = invoiceResult.invoice
                   val db: InvoiceDb =
-                    InvoiceDb(Sha256Digest(invoiceResult.rHash),
-                              invoice,
-                              usableMessage,
-                              hashMessage,
-                              feeRate,
-                              None,
-                              None)
+                    InvoiceDb(rHash = Sha256Digest(invoiceResult.rHash),
+                              invoice = invoice,
+                              message = message,
+                              hash = false,
+                              feeRate = feeRate,
+                              txOpt = None,
+                              txIdOpt = None)
 
-                  startMonitor(invoiceResult.rHash,
-                               invoice,
-                               usableMessage,
-                               hashMessage,
-                               feeRate,
-                               expiry)
+                  startMonitor(rHash = invoiceResult.rHash,
+                               invoice = invoice,
+                               message = message,
+                               feeRate = feeRate,
+                               expiry = expiry)
 
                   invoiceDAO.create(db).map { _ =>
                     Redirect(routes.Controller.invoice(invoice.toString()))
@@ -198,7 +191,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       rHash: ByteVector,
       invoice: LnInvoice,
       message: String,
-      hashMessage: Boolean,
       feeRate: SatoshisPerVirtualByte,
       expiry: Int): Cancellable = {
     system.scheduler.scheduleOnce(2.seconds) {
@@ -209,13 +201,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           logger.info(s"Received ${invoiceResult.amtPaidSat} sats!")
 
           val output = {
-            val messageToUse =
-              if (hashMessage)
-                CryptoUtil.sha256(ByteVector(message.getBytes)).bytes
-              else ByteVector(message.getBytes)
+            val messageBytes = ByteVector(message.getBytes)
 
             val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
-              messageToUse) :+ ScriptConstant(messageToUse)
+              messageBytes) :+ ScriptConstant(messageBytes)
 
             val scriptPubKey = ScriptPubKey(asm.toVector)
 
@@ -240,7 +229,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             val dbWithTx: InvoiceDb = InvoiceDb(Sha256Digest(rHash),
                                                 invoice,
                                                 message,
-                                                hashMessage,
+                                                hash = false,
                                                 feeRate,
                                                 Some(transaction),
                                                 Some(txId))
