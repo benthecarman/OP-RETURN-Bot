@@ -1,7 +1,6 @@
 package controllers
 
 import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.crypto.CryptoUtil
 
 object Forms {
   import play.api.data.Form
@@ -13,7 +12,8 @@ object Forms {
 
   val opReturnRequestForm: Form[OpReturnRequest] = Form(
     mapping(
-      "Message" -> nonEmptyText.verifying(_.getBytes.length <= 80)
+      "Message" -> nonEmptyText.verifying("Message was too long",
+                                          _.getBytes.length <= 80)
     )(OpReturnRequest.apply)(OpReturnRequest.unapply)
   )
 
