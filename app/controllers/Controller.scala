@@ -225,11 +225,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             TransactionOutput(Satoshis.zero, scriptPubKey)
           }
 
+          val usedFeeRate = {
+            val long = feeRate.currencyUnit.satoshis.toLong * 0.1
+            SatoshisPerVirtualByte.fromLong(long.toLong)
+          }
+
           val createTxF = for {
-            transaction <- lnd.sendOutputs(
-              Vector(output),
-              feeRate.copy(currencyUnit = feeRate.currencyUnit * 0.1),
-              spendUnconfirmed = true)
+            transaction <- lnd.sendOutputs(Vector(output),
+                                           usedFeeRate,
+                                           spendUnconfirmed = true)
             _ <- lnd.publishTransaction(transaction)
           } yield {
             val txId = transaction.txIdBE
