@@ -55,6 +55,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(
     HalfHourFeeTarget)
 
+  var uri: String = "Error: try again"
+
+  lnd.getInfo.map { info =>
+    val torAddrOpt = info.uris.find(_.contains(".onion"))
+
+    torAddrOpt.getOrElse(info.uris.head)
+  }
+
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
   // The URL to the request.  You can call this directly from the template, but it
@@ -68,13 +76,20 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     mutable.ArrayBuffer[DoubleSha256DigestBE]().addAll(res)
   }
 
-  def index: Action[AnyContent] =
+  def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
       // Pass an unpopulated form to the template
       Ok(
         views.html
           .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
     }
+  }
+
+  def connect: Action[AnyContent] = {
+    Action { implicit request: MessagesRequest[AnyContent] =>
+      Ok(views.html.connect(uri))
+    }
+  }
 
   def invoice(invoiceStr: String): Action[AnyContent] =
     Action { implicit request: MessagesRequest[AnyContent] =>
