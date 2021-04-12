@@ -226,8 +226,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           }
 
           val createTxF = for {
-            transaction <-
-              lnd.sendOutputs(Vector(output), feeRate, spendUnconfirmed = true)
+            transaction <- lnd.sendOutputs(
+              Vector(output),
+              feeRate.copy(currencyUnit = feeRate.currencyUnit * 0.1),
+              spendUnconfirmed = true)
             _ <- lnd.publishTransaction(transaction)
           } yield {
             val txId = transaction.txIdBE
