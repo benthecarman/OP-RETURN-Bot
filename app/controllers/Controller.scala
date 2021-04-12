@@ -60,7 +60,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   lnd.getInfo.map { info =>
     val torAddrOpt = info.uris.find(_.contains(".onion"))
 
-    torAddrOpt.getOrElse(info.uris.head)
+    uri = torAddrOpt.getOrElse(info.uris.head)
   }
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
