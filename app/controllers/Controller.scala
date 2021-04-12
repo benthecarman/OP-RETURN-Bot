@@ -12,7 +12,7 @@ import org.bitcoins.core.protocol.transaction.TransactionOutput
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.BitcoinScriptUtil
-import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
+import org.bitcoins.core.wallet.fee.{SatoshisPerKW, SatoshisPerVirtualByte}
 import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.feeprovider.MempoolSpaceProvider
 import org.bitcoins.feeprovider.MempoolSpaceTarget._
@@ -160,8 +160,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           val result = feeProvider.getFeeRate
             .map(_.asInstanceOf[SatoshisPerVirtualByte])
             .flatMap { feeRate =>
-              // 102 base tx fee + 100 app fee
-              val baseSize = 102 + 100
+              // 124 base tx fee + 100 app fee
+              val baseSize = 124 + 100
               val messageSize = message.getBytes.length
 
               // tx fee + app fee (1337)
@@ -226,8 +226,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           }
 
           val usedFeeRate = {
-            val long = feeRate.currencyUnit.satoshis.toLong * 0.1
-            SatoshisPerVirtualByte.fromLong(long.toLong)
+            val long = feeRate.currencyUnit
+            SatoshisPerKW(long * 250)
           }
 
           val createTxF = for {
