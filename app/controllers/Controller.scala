@@ -52,8 +52,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     lnd.start()
   }
 
-  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(
-    HalfHourFeeTarget)
+  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(HourFeeTarget)
 
   var uri: String = "Error: try again"
 
