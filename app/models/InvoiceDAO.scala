@@ -54,9 +54,9 @@ case class InvoiceDAO()(implicit
   }
 
   def lastFiveCompleted(): Future[Vector[DoubleSha256DigestBE]] = {
-    val query = table.filter(_.txIdOpt.isDefined).map(_.txIdOpt).take(5)
+    val query = table.filter(_.txIdOpt.isDefined).map(_.txIdOpt)
 
-    safeDatabase.runVec(query.result).map(_.flatten)
+    safeDatabase.runVec(query.result).map(_.flatten.takeRight(5))
   }
 
   class InvoiceTable(tag: Tag)
