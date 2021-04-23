@@ -12,7 +12,7 @@ import org.bitcoins.core.protocol.transaction.TransactionOutput
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.BitcoinScriptUtil
-import org.bitcoins.core.wallet.fee.{SatoshisPerKW, SatoshisPerVirtualByte}
+import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.feeprovider.MempoolSpaceProvider
 import org.bitcoins.feeprovider.MempoolSpaceTarget._
@@ -52,7 +52,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     lnd.start()
   }
 
-  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(HourFeeTarget)
+  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(FastestFeeTarget)
 
   var uri: String = "Error: try again"
 
@@ -212,58 +212,63 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       lnd.monitorInvoice(rHash, 1.second, expiry).flatMap { invoiceResult =>
         if (invoiceResult.state.isSettled) {
-          logger.info(s"Received ${invoiceResult.amtPaidSat} sats!")
-
-          val output = {
-            val messageBytes = ByteVector(message.getBytes)
-
-            val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
-              messageBytes) :+ ScriptConstant(messageBytes)
-
-            val scriptPubKey = ScriptPubKey(asm.toVector)
-
-            TransactionOutput(Satoshis.zero, scriptPubKey)
-          }
-
-          val usedFeeRate = {
-            val long = feeRate.currencyUnit
-            SatoshisPerKW(long * 250)
-          }
-
-          val createTxF = for {
-            transaction <- lnd.sendOutputs(Vector(output),
-                                           usedFeeRate,
-                                           spendUnconfirmed = true)
-            _ <- lnd.publishTransaction(transaction)
-          } yield {
-            val txId = transaction.txIdBE
-            logger.info(s"Successfully created tx: ${txId.hex}")
-
-            recentTransactions += txId
-            if (recentTransactions.size >= 5) {
-              val old = recentTransactions.takeRight(5)
-              recentTransactions.clear()
-              recentTransactions ++= old
-            }
-
-            val dbWithTx: InvoiceDb = InvoiceDb(Sha256Digest(rHash),
-                                                invoice,
-                                                message,
-                                                hash = false,
-                                                feeRate,
-                                                Some(transaction),
-                                                Some(txId))
-            invoiceDAO.upsert(dbWithTx)
-          }
-
-          createTxF.failed.foreach { err =>
-            logger.error(
-              s"Failed to create tx for invoice ${invoice.lnTags.paymentHash.hash.hex}, got error $err")
-          }
-
-          createTxF
+          onInvoicePaid(rHash, invoice, message, feeRate)
         } else Future.unit
       }
     }
+  }
+
+  def onInvoicePaid(
+      rHash: ByteVector,
+      invoice: LnInvoice,
+      message: String,
+      feeRate: SatoshisPerVirtualByte): Future[InvoiceDb] = {
+    logger.info(s"Received ${invoice.amount.get.toSatoshis} sats!")
+
+    val output = {
+      val messageBytes = ByteVector(message.getBytes)
+
+      val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
+        messageBytes) :+ ScriptConstant(messageBytes)
+
+      val scriptPubKey = ScriptPubKey(asm.toVector)
+
+      TransactionOutput(Satoshis.zero, scriptPubKey)
+    }
+
+    val createTxF = for {
+      transaction <-
+        lnd.sendOutputs(Vector(output), feeRate, spendUnconfirmed = true)
+      _ <- lnd.publishTransaction(transaction)
+
+      txId = transaction.txIdBE
+      _ = logger.info(s"Successfully created tx: ${txId.hex}")
+
+      _ = {
+        recentTransactions += txId
+        if (recentTransactions.size >= 5) {
+          val old = recentTransactions.takeRight(5)
+          recentTransactions.clear()
+          recentTransactions ++= old
+        }
+      }
+
+      dbWithTx: InvoiceDb = InvoiceDb(Sha256Digest(rHash),
+                                      invoice,
+                                      message,
+                                      hash = false,
+                                      feeRate,
+                                      Some(transaction),
+                                      Some(txId))
+
+      res <- invoiceDAO.upsert(dbWithTx)
+    } yield res
+
+    createTxF.failed.foreach { err =>
+      logger.error(
+        s"Failed to create tx for invoice ${invoice.lnTags.paymentHash.hash.hex}, got error $err")
+    }
+
+    createTxF
   }
 }
