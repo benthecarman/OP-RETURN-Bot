@@ -30,6 +30,7 @@ import scala.util.{Failure, Success, Try}
 
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
+    with TelegramHandler
     with Logging {
 
   import controllers.Forms._
@@ -218,7 +219,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  def onInvoicePaid(
+  private def onInvoicePaid(
       rHash: ByteVector,
       invoice: LnInvoice,
       message: String,
@@ -244,6 +245,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       txId = transaction.txIdBE
       _ = logger.info(s"Successfully created tx: ${txId.hex}")
 
+      txDetailsOpt <- lnd.getTransaction(txId)
+
       _ = {
         recentTransactions += txId
         if (recentTransactions.size >= 5) {
@@ -262,6 +265,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                                       Some(txId))
 
       res <- invoiceDAO.upsert(dbWithTx)
+
+      _ <- txDetailsOpt match {
+        case Some(details) =>
+          handleTelegram(rHash, invoice, message, feeRate, details)
+        case None =>
+          val msg = s"Failed to get transaction details for ${rHash.toHex}"
+          logger.warn(msg)
+          sendTelegramMessage(msg)
+      }
     } yield res
 
     createTxF.failed.foreach { err =>
