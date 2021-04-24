@@ -40,9 +40,7 @@ class FunctionalSpec
 
       // Call using the FakeRequest and the correct body information and CSRF token
       val request = FakeRequest(routes.Controller.createRequest())
-        .withFormUrlEncodedBody("Message" -> "foo",
-                                "Hash" -> "false",
-                                "FeeRate" -> "10")
+        .withFormUrlEncodedBody("Message" -> "foo")
         .withCSRFToken
       val futureResult: Future[Result] =
         controller.createRequest().apply(request)
@@ -57,44 +55,26 @@ class FunctionalSpec
       }
     }
 
+    "reject a POST request when given empty Message value" in {
+      val controller = inject[Controller]
+
+      // Call the controller with negative price...
+      val request = FakeRequest(routes.Controller.createRequest())
+        .withFormUrlEncodedBody("Message" -> "")
+        .withCSRFToken
+      val futureResult: Future[Result] =
+        controller.createRequest().apply(request)
+
+      status(futureResult) must be(Status.BAD_REQUEST)
+    }
+
     "reject a POST request when given bad Message value" in {
       val controller = inject[Controller]
 
       // Call the controller with negative price...
       val request = FakeRequest(routes.Controller.createRequest())
-        .withFormUrlEncodedBody("Message" -> "",
-                                "Hash" -> "false",
-                                "FeeRate" -> "10")
-        .withCSRFToken
-      val futureResult: Future[Result] =
-        controller.createRequest().apply(request)
-
-      status(futureResult) must be(Status.BAD_REQUEST)
-    }
-
-    "reject a POST request when given bad Hash value" in {
-      val controller = inject[Controller]
-
-      // Call the controller with negative price...
-      val request = FakeRequest(routes.Controller.createRequest())
-        .withFormUrlEncodedBody("Message" -> "foo",
-                                "Hash" -> "-100",
-                                "FeeRate" -> "10")
-        .withCSRFToken
-      val futureResult: Future[Result] =
-        controller.createRequest().apply(request)
-
-      status(futureResult) must be(Status.BAD_REQUEST)
-    }
-
-    "reject a POST request when given bad FeeRate value" in {
-      val controller = inject[Controller]
-
-      // Call the controller with negative price...
-      val request = FakeRequest(routes.Controller.createRequest())
-        .withFormUrlEncodedBody("Message" -> "foo",
-                                "Hash" -> "false",
-                                "FeeRate" -> "-10")
+        .withFormUrlEncodedBody(
+          "Message" -> "this is over 80 characters _____________________________________________________________________")
         .withCSRFToken
       val futureResult: Future[Result] =
         controller.createRequest().apply(request)

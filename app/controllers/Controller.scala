@@ -47,7 +47,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val lnd: LndRpcClient = config.lndRpcClient
 
-  config.start()
+  val startF: Future[Unit] = config.start()
 
   if (config.startBinaries) {
     lnd.start()
@@ -71,9 +71,34 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   private val postUrl = routes.Controller.createRequest()
 
   private val recentTransactions: ArrayBuffer[DoubleSha256DigestBE] = {
-    val f = invoiceDAO.lastFiveCompleted()
+    val f = startF.flatMap(_ => invoiceDAO.lastFiveCompleted())
     val res = Await.result(f, 15.seconds)
     mutable.ArrayBuffer[DoubleSha256DigestBE]().addAll(res)
+  }
+
+  startF.flatMap { _ =>
+    invoiceDAO.missingProfitCol().map { missing =>
+      if (missing.nonEmpty) {
+        logger.info(s"${missing.size} invoices missing profit, calculating...")
+
+        for {
+          txDetails <- lnd.getTransactions
+          byTx = txDetails.groupBy(_.txId)
+
+          updated = missing.map { db =>
+            val details = byTx(db.txIdOpt.get).head
+            val profit = db.invoice.amount.get.toSatoshis - details.totalFees
+            db.copy(profitOpt = Some(profit))
+          }
+
+          _ <- invoiceDAO.updateAll(updated)
+        } yield {
+          val totalProfit = updated.flatMap(_.profitOpt).sum
+          logger.info(
+            s"${updated.size} invoices updated, total profit: $totalProfit")
+        }
+      }
+    }
   }
 
   def index: Action[AnyContent] = {
@@ -103,9 +128,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           val resultF = invoiceDAO.read(invoice.lnTags.paymentHash.hash).map {
             case None =>
               throw new RuntimeException("Invoice not from OP_RETURN Bot")
-            case Some(InvoiceDb(_, _, _, _, _, _, None)) =>
+            case Some(InvoiceDb(_, _, _, _, _, _, None, _)) =>
               Ok(views.html.showInvoice(invoice))
-            case Some(InvoiceDb(_, _, _, _, _, _, Some(txId))) =>
+            case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _)) =>
               Redirect(routes.Controller.success(txId.hex))
           }
 
@@ -126,9 +151,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
-            case Some(InvoiceDb(_, _, _, _, _, Some(tx), _)) =>
+            case Some(InvoiceDb(_, _, _, _, _, Some(tx), _, _)) =>
               Ok(views.html.success(tx))
-            case Some(InvoiceDb(_, invoice, _, _, _, None, _)) =>
+            case Some(InvoiceDb(_, invoice, _, _, _, None, _, _)) =>
               throw new RuntimeException(s"This is impossible, $invoice")
           }
 
@@ -182,7 +207,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                               hash = false,
                               feeRate = feeRate,
                               txOpt = None,
-                              txIdOpt = None)
+                              txIdOpt = None,
+                              profitOpt = None)
 
                   startMonitor(rHash = invoiceResult.rHash,
                                invoice = invoice,
@@ -256,19 +282,28 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         }
       }
 
+      amount = invoice.amount.get.toSatoshis
+      // Need to make sure we upsert the tx and txid even if this fails, so we can't call .get
+      profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
+
       dbWithTx: InvoiceDb = InvoiceDb(Sha256Digest(rHash),
                                       invoice,
                                       message,
                                       hash = false,
                                       feeRate,
                                       Some(transaction),
-                                      Some(txId))
+                                      Some(txId),
+                                      profitOpt)
 
       res <- invoiceDAO.upsert(dbWithTx)
 
       _ <- txDetailsOpt match {
         case Some(details) =>
-          handleTelegram(rHash, invoice, message, feeRate, details)
+          for {
+            profit <- invoiceDAO.totalProfit()
+            _ <-
+              handleTelegram(rHash, invoice, message, feeRate, details, profit)
+          } yield ()
         case None =>
           val msg = s"Failed to get transaction details for ${rHash.toHex}"
           logger.warn(msg)

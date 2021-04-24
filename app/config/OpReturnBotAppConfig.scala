@@ -3,7 +3,6 @@ package config
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
-import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.db.{
   AppConfigFactory,
   DbAppConfig,
@@ -59,7 +58,7 @@ case class OpReturnBotAppConfig(
   lazy val bitcoindVersion: BitcoindVersion = BitcoindVersion.newest
 
   override def start(): Future[Unit] = {
-    logger.debug(s"Initializing setup")
+    logger.info(s"Initializing setup")
 
     if (Files.notExists(baseDatadir)) {
       Files.createDirectories(baseDatadir)
@@ -70,11 +69,10 @@ case class OpReturnBotAppConfig(
         s"Cannot find lnd data dir at ${lndDataDir.toString}")
     }
 
-    logger.debug(s"Initializing lnd with bitcoind version $bitcoindVersion")
+    val numMigrations = migrate()
+    logger.info(s"Applied $numMigrations")
 
-    FutureUtil
-      .sequentially(allTables)(table => createTable(table))
-      .map(_ => ())
+    Future.unit
   }
 
   override def stop(): Future[Unit] = Future.unit

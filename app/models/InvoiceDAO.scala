@@ -1,6 +1,7 @@
 package models
 
 import config.OpReturnBotAppConfig
+import org.bitcoins.core.currency.CurrencyUnit
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
@@ -17,7 +18,8 @@ case class InvoiceDb(
     hash: Boolean,
     feeRate: SatoshisPerVirtualByte,
     txOpt: Option[Transaction],
-    txIdOpt: Option[DoubleSha256DigestBE])
+    txIdOpt: Option[DoubleSha256DigestBE],
+    profitOpt: Option[CurrencyUnit])
 
 case class InvoiceDAO()(implicit
     val ec: ExecutionContext,
@@ -59,6 +61,18 @@ case class InvoiceDAO()(implicit
     safeDatabase.runVec(query.result).map(_.flatten.takeRight(5))
   }
 
+  def missingProfitCol(): Future[Vector[InvoiceDb]] = {
+    val query = table.filter(t => t.txIdOpt.isDefined && t.profitOpt.isEmpty)
+
+    safeDatabase.runVec(query.result)
+  }
+
+  def totalProfit(): Future[CurrencyUnit] = {
+    val query = table.filter(_.profitOpt.isDefined).map(_.profitOpt)
+
+    safeDatabase.runVec(query.result).map(_.flatten.sum)
+  }
+
   class InvoiceTable(tag: Tag)
       extends Table[InvoiceDb](tag, schemaName, "invoices") {
 
@@ -74,12 +88,18 @@ case class InvoiceDAO()(implicit
 
     def transactionOpt: Rep[Option[Transaction]] = column("transaction")
 
-    def txIdOpt: Rep[Option[DoubleSha256DigestBE]] =
-      column[Option[DoubleSha256DigestBE]]("txid")
+    def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
+
+    def profitOpt: Rep[Option[CurrencyUnit]] = column("profit")
 
     def * : ProvenShape[InvoiceDb] =
-      (rHash, invoice, message, hash, feeRate, transactionOpt, txIdOpt).<>(
-        InvoiceDb.tupled,
-        InvoiceDb.unapply)
+      (rHash,
+       invoice,
+       message,
+       hash,
+       feeRate,
+       transactionOpt,
+       txIdOpt,
+       profitOpt).<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }

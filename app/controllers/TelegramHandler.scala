@@ -4,6 +4,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.Get
 import grizzled.slf4j.Logging
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
+import org.bitcoins.core.currency.CurrencyUnit
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import scodec.bits.ByteVector
@@ -28,7 +29,8 @@ trait TelegramHandler extends Logging { self: Controller =>
       invoice: LnInvoice,
       message: String,
       feeRate: SatoshisPerVirtualByte,
-      txDetails: TxDetails): Future[Unit] = {
+      txDetails: TxDetails,
+      totalProfit: CurrencyUnit): Future[Unit] = {
     val amount = invoice.amount.get.toSatoshis
     val profit = amount - txDetails.totalFees
 
@@ -42,6 +44,8 @@ trait TelegramHandler extends Logging { self: Controller =>
          |invoice amount: ${amount.satoshis}
          |tx fee: ${txDetails.totalFees.satoshis}
          |profit: ${profit.satoshis}
+         |
+         |total profit: ${totalProfit.satoshis}
          |""".stripMargin
 
     sendTelegramMessage(telegramMsg)

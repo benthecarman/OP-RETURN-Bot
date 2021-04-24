@@ -1,4 +1,4 @@
-val bitcoinsV = "0.5.0-170-ebbe9b11-20210423-1922-SNAPSHOT"
+val bitcoinsV = "0.5.0-171-af9cbe55-SNAPSHOT"
 val akkaV = "2.6.14"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
@@ -7,7 +7,7 @@ resolvers +=
   "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
 lazy val root = (project in file("."))
-  .enablePlugins(PlayScala, DebianPlugin)
+  .enablePlugins(PlayScala, DebianPlugin, FlywayPlugin)
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
