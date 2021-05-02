@@ -76,31 +76,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     mutable.ArrayBuffer[DoubleSha256DigestBE]().addAll(res)
   }
 
-  startF.flatMap { _ =>
-    invoiceDAO.missingProfitCol().map { missing =>
-      if (missing.nonEmpty) {
-        logger.info(s"${missing.size} invoices missing profit, calculating...")
-
-        for {
-          txDetails <- lnd.getTransactions
-          byTx = txDetails.groupBy(_.txId)
-
-          updated = missing.map { db =>
-            val details = byTx(db.txIdOpt.get).head
-            val profit = db.invoice.amount.get.toSatoshis - details.totalFees
-            db.copy(profitOpt = Some(profit))
-          }
-
-          _ <- invoiceDAO.updateAll(updated)
-        } yield {
-          val totalProfit = updated.flatMap(_.profitOpt).sum
-          logger.info(
-            s"${updated.size} invoices updated, total profit: $totalProfit")
-        }
-      }
-    }
-  }
-
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
       // Pass an unpopulated form to the template

@@ -61,12 +61,6 @@ case class InvoiceDAO()(implicit
     safeDatabase.runVec(query.result).map(_.flatten.takeRight(5))
   }
 
-  def missingProfitCol(): Future[Vector[InvoiceDb]] = {
-    val query = table.filter(t => t.txIdOpt.isDefined && t.profitOpt.isEmpty)
-
-    safeDatabase.runVec(query.result)
-  }
-
   def totalProfit(): Future[CurrencyUnit] = {
     val query = table.filter(_.profitOpt.isDefined).map(_.profitOpt)
 
