@@ -53,7 +53,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     lnd.start()
   }
 
-  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(FastestFeeTarget)
+  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(HalfHourFeeTarget)
 
   var uri: String = "Error: try again"
 
@@ -184,7 +184,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             "OP_Return message received was too long, must be less than 80 chars")
 
           val result = feeProvider.getFeeRate
-            .map(_.asInstanceOf[SatoshisPerVirtualByte])
             .flatMap { feeRate =>
               // 124 base tx fee + 100 app fee
               val baseSize = 124 + 100
