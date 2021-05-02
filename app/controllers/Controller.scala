@@ -212,7 +212,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     system.scheduler.scheduleOnce(2.seconds) {
       logger.info(s"Starting monitor for invoice ${rHash.toHex}")
 
-      lnd.monitorInvoice(rHash, 1.second, expiry).flatMap { invoiceResult =>
+      lnd.monitorInvoice(rHash, 1.second, expiry + 60).flatMap { invoiceResult =>
         if (invoiceResult.state.isSettled) {
           onInvoicePaid(rHash, invoice, message, feeRate)
         } else Future.unit
