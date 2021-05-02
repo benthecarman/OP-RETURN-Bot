@@ -22,7 +22,7 @@ jobs:
             ~/.sbt
           key: ${{ runner.os }}-cache
       - name: Compile and Check Formatting
-        run: sbt test:compile scalafmtCheckAll test
+        run: sbt test:compile scalafmtCheckAll
 
   mac:
     runs-on: macos-latest
