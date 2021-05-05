@@ -83,12 +83,17 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       Ok(
         views.html
           .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
+        .withHeaders(
+          ("Onion-Location",
+           "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion"))
     }
   }
 
   def connect: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
-      Ok(views.html.connect(uri)).withHeaders(("Onion-Location", "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion"))
+      Ok(views.html.connect(uri)).withHeaders(
+        ("Onion-Location",
+         "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion"))
     }
   }
 
