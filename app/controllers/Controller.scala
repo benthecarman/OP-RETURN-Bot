@@ -88,7 +88,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def connect: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
-      Ok(views.html.connect(uri))
+      Ok(views.html.connect(uri)).withHeaders(("Onion-Location", "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion"))
     }
   }
 
@@ -212,10 +212,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     system.scheduler.scheduleOnce(2.seconds) {
       logger.info(s"Starting monitor for invoice ${rHash.toHex}")
 
-      lnd.monitorInvoice(rHash, 1.second, expiry + 60).flatMap { invoiceResult =>
-        if (invoiceResult.state.isSettled) {
-          onInvoicePaid(rHash, invoice, message, feeRate)
-        } else Future.unit
+      lnd.monitorInvoice(rHash, 1.second, expiry + 60).flatMap {
+        invoiceResult =>
+          if (invoiceResult.state.isSettled) {
+            onInvoicePaid(rHash, invoice, message, feeRate)
+          } else Future.unit
       }
     }
   }

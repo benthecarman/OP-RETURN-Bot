@@ -6,7 +6,7 @@ resolvers += Resolver.sonatypeRepo("snapshots")
 resolvers +=
   "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
-lazy val root = (project in file("."))
+lazy val root = project.in(file("."))
   .enablePlugins(PlayScala, DebianPlugin, FlywayPlugin)
   .settings(
     name := "op-return-bot",
