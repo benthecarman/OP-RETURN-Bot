@@ -1,6 +1,6 @@
 package controllers
 
-import akka.actor.{ActorSystem, Cancellable}
+import akka.actor.ActorSystem
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
@@ -106,6 +106,18 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           Ok(views.html.connect(uri)).withHeaders(
             ("Onion-Location",
              "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion")))
+      }
+    }
+  }
+
+  def viewMessage(txIdStr: String): Action[AnyContent] = {
+    Action.async { _ =>
+      val txId = DoubleSha256DigestBE(txIdStr)
+      invoiceDAO.findByTxId(txId).map {
+        case None =>
+          BadRequest("Tx does not originate from OP_RETURN Bot")
+        case Some(invoiceDb: InvoiceDb) =>
+          Ok(invoiceDb.message)
       }
     }
   }
