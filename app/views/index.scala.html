@@ -31,10 +31,10 @@
                 <form method="post" action="createRequest">
                     @helper.CSRF.formField
                     <div class="form-group">
-                        <label for="Message">Message:</label>
-                        <input maxlength="80" minlength="1" type="text" class="form-control" placeholder="Max 80 characters" name="Message" id="Message">
+                        <label for="message">Message:</label>
+                        <input maxlength="80" minlength="1" type="text" class="form-control" placeholder="Max 80 characters" name="message" id="message">
                         <div class="text-danger" style="float: right">
-                        @form.error("Message").map(err => err.message)
+                        @form.error("message").map(err => err.message)
                         </div>
                     </div>
                     <br/>

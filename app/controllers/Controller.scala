@@ -56,13 +56,17 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(
     HalfHourFeeTarget)
 
-  var uri: String = "Error: try again"
+  val uriErrorString = "Error: try again"
+  var uri: String = uriErrorString
 
-  lnd.getInfo.map { info =>
-    val torAddrOpt = info.uris.find(_.contains(".onion"))
+  def setURI(): Future[Unit] = {
+    lnd.getInfo.map { info =>
+      val torAddrOpt = info.uris.find(_.contains(".onion"))
 
-    uri = torAddrOpt.getOrElse(info.uris.head)
+      uri = torAddrOpt.getOrElse(info.uris.head)
+    }
   }
+  setURI()
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
@@ -73,7 +77,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   private val recentTransactions: ArrayBuffer[DoubleSha256DigestBE] = {
     val f = startF.flatMap(_ => invoiceDAO.lastFiveCompleted())
-    val res = Await.result(f, 15.seconds)
+    val res = Await.result(f, 30.seconds)
     mutable.ArrayBuffer[DoubleSha256DigestBE]().addAll(res)
   }
 
@@ -90,10 +94,19 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   }
 
   def connect: Action[AnyContent] = {
-    Action { implicit request: MessagesRequest[AnyContent] =>
-      Ok(views.html.connect(uri)).withHeaders(
-        ("Onion-Location",
-         "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion"))
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      if (uri == uriErrorString) {
+        setURI().map { _ =>
+          Ok(views.html.connect(uri)).withHeaders(
+            ("Onion-Location",
+             "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion"))
+        }
+      } else {
+        Future.successful(
+          Ok(views.html.connect(uri)).withHeaders(
+            ("Onion-Location",
+             "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion")))
+      }
     }
   }
 
@@ -112,15 +125,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   }
 
   def invoice(invoiceStr: String): Action[AnyContent] =
-    Action { implicit request: MessagesRequest[AnyContent] =>
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
       LnInvoice.fromStringT(invoiceStr) match {
         case Failure(exception) =>
           logger.error(exception)
-          BadRequest(
-            views.html
-              .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
+          Future.successful(
+            BadRequest(views.html
+              .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
         case Success(invoice) =>
-          val resultF = invoiceDAO.read(invoice.lnTags.paymentHash.hash).map {
+          invoiceDAO.read(invoice.lnTags.paymentHash.hash).map {
             case None =>
               BadRequest("Invoice not from OP_RETURN Bot")
             case Some(InvoiceDb(_, _, _, _, _, _, None, _)) =>
@@ -128,21 +141,19 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _)) =>
               Redirect(routes.Controller.success(txId.hex))
           }
-
-          Await.result(resultF, 30.seconds)
       }
     }
 
   def success(txIdStr: String): Action[AnyContent] = {
-    Action { implicit request: MessagesRequest[AnyContent] =>
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
       Try(DoubleSha256DigestBE.fromHex(txIdStr)) match {
         case Failure(exception) =>
           logger.error(exception)
-          BadRequest(
-            views.html
-              .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
+          Future.successful(
+            BadRequest(views.html
+              .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
         case Success(txId) =>
-          val resultF = invoiceDAO.findByTxId(txId).map {
+          invoiceDAO.findByTxId(txId).map {
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
@@ -151,8 +162,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case Some(InvoiceDb(_, invoice, _, _, _, None, _, _)) =>
               throw new RuntimeException(s"This is impossible, $invoice")
           }
-
-          Await.result(resultF, 30.seconds)
       }
     }
   }
@@ -177,25 +186,24 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   // This will be the action that handles our form post
   def createRequest: Action[AnyContent] = {
-    Action { implicit request: MessagesRequest[AnyContent] =>
-      val errorFunction: Form[OpReturnRequest] => Result = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      val errorFunction: Form[OpReturnRequest] => Future[Result] = {
         formWithErrors: Form[OpReturnRequest] =>
           // This is the bad case, where the form had validation errors.
           // Let's show the user the form again, with the errors highlighted.
           // Note how we pass the form with errors to the template.
-          BadRequest(
-            views.html
-              .index(recentTransactions.toSeq, formWithErrors, postUrl))
+          Future.successful(
+            BadRequest(views.html
+              .index(recentTransactions.toSeq, formWithErrors, postUrl)))
       }
 
       // This is the good case, where the form was successfully parsed as an OpReturnRequest
-      val successFunction: OpReturnRequest => Result = {
+      val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
           val message = data.message
-          val resultF = processMessage(message).map { invoiceDb =>
+          processMessage(message).map { invoiceDb =>
             Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
           }
-          Await.result(resultF, 30.seconds)
       }
 
       val formValidationResult = opReturnRequestForm.bindFromRequest()
@@ -231,14 +239,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                         txOpt = None,
                         txIdOpt = None,
                         profitOpt = None)
-
-            startMonitor(rHash = invoiceResult.rHash,
-                         invoice = invoice,
-                         message = message,
-                         feeRate = feeRate,
-                         expiry = expiry)
-
-            invoiceDAO.create(db)
+            invoiceDAO.create(db).map { db =>
+              startMonitor(rHash = invoiceResult.rHash,
+                           invoice = invoice,
+                           message = message,
+                           feeRate = feeRate,
+                           expiry = expiry)
+              db
+            }
           }
       }
   }
@@ -248,16 +256,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       invoice: LnInvoice,
       message: String,
       feeRate: SatoshisPerVirtualByte,
-      expiry: Int): Cancellable = {
-    system.scheduler.scheduleOnce(2.seconds) {
-      logger.info(s"Starting monitor for invoice ${rHash.toHex}")
+      expiry: Int): Future[Unit] = {
+    logger.info(s"Starting monitor for invoice ${rHash.toHex}")
 
-      lnd.monitorInvoice(rHash, 1.second, expiry + 60).flatMap {
-        invoiceResult =>
-          if (invoiceResult.state.isSettled) {
-            onInvoicePaid(rHash, invoice, message, feeRate)
-          } else Future.unit
-      }
+    lnd.monitorInvoice(rHash, 1.second, expiry + 60).flatMap { invoiceResult =>
+      if (invoiceResult.state.isSettled) {
+        onInvoicePaid(rHash, invoice, message, feeRate).map(_ => ())
+      } else Future.unit
     }
   }
 

@@ -20,7 +20,7 @@ class UnitSpec extends PlaySpec {
       // The easiest way to test a form is by passing it a fake request.
       val call = controllers.routes.Controller.createRequest()
       implicit val request: Request[_] =
-        FakeRequest(call).withFormUrlEncodedBody("Message" -> "foo")
+        FakeRequest(call).withFormUrlEncodedBody("message" -> "foo")
       // A successful binding using an implicit request will give you a form with a value.
       val boundForm = Forms.opReturnRequestForm.bindFromRequest()
       // You can then get the data out and test it.
@@ -31,7 +31,7 @@ class UnitSpec extends PlaySpec {
 
     "apply successfully from map" in {
       // You can also bind directly from a map, if you don't have a request handy.
-      val data = Map("Message" -> "foo")
+      val data = Map("message" -> "foo")
       // A successful binding will give you a form with a value.
       val boundForm = Forms.opReturnRequestForm.bind(data)
       // You can then get the data out and test it.
@@ -43,7 +43,7 @@ class UnitSpec extends PlaySpec {
     "show errors when applied unsuccessfully" in {
       // Pass in a negative price that fails the constraints...
       val data = Map(
-        "Message" -> "this is over 80 characters _____________________________________________________________________")
+        "message" -> "this is over 80 characters _____________________________________________________________________")
 
       // ...and binding the form will show errors.
       val errorForm = Forms.opReturnRequestForm.bind(data)
@@ -53,7 +53,7 @@ class UnitSpec extends PlaySpec {
       // Note that the FormError's key is the field it was bound to.
       // If there is no key, then it is a "global error".
       val formError: FormError = listOfErrors.head
-      formError.key must equal("Message")
+      formError.key must equal("message")
 
       // In this case, we don't have any global errors -- they're caused
       // when a constraint on the form itself fails.

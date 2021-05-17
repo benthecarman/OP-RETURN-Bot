@@ -12,7 +12,7 @@ object Forms {
 
   val opReturnRequestForm: Form[OpReturnRequest] = Form(
     mapping(
-      "Message" -> nonEmptyText.verifying("Message was too long",
+      "message" -> nonEmptyText.verifying("Message was too long",
                                           _.getBytes.length <= 80)
     )(OpReturnRequest.apply)(OpReturnRequest.unapply)
   )

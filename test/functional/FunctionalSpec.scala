@@ -5,6 +5,7 @@ import org.bitcoins.core.protocol.ln.LnInvoice
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatestplus.play.PlaySpec
 import org.scalatestplus.play.guice.GuiceOneAppPerSuite
+import play.api.Play.materializer
 import play.api.http.Status
 import play.api.mvc._
 import play.api.test.Helpers._
@@ -40,7 +41,7 @@ class FunctionalSpec
 
       // Call using the FakeRequest and the correct body information and CSRF token
       val request = FakeRequest(routes.Controller.createRequest())
-        .withFormUrlEncodedBody("Message" -> "foo")
+        .withFormUrlEncodedBody("message" -> "foo")
         .withCSRFToken
       val futureResult: Future[Result] =
         controller.createRequest().apply(request)
@@ -60,7 +61,7 @@ class FunctionalSpec
 
       // Call the controller with negative price...
       val request = FakeRequest(routes.Controller.createRequest())
-        .withFormUrlEncodedBody("Message" -> "")
+        .withFormUrlEncodedBody("message" -> "")
         .withCSRFToken
       val futureResult: Future[Result] =
         controller.createRequest().apply(request)
@@ -74,7 +75,7 @@ class FunctionalSpec
       // Call the controller with negative price...
       val request = FakeRequest(routes.Controller.createRequest())
         .withFormUrlEncodedBody(
-          "Message" -> "this is over 80 characters _____________________________________________________________________")
+          "message" -> "this is over 80 characters _____________________________________________________________________")
         .withCSRFToken
       val futureResult: Future[Result] =
         controller.createRequest().apply(request)
