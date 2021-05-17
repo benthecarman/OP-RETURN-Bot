@@ -39,8 +39,9 @@ trait TelegramHandler extends Logging { self: Controller =>
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |Message: $message
          |rhash: ${rHash.toHex}
-         |fee rate: $feeRate
+         |tx: https://mempool.space/tx/${txDetails.txId.hex}
          |
+         |fee rate: $feeRate
          |invoice amount: ${amount.satoshis}
          |tx fee: ${txDetails.totalFees.satoshis}
          |profit: ${profit.satoshis}
