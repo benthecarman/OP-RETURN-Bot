@@ -97,6 +97,20 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
+  def invoiceStatus(rHash: String): Action[AnyContent] = {
+    Action.async { _ =>
+      val hash = Sha256Digest.fromHex(rHash)
+      invoiceDAO.read(hash).map {
+        case None =>
+          BadRequest("Invoice not from OP_RETURN Bot")
+        case Some(InvoiceDb(_, _, _, _, _, _, None, _)) =>
+          BadRequest("Invoice has not been paid")
+        case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _)) =>
+          Ok(txId.hex)
+      }
+    }
+  }
+
   def invoice(invoiceStr: String): Action[AnyContent] =
     Action { implicit request: MessagesRequest[AnyContent] =>
       LnInvoice.fromStringT(invoiceStr) match {
@@ -108,7 +122,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         case Success(invoice) =>
           val resultF = invoiceDAO.read(invoice.lnTags.paymentHash.hash).map {
             case None =>
-              throw new RuntimeException("Invoice not from OP_RETURN Bot")
+              BadRequest("Invoice not from OP_RETURN Bot")
             case Some(InvoiceDb(_, _, _, _, _, _, None, _)) =>
               Ok(views.html.showInvoice(invoice))
             case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _)) =>
@@ -143,8 +157,26 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
+  def create: Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      def failure(badForm: Form[OpReturnRequest]): Future[Result] = {
+        Future.successful(BadRequest(badForm.errorsAsJson))
+      }
+
+      def success(input: OpReturnRequest): Future[Result] = {
+        for {
+          invoiceDb <- processMessage(input.message)
+        } yield {
+          Ok(invoiceDb.invoice.toString())
+        }
+      }
+
+      opReturnRequestForm.bindFromRequest().fold(failure, success)
+    }
+  }
+
   // This will be the action that handles our form post
-  def createRequest: Action[AnyContent] =
+  def createRequest: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
       val errorFunction: Form[OpReturnRequest] => Result = {
         formWithErrors: Form[OpReturnRequest] =>
@@ -160,53 +192,56 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: OpReturnRequest => Result = {
         data: OpReturnRequest =>
           val message = data.message
-          require(
-            message.getBytes.length <= 80,
-            "OP_Return message received was too long, must be less than 80 chars")
-
-          val result = feeProvider.getFeeRate
-            .flatMap { feeRate =>
-              // 124 base tx fee + 100 app fee
-              val baseSize = 124 + 100
-              val messageSize = message.getBytes.length
-
-              // tx fee + app fee (1337)
-              val sats = (feeRate * (baseSize + messageSize)) + Satoshis(1337)
-              val expiry = 60 * 5 // 5 minutes
-
-              lnd
-                .addInvoice(s"OP_RETURN Bot: $message",
-                            MilliSatoshis(sats),
-                            expiry)
-                .flatMap { invoiceResult =>
-                  val invoice = invoiceResult.invoice
-                  val db: InvoiceDb =
-                    InvoiceDb(rHash = Sha256Digest(invoiceResult.rHash),
-                              invoice = invoice,
-                              message = message,
-                              hash = false,
-                              feeRate = feeRate,
-                              txOpt = None,
-                              txIdOpt = None,
-                              profitOpt = None)
-
-                  startMonitor(rHash = invoiceResult.rHash,
-                               invoice = invoice,
-                               message = message,
-                               feeRate = feeRate,
-                               expiry = expiry)
-
-                  invoiceDAO.create(db).map { _ =>
-                    Redirect(routes.Controller.invoice(invoice.toString()))
-                  }
-                }
-            }
-          Await.result(result, 30.seconds)
+          val resultF = processMessage(message).map { invoiceDb =>
+            Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
+          }
+          Await.result(resultF, 30.seconds)
       }
 
       val formValidationResult = opReturnRequestForm.bindFromRequest()
       formValidationResult.fold(errorFunction, successFunction)
     }
+  }
+
+  private def processMessage(message: String): Future[InvoiceDb] = {
+    require(
+      message.getBytes.length <= 80,
+      "OP_Return message received was too long, must be less than 80 chars")
+
+    feeProvider.getFeeRate
+      .flatMap { feeRate =>
+        // 124 base tx fee + 100 app fee
+        val baseSize = 124 + 100
+        val messageSize = message.getBytes.length
+
+        // tx fee + app fee (1337)
+        val sats = (feeRate * (baseSize + messageSize)) + Satoshis(1337)
+        val expiry = 60 * 5 // 5 minutes
+
+        lnd
+          .addInvoice(s"OP_RETURN Bot: $message", MilliSatoshis(sats), expiry)
+          .flatMap { invoiceResult =>
+            val invoice = invoiceResult.invoice
+            val db: InvoiceDb =
+              InvoiceDb(rHash = Sha256Digest(invoiceResult.rHash),
+                        invoice = invoice,
+                        message = message,
+                        hash = false,
+                        feeRate = feeRate,
+                        txOpt = None,
+                        txIdOpt = None,
+                        profitOpt = None)
+
+            startMonitor(rHash = invoiceResult.rHash,
+                         invoice = invoice,
+                         message = message,
+                         feeRate = feeRate,
+                         expiry = expiry)
+
+            invoiceDAO.create(db)
+          }
+      }
+  }
 
   private def startMonitor(
       rHash: ByteVector,
