@@ -55,6 +55,12 @@ case class OpReturnBotAppConfig(
   lazy val bitcoindBinary: File =
     Paths.get(config.getString(s"bitcoin-s.bitcoind.binary")).toFile
 
+  lazy val telegramCreds: String =
+    config.getString(s"bitcoin-s.$moduleName.telegramCreds")
+
+  lazy val telegramId: String =
+    config.getString(s"bitcoin-s.$moduleName.telegramId")
+
   lazy val bitcoindVersion: BitcoindVersion = BitcoindVersion.newest
 
   override def start(): Future[Unit] = {

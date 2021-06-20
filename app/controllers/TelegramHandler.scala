@@ -13,8 +13,8 @@ import java.net.URLEncoder
 import scala.concurrent.Future
 
 trait TelegramHandler extends Logging { self: Controller =>
-  private val myTelegramId = "434973056"
-  private val telegramCreds = "1765017204:AAEcyRqASn08wFXRQqFQRtd7bLBRdh9cY-M"
+  private val myTelegramId = self.config.telegramId
+  private val telegramCreds = self.config.telegramCreds
 
   protected def sendTelegramMessage(message: String): Future[Unit] = {
     val url = s"https://api.telegram.org/bot$telegramCreds/sendMessage" +
