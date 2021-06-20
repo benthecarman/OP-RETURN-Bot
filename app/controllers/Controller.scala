@@ -31,6 +31,7 @@ import scala.util.{Failure, Success, Try}
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
     with TelegramHandler
+    with TwitterHandler
     with Logging {
 
   import controllers.Forms._
@@ -330,6 +331,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       res <- invoiceDAO.upsert(dbWithTx)
 
+      _ <- handleTweet(message, txId)
       _ <- txDetailsOpt match {
         case Some(details) =>
           for {

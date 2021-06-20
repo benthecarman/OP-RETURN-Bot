@@ -22,7 +22,8 @@ lazy val root = project.in(file("."))
       "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc ()
+      "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
+      "com.danielasfregola" %% "twitter4s" % "7.0"
     ),
     scalacOptions ++= Seq(
       "-feature",
