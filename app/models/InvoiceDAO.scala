@@ -31,9 +31,6 @@ case class InvoiceDAO()(implicit
 
   private val mappers = new DbCommonsColumnMappers(profile)
 
-  implicit val invoiceMapper: BaseColumnType[LnInvoice] =
-    MappedColumnType.base[LnInvoice, String](_.toString(), LnInvoice.fromString)
-
   import mappers._
 
   override val table: TableQuery[InvoiceTable] = TableQuery[InvoiceTable]

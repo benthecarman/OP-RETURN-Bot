@@ -1,5 +1,5 @@
-val bitcoinsV = "0.6.0-21-41f3cb4d-SNAPSHOT"
-val akkaV = "2.6.14"
+val bitcoinsV = "1.6.0-153-fafc564d-SNAPSHOT"
+val akkaV = "2.6.15"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
@@ -11,7 +11,7 @@ lazy val root = project.in(file("."))
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
-    scalaVersion := "2.13.5",
+    scalaVersion := "2.13.6",
     maintainer := "benthecarman",
     libraryDependencies ++= Seq(
       guice,
