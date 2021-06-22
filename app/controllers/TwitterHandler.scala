@@ -27,11 +27,13 @@ trait TwitterHandler extends Logging { self: Controller =>
       shillTweet()
     }
 
+    val usedMessage = censorMessage(message)
+
     val tweet =
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |
-         |$message
+         |$usedMessage
          |
          |https://mempool.space/tx/${txId.hex}
          |""".stripMargin
@@ -52,5 +54,48 @@ trait TwitterHandler extends Logging { self: Controller =>
 
       sendTweet(tweet).map(_ => ())
     } else Future.unit
+  }
+
+  private def censorMessage(message: String): String = {
+    val replacement = "$#@!&"
+    message
+      .replaceAll("(?i)nigger", replacement)
+      .replaceAll("(?i)niggger", replacement)
+      .replaceAll("(?i)nigggger", replacement)
+      .replaceAll("(?i)niggggger", replacement)
+      .replaceAll("(?i)nigggggger", replacement)
+      .replaceAll("(?i)niggggggger", replacement)
+      .replaceAll("(?i)niggr", replacement)
+      .replaceAll("(?i)nigggr", replacement)
+      .replaceAll("(?i)n i g g e r", replacement)
+      .replaceAll("(?i)nifgger", replacement)
+      .replaceAll("(?i)n1gger", replacement)
+      .replaceAll("(?i)n1ggr", replacement)
+      .replaceAll("(?i)n1ggger", replacement)
+      .replaceAll("(?i)nigga", replacement)
+      .replaceAll("(?i)niggga", replacement)
+      .replaceAll("(?i)n1gga", replacement)
+      .replaceAll("(?i)niglet", replacement)
+      .replaceAll("(?i)n1glet", replacement)
+      .replaceAll("(?i)nigl3t", replacement)
+      .replaceAll("(?i)n1gl3t", replacement)
+      .replaceAll("(?i)nig", replacement)
+      .replaceAll("(?i)kike", replacement)
+      .replaceAll("(?i)k1ke", replacement)
+      .replaceAll("(?i)retard", replacement)
+      .replaceAll("(?i)faggot", replacement)
+      .replaceAll("(?i)f a g g o t", replacement)
+      .replaceAll("(?i)fag", replacement)
+      .replaceAll("(?i)f a g", replacement)
+      .replaceAll("(?i)fagget", replacement)
+      .replaceAll("(?i)fagget", replacement)
+      .replaceAll("(?i)faggit", replacement)
+      .replaceAll("(?i)beaner", replacement)
+      .replaceAll("(?i)b e a n e r", replacement)
+      .replaceAll("(?i)chink", replacement)
+      .replaceAll("(?i)c h i n k", replacement)
+      .replaceAll("(?i)coon", replacement)
+      .replaceAll("(?i)koon", replacement)
+      .replaceAll("(?i)gook", replacement)
   }
 }
