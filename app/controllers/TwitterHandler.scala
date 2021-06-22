@@ -97,5 +97,6 @@ trait TwitterHandler extends Logging { self: Controller =>
       .replaceAll("(?i)coon", replacement)
       .replaceAll("(?i)koon", replacement)
       .replaceAll("(?i)gook", replacement)
+      .replaceAll("(?i)sodomy", replacement)
   }
 }
