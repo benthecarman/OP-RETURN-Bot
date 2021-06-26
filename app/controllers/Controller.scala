@@ -8,7 +8,7 @@ import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.script.ScriptPubKey
-import org.bitcoins.core.protocol.transaction.TransactionOutput
+import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.BitcoinScriptUtil
@@ -175,6 +175,25 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case Some(InvoiceDb(_, invoice, _, _, _, None, _, _)) =>
               throw new RuntimeException(s"This is impossible, $invoice")
           }
+      }
+    }
+  }
+
+  def publishTransaction(txHex: String): Action[AnyContent] = {
+    Try(Transaction.fromHex(txHex)) match {
+      case Failure(exception) =>
+        Action { implicit request: MessagesRequest[AnyContent] =>
+          BadRequest(exception.getMessage)
+        }
+      case Success(tx) => publishTransaction(tx)
+    }
+  }
+
+  def publishTransaction(tx: Transaction): Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      lnd.publishTransaction(tx).map {
+        case Some(error) => BadRequest(error)
+        case None        => Ok(tx.txIdBE.hex)
       }
     }
   }
