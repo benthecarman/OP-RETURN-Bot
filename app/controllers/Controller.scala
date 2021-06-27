@@ -82,15 +82,16 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     mutable.ArrayBuffer[DoubleSha256DigestBE]().addAll(res)
   }
 
+  final val onionAddr =
+    "http://opreturnqfd4qdv745xy6ncwvogbtxddttqkqkp5gipby6uytzpxwzqd.onion"
+
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
       // Pass an unpopulated form to the template
       Ok(
         views.html
           .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
-        .withHeaders(
-          ("Onion-Location",
-           "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion"))
+        .withHeaders(("Onion-Location", onionAddr))
     }
   }
 
@@ -98,15 +99,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       if (uri == uriErrorString) {
         setURI().map { _ =>
-          Ok(views.html.connect(uri)).withHeaders(
-            ("Onion-Location",
-             "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion"))
+          Ok(views.html.connect(uri)).withHeaders(("Onion-Location", onionAddr))
         }
       } else {
         Future.successful(
-          Ok(views.html.connect(uri)).withHeaders(
-            ("Onion-Location",
-             "http://v2twhpggkhd5xrcxdhfjiwclfn6hegcd26og2u7apblc4wrbr62sowyd.onion")))
+          Ok(views.html.connect(uri))
+            .withHeaders(("Onion-Location", onionAddr)))
       }
     }
   }
