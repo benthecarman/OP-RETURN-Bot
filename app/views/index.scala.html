@@ -2,7 +2,7 @@
 
 @(recentTxs: Seq[org.bitcoins.crypto.DoubleSha256DigestBE], form: Form[OpReturnRequest], postUrl: Call)(implicit request: MessagesRequestHeader)
 
-@main("OP_Return Bot") {
+@main("OP_RETURN Bot") {
     @* Global errors are not tied to any particular form field *@
     @if(form.hasGlobalErrors) {
         @form.globalErrors.map { error: FormError =>
