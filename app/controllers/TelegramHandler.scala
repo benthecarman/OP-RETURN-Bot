@@ -2,6 +2,7 @@ package controllers
 
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.Get
+import com.danielasfregola.twitter4s.entities.Tweet
 import grizzled.slf4j.Logging
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency.CurrencyUnit
@@ -27,6 +28,7 @@ trait TelegramHandler extends Logging { self: Controller =>
   protected def handleTelegram(
       rHash: ByteVector,
       invoice: LnInvoice,
+      tweet: Tweet,
       message: String,
       feeRate: SatoshisPerVirtualByte,
       txDetails: TxDetails,
@@ -40,6 +42,7 @@ trait TelegramHandler extends Logging { self: Controller =>
          |Message: $message
          |rhash: ${rHash.toHex}
          |tx: https://mempool.space/tx/${txDetails.txId.hex}
+         |tweet: https://twitter.com/OP_RETURN_Bot/status/${tweet.id}
          |
          |fee rate: $feeRate
          |invoice amount: ${amount.satoshis}

@@ -348,13 +348,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       res <- invoiceDAO.upsert(dbWithTx)
 
-      _ <- handleTweet(message, txId)
+      tweet <- handleTweet(message, txId)
       _ <- txDetailsOpt match {
         case Some(details) =>
           for {
             profit <- invoiceDAO.totalProfit()
             _ <-
-              handleTelegram(rHash, invoice, message, feeRate, details, profit)
+              handleTelegram(rHash, invoice,tweet, message, feeRate, details, profit)
           } yield ()
         case None =>
           val msg = s"Failed to get transaction details for ${rHash.toHex}"
