@@ -8,7 +8,7 @@ import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency.CurrencyUnit
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
-import scodec.bits.ByteVector
+import org.bitcoins.crypto.Sha256Digest
 
 import java.net.URLEncoder
 import scala.concurrent.Future
@@ -26,7 +26,7 @@ trait TelegramHandler extends Logging { self: Controller =>
   }
 
   protected def handleTelegram(
-      rHash: ByteVector,
+      rHash: Sha256Digest,
       invoice: LnInvoice,
       tweet: Tweet,
       message: String,
@@ -40,7 +40,7 @@ trait TelegramHandler extends Logging { self: Controller =>
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |Message: $message
-         |rhash: ${rHash.toHex}
+         |rhash: ${rHash.hex}
          |tx: https://mempool.space/tx/${txDetails.txId.hex}
          |tweet: https://twitter.com/OP_RETURN_Bot/status/${tweet.id}
          |

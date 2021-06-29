@@ -4,8 +4,10 @@ import akka.actor.ActorSystem
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
+import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
+import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction._
@@ -54,8 +56,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     lnd.start()
   }
 
-  val feeProvider: MempoolSpaceProvider = MempoolSpaceProvider(
-    HalfHourFeeTarget)
+  val feeProvider: MempoolSpaceProvider =
+    MempoolSpaceProvider(FastestFeeTarget, MainNet)
 
   val uriErrorString = "Error: try again"
   var uri: String = uriErrorString
@@ -261,7 +263,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           .flatMap { invoiceResult =>
             val invoice = invoiceResult.invoice
             val db: InvoiceDb =
-              InvoiceDb(rHash = Sha256Digest(invoiceResult.rHash),
+              InvoiceDb(rHash = invoiceResult.rHash.hash,
                         invoice = invoice,
                         message = message,
                         hash = false,
@@ -282,22 +284,26 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   }
 
   private def startMonitor(
-      rHash: ByteVector,
+      rHash: PaymentHashTag,
       invoice: LnInvoice,
       message: String,
       feeRate: SatoshisPerVirtualByte,
       expiry: Int): Future[Unit] = {
-    logger.info(s"Starting monitor for invoice ${rHash.toHex}")
+    val monitorDuration = expiry + 60
 
-    lnd.monitorInvoice(rHash, 1.second, expiry + 60).flatMap { invoiceResult =>
-      if (invoiceResult.state.isSettled) {
-        onInvoicePaid(rHash, invoice, message, feeRate).map(_ => ())
-      } else Future.unit
+    logger.info(
+      s"Starting monitor for invoice ${rHash.hash.hex} for $monitorDuration seconds")
+
+    lnd.monitorInvoice(rHash, 1.second, monitorDuration).flatMap {
+      invoiceResult =>
+        if (invoiceResult.state.isSettled) {
+          onInvoicePaid(rHash, invoice, message, feeRate).map(_ => ())
+        } else Future.unit
     }
   }
 
   private def onInvoicePaid(
-      rHash: ByteVector,
+      rHash: PaymentHashTag,
       invoice: LnInvoice,
       message: String,
       feeRate: SatoshisPerVirtualByte): Future[InvoiceDb] = {
@@ -337,7 +343,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       // Need to make sure we upsert the tx and txid even if this fails, so we can't call .get
       profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
 
-      dbWithTx: InvoiceDb = InvoiceDb(Sha256Digest(rHash),
+      dbWithTx: InvoiceDb = InvoiceDb(rHash.hash,
                                       invoice,
                                       message,
                                       hash = false,
@@ -353,7 +359,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         case Some(details) =>
           for {
             profit <- invoiceDAO.totalProfit()
-            _ <- handleTelegram(rHash,
+            _ <- handleTelegram(rHash.hash,
                                 invoice,
                                 tweet,
                                 message,
@@ -362,7 +368,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                                 profit)
           } yield ()
         case None =>
-          val msg = s"Failed to get transaction details for ${rHash.toHex}"
+          val msg = s"Failed to get transaction details for ${rHash.hash.hex}"
           logger.warn(msg)
           sendTelegramMessage(msg)
       }
