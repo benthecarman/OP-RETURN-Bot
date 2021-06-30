@@ -307,7 +307,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       invoice: LnInvoice,
       message: String,
       feeRate: SatoshisPerVirtualByte): Future[InvoiceDb] = {
-    logger.info(s"Received ${invoice.amount.get.toSatoshis} sats!")
+    logger.info(s"Received ${invoice.amount.get.toSatoshis}!")
 
     val output = {
       val messageBytes = ByteVector(message.getBytes)
@@ -354,29 +354,40 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       res <- invoiceDAO.upsert(dbWithTx)
 
-      tweet <- handleTweet(message, txId)
-      _ <- txDetailsOpt match {
-        case Some(details) =>
-          for {
-            profit <- invoiceDAO.totalProfit()
-            _ <- handleTelegram(rHash.hash,
-                                invoice,
-                                tweet,
-                                message,
-                                feeRate,
-                                details,
-                                profit)
-          } yield ()
-        case None =>
-          val msg = s"Failed to get transaction details for ${rHash.hash.hex}"
-          logger.warn(msg)
-          sendTelegramMessage(msg)
+      tweetOpt <- handleTweet(message, txId).map(Some(_)).recover { err =>
+        logger.error(
+          s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
+        None
+      }
+      _ <- {
+        val telegramF = txDetailsOpt match {
+          case Some(details) =>
+            for {
+              profit <- invoiceDAO.totalProfit()
+              _ <- handleTelegram(rHash.hash,
+                                  invoice,
+                                  tweetOpt,
+                                  message,
+                                  feeRate,
+                                  details,
+                                  profit)
+            } yield ()
+          case None =>
+            val msg = s"Failed to get transaction details for ${rHash.hash.hex}"
+            logger.warn(msg)
+            sendTelegramMessage(msg)
+        }
+
+        telegramF.recover { err =>
+          logger.error(
+            s"Failed to send telegram message for invoice ${rHash.hash.hex}, got error $err")
+        }
       }
     } yield res
 
     createTxF.failed.foreach { err =>
       logger.error(
-        s"Failed to create tx for invoice ${invoice.lnTags.paymentHash.hash.hex}, got error $err")
+        s"Failed to create tx for invoice ${rHash.hash.hex}, got error $err")
     }
 
     createTxF

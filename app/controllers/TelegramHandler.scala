@@ -28,7 +28,7 @@ trait TelegramHandler extends Logging { self: Controller =>
   protected def handleTelegram(
       rHash: Sha256Digest,
       invoice: LnInvoice,
-      tweet: Tweet,
+      tweetOpt: Option[Tweet],
       message: String,
       feeRate: SatoshisPerVirtualByte,
       txDetails: TxDetails,
@@ -36,21 +36,37 @@ trait TelegramHandler extends Logging { self: Controller =>
     val amount = invoice.amount.get.toSatoshis
     val profit = amount - txDetails.totalFees
 
-    val telegramMsg =
-      s"""
-         |🔔 🔔 NEW OP_RETURN 🔔 🔔
-         |Message: $message
-         |rhash: ${rHash.hex}
-         |tx: https://mempool.space/tx/${txDetails.txId.hex}
-         |tweet: https://twitter.com/OP_RETURN_Bot/status/${tweet.id}
-         |
-         |fee rate: $feeRate
-         |invoice amount: ${amount.satoshis}
-         |tx fee: ${txDetails.totalFees.satoshis}
-         |profit: ${profit.satoshis}
-         |
-         |total profit: ${totalProfit.satoshis}
-         |""".stripMargin
+    val telegramMsg = tweetOpt match {
+      case Some(tweet) =>
+        s"""
+           |🔔 🔔 NEW OP_RETURN 🔔 🔔
+           |Message: $message
+           |rhash: ${rHash.hex}
+           |tx: https://mempool.space/tx/${txDetails.txId.hex}
+           |tweet: https://twitter.com/OP_RETURN_Bot/status/${tweet.id}
+           |
+           |fee rate: $feeRate
+           |invoice amount: ${amount.satoshis}
+           |tx fee: ${txDetails.totalFees.satoshis}
+           |profit: ${profit.satoshis}
+           |
+           |total profit: ${totalProfit.satoshis}
+           |""".stripMargin
+      case None =>
+        s"""
+           |🔔 🔔 NEW OP_RETURN 🔔 🔔
+           |Message: $message
+           |rhash: ${rHash.hex}
+           |tx: https://mempool.space/tx/${txDetails.txId.hex}
+           |
+           |fee rate: $feeRate
+           |invoice amount: ${amount.satoshis}
+           |tx fee: ${txDetails.totalFees.satoshis}
+           |profit: ${profit.satoshis}
+           |
+           |total profit: ${totalProfit.satoshis}
+           |""".stripMargin
+    }
 
     sendTelegramMessage(telegramMsg)
   }
