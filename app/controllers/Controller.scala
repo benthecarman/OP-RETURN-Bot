@@ -1,6 +1,7 @@
 package controllers
 
 import akka.actor.ActorSystem
+import com.google.protobuf.ByteString
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
@@ -22,6 +23,8 @@ import org.bitcoins.lnd.rpc.LndRpcClient
 import play.api.data._
 import play.api.mvc._
 import scodec.bits.ByteVector
+import signrpc.TxOut
+import walletrpc.SendOutputsRequest
 
 import javax.inject.Inject
 import scala.collection._
@@ -250,8 +253,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
     feeProvider.getFeeRate
       .flatMap { feeRate =>
-        // 124 base tx fee + 100 app fee
-        val baseSize = 124 + 100
+        // 125 base tx fee * 2 just in case
+        val baseSize = 250
         val messageSize = message.getBytes.length
 
         // tx fee + app fee (1337)
@@ -320,13 +323,28 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       TransactionOutput(Satoshis.zero, scriptPubKey)
     }
 
+    val txOut =
+      TxOut(output.value.satoshis.toLong,
+            ByteString.copyFrom(output.scriptPubKey.asmBytes.toArray))
+
+    val request: SendOutputsRequest = SendOutputsRequest(
+      satPerKw = feeRate.toSatoshisPerKW.toLong,
+      outputs = Vector(txOut),
+      label = invoice.lnTags.description.map(_.string).getOrElse(""),
+      spendUnconfirmed = true)
+
     val createTxF = for {
-      transaction <-
-        lnd.sendOutputs(Vector(output), feeRate, spendUnconfirmed = true)
-      _ <- lnd.publishTransaction(transaction)
+      transaction <- lnd.sendOutputs(request)
+      errorOpt <- lnd.publishTransaction(transaction)
 
       txId = transaction.txIdBE
-      _ = logger.info(s"Successfully created tx: ${txId.hex}")
+
+      _ = errorOpt match {
+        case Some(error) =>
+          logger.error(s"Error when broadcasting transaction ${txId.hex}, $error")
+        case None =>
+          logger.info(s"Successfully created tx: ${txId.hex}")
+      }
 
       txDetailsOpt <- lnd.getTransaction(txId)
 
@@ -373,7 +391,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                                   profit)
             } yield ()
           case None =>
-            val msg = s"Failed to get transaction details for ${rHash.hash.hex}"
+            val msg =
+              s"Failed to get transaction details for ${rHash.hash.hex}\n" +
+                s"Transaction (${txId.hex}): ${transaction.hex}"
             logger.warn(msg)
             sendTelegramMessage(msg)
         }
