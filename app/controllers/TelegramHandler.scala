@@ -1,23 +1,52 @@
 package controllers
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.Get
+import com.bot4s.telegram.api.RequestHandler
+import com.bot4s.telegram.api.declarative.Commands
+import com.bot4s.telegram.clients.FutureSttpClient
+import com.bot4s.telegram.future.{Polling, TelegramBot}
 import com.danielasfregola.twitter4s.entities.Tweet
-import grizzled.slf4j.Logging
+import config.OpReturnBotAppConfig
+import models.InvoiceDAO
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency.CurrencyUnit
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
+import sttp.capabilities._
+import sttp.client3.SttpBackend
+import sttp.client3.okhttp.OkHttpFutureBackend
 
 import java.net.URLEncoder
 import scala.concurrent.Future
 
-trait TelegramHandler extends Logging { self: Controller =>
-  private val myTelegramId = self.config.telegramId
-  private val telegramCreds = self.config.telegramCreds
+class TelegramHandler(implicit
+    config: OpReturnBotAppConfig,
+    system: ActorSystem)
+    extends TelegramBot
+    with Polling
+    with Commands[Future] {
 
-  protected def sendTelegramMessage(message: String): Future[Unit] = {
+  val invoiceDAO: InvoiceDAO = InvoiceDAO()
+
+  private val myTelegramId = config.telegramId
+  private val telegramCreds = config.telegramCreds
+
+  implicit val backend: SttpBackend[Future, WebSockets] =
+    OkHttpFutureBackend()
+
+  override val client: RequestHandler[Future] = new FutureSttpClient(
+    telegramCreds)
+
+  onCommand("report") { implicit msg =>
+    createReport().map { report =>
+      reply(report)
+    }
+  }
+
+  def sendTelegramMessage(message: String): Future[Unit] = {
     val url = s"https://api.telegram.org/bot$telegramCreds/sendMessage" +
       s"?chat_id=${URLEncoder.encode(myTelegramId, "UTF-8")}" +
       s"&text=${URLEncoder.encode(message, "UTF-8")}"
@@ -25,7 +54,7 @@ trait TelegramHandler extends Logging { self: Controller =>
     Http().singleRequest(Get(url)).map(_ => ())
   }
 
-  protected def handleTelegram(
+  def handleTelegram(
       rHash: Sha256Digest,
       invoice: LnInvoice,
       tweetOpt: Option[Tweet],
@@ -72,5 +101,17 @@ trait TelegramHandler extends Logging { self: Controller =>
     }
 
     sendTelegramMessage(telegramMsg)
+  }
+
+  protected def createReport(): Future[String] = {
+    for {
+      profit <- invoiceDAO.totalProfit()
+      chainFees <- invoiceDAO.totalChainFees()
+    } yield {
+      s"""
+         |total chain fees: ${chainFees.satoshis}
+         |total profit: ${profit.satoshis}
+         |""".stripMargin
+    }
   }
 }

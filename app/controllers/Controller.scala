@@ -35,7 +35,6 @@ import scala.util.{Failure, Success, Try}
 
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
-    with TelegramHandler
     with TwitterHandler
     with Logging {
 
@@ -89,6 +88,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   final val onionAddr =
     "http://opreturnqfd4qdv745xy6ncwvogbtxddttqkqkp5gipby6uytzpxwzqd.onion"
+
+  private val telegramHandler = new TelegramHandler()
+
+  telegramHandler.run()
 
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
@@ -387,21 +390,21 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             for {
               profit <- invoiceDAO.totalProfit()
               chainFees <- invoiceDAO.totalChainFees()
-              _ <- handleTelegram(rHash = rHash.hash,
-                                  invoice = invoice,
-                                  tweetOpt = tweetOpt,
-                                  message = message,
-                                  feeRate = feeRate,
-                                  txDetails = details,
-                                  totalProfit = profit,
-                                  totalChainFees = chainFees)
+              _ <- telegramHandler.handleTelegram(rHash = rHash.hash,
+                                                  invoice = invoice,
+                                                  tweetOpt = tweetOpt,
+                                                  message = message,
+                                                  feeRate = feeRate,
+                                                  txDetails = details,
+                                                  totalProfit = profit,
+                                                  totalChainFees = chainFees)
             } yield ()
           case None =>
             val msg =
               s"Failed to get transaction details for ${rHash.hash.hex}\n" +
                 s"Transaction (${txId.hex}): ${transaction.hex}"
             logger.warn(msg)
-            sendTelegramMessage(msg)
+            telegramHandler.sendTelegramMessage(msg)
         }
 
         telegramF.recover { err =>

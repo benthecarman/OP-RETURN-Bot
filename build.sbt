@@ -6,7 +6,8 @@ resolvers += Resolver.sonatypeRepo("snapshots")
 resolvers +=
   "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
 
-lazy val root = project.in(file("."))
+lazy val root = project
+  .in(file("."))
   .enablePlugins(PlayScala, DebianPlugin, FlywayPlugin)
   .settings(
     name := "op-return-bot",
@@ -23,7 +24,8 @@ lazy val root = project.in(file("."))
       "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
-      "com.danielasfregola" %% "twitter4s" % "7.0"
+      "com.danielasfregola" %% "twitter4s" % "7.0",
+      "com.bot4s" %% "telegram-akka" % "5.0.1"
     ),
     scalacOptions ++= Seq(
       "-feature",
