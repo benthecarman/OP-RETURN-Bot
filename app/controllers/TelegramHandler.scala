@@ -20,7 +20,9 @@ import sttp.client3.SttpBackend
 import sttp.client3.okhttp.OkHttpFutureBackend
 
 import java.net.URLEncoder
+import java.text.NumberFormat
 import scala.concurrent.Future
+import scala.util.matching.Regex
 
 class TelegramHandler(implicit
     config: OpReturnBotAppConfig,
@@ -28,6 +30,9 @@ class TelegramHandler(implicit
     extends TelegramBot
     with Polling
     with Commands[Future] {
+
+  val numericRegex: Regex = "-?([1-9,][0-9,]*)?".r
+  val numberFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
@@ -76,12 +81,12 @@ class TelegramHandler(implicit
            |tweet: https://twitter.com/OP_RETURN_Bot/status/${tweet.id}
            |
            |fee rate: $feeRate
-           |invoice amount: ${amount.satoshis}
-           |tx fee: ${txDetails.totalFees.satoshis}
-           |profit: ${profit.satoshis}
+           |invoice amount: ${printAmount(amount)}
+           |tx fee: ${printAmount(txDetails.totalFees)}
+           |profit: ${printAmount(profit)}
            |
-           |total chain fees: ${totalChainFees.satoshis}
-           |total profit: ${totalProfit.satoshis}
+           |total chain fees: ${printAmount(totalChainFees)}
+           |total profit: ${printAmount(totalProfit)}
            |""".stripMargin
       case None =>
         s"""
@@ -91,12 +96,12 @@ class TelegramHandler(implicit
            |tx: https://mempool.space/tx/${txDetails.txId.hex}
            |
            |fee rate: $feeRate
-           |invoice amount: ${amount.satoshis}
-           |tx fee: ${txDetails.totalFees.satoshis}
-           |profit: ${profit.satoshis}
+           |invoice amount: ${printAmount(amount)}
+           |tx fee: ${printAmount(txDetails.totalFees)}
+           |profit: ${printAmount(profit)}
            |
-           |total chain fees: ${totalChainFees.satoshis}
-           |total profit: ${totalProfit.satoshis}
+           |total chain fees: ${printAmount(totalChainFees)}
+           |total profit: ${printAmount(totalProfit)}
            |""".stripMargin
     }
 
@@ -109,9 +114,13 @@ class TelegramHandler(implicit
       chainFees <- invoiceDAO.totalChainFees()
     } yield {
       s"""
-         |total chain fees: ${chainFees.satoshis}
-         |total profit: ${profit.satoshis}
+         |total chain fees: ${printAmount(chainFees)}
+         |total profit: ${printAmount(profit)}
          |""".stripMargin
     }
+  }
+
+  private def printAmount(amount: CurrencyUnit): String = {
+    numberFormatter.format(amount.satoshis.toLong) + " sats"
   }
 }
