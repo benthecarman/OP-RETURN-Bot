@@ -76,6 +76,24 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
+  val dbF: Future[Unit] = for {
+    completed <- invoiceDAO.completed()
+    txs <- lnd.getTransactions
+    updates = completed.map { db =>
+      val detailsOpt = txs.find(tx => db.txIdOpt.contains(tx.txId))
+      detailsOpt match {
+        case Some(details) =>
+          db.copy(chainFeeOpt = Some(details.totalFees))
+        case None =>
+          println(s"NO DETAILS FOR ${db.txIdOpt.get}.")
+          db
+      }
+    }
+
+    _ <- invoiceDAO.updateAll(updates)
+    total <- invoiceDAO.totalOnChainFees()
+  } yield println(total.satoshis)
+
   // The URL to the request.  You can call this directly from the template, but it
   // can be more convenient to leave the template completely stateless i.e. all
   // of the "Controller" references are inside the .scala file.
@@ -132,9 +150,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       invoiceDAO.read(hash).map {
         case None =>
           BadRequest("Invoice not from OP_RETURN Bot")
-        case Some(InvoiceDb(_, _, _, _, _, _, None, _)) =>
+        case Some(InvoiceDb(_, _, _, _, _, _, None, _, _)) =>
           BadRequest("Invoice has not been paid")
-        case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _)) =>
+        case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _, _)) =>
           Ok(txId.hex)
       }
     }
@@ -152,9 +170,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           invoiceDAO.read(invoice.lnTags.paymentHash.hash).map {
             case None =>
               BadRequest("Invoice not from OP_RETURN Bot")
-            case Some(InvoiceDb(_, _, _, _, _, _, None, _)) =>
+            case Some(InvoiceDb(_, _, _, _, _, _, None, _, _)) =>
               Ok(views.html.showInvoice(invoice))
-            case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _)) =>
+            case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _, _)) =>
               Redirect(routes.Controller.success(txId.hex))
           }
       }
@@ -173,9 +191,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
-            case Some(InvoiceDb(_, _, _, _, _, Some(tx), _, _)) =>
+            case Some(InvoiceDb(_, _, _, _, _, Some(tx), _, _, _)) =>
               Ok(views.html.success(tx))
-            case Some(InvoiceDb(_, invoice, _, _, _, None, _, _)) =>
+            case Some(InvoiceDb(_, invoice, _, _, _, None, _, _, _)) =>
               throw new RuntimeException(s"This is impossible, $invoice")
           }
       }
@@ -273,7 +291,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                         feeRate = feeRate,
                         txOpt = None,
                         txIdOpt = None,
-                        profitOpt = None)
+                        profitOpt = None,
+                        chainFeeOpt = None)
             invoiceDAO.create(db).map { db =>
               startMonitor(rHash = invoiceResult.rHash,
                            invoice = invoice,
@@ -341,7 +360,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       _ = errorOpt match {
         case Some(error) =>
-          logger.error(s"Error when broadcasting transaction ${txId.hex}, $error")
+          logger.error(
+            s"Error when broadcasting transaction ${txId.hex}, $error")
         case None =>
           logger.info(s"Successfully created tx: ${txId.hex}")
       }
@@ -359,6 +379,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       amount = invoice.amount.get.toSatoshis
       // Need to make sure we upsert the tx and txid even if this fails, so we can't call .get
+      chainFeeOpt = txDetailsOpt.map(_.totalFees)
       profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
 
       dbWithTx: InvoiceDb = InvoiceDb(rHash.hash,
@@ -368,7 +389,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                                       feeRate,
                                       Some(transaction),
                                       Some(txId),
-                                      profitOpt)
+                                      profitOpt,
+                                      chainFeeOpt)
 
       res <- invoiceDAO.upsert(dbWithTx)
 

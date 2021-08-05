@@ -19,7 +19,8 @@ case class InvoiceDb(
     feeRate: SatoshisPerVirtualByte,
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE],
-    profitOpt: Option[CurrencyUnit])
+    profitOpt: Option[CurrencyUnit],
+    chainFeeOpt: Option[CurrencyUnit])
 
 case class InvoiceDAO()(implicit
     val ec: ExecutionContext,
@@ -52,6 +53,12 @@ case class InvoiceDAO()(implicit
     safeDatabase.run(query.result).map(_.headOption)
   }
 
+  def completed(): Future[Vector[InvoiceDb]] = {
+    val query = table.filter(_.txIdOpt.isDefined)
+
+    safeDatabase.runVec(query.result)
+  }
+
   def lastFiveCompleted(): Future[Vector[DoubleSha256DigestBE]] = {
     val query = table.filter(_.txIdOpt.isDefined).map(_.txIdOpt)
 
@@ -60,6 +67,12 @@ case class InvoiceDAO()(implicit
 
   def totalProfit(): Future[CurrencyUnit] = {
     val query = table.filter(_.profitOpt.isDefined).map(_.profitOpt)
+
+    safeDatabase.runVec(query.result).map(_.flatten.sum)
+  }
+
+  def totalOnChainFees(): Future[CurrencyUnit] = {
+    val query = table.filter(_.chainFeeOpt.isDefined).map(_.chainFeeOpt)
 
     safeDatabase.runVec(query.result).map(_.flatten.sum)
   }
@@ -83,6 +96,8 @@ case class InvoiceDAO()(implicit
 
     def profitOpt: Rep[Option[CurrencyUnit]] = column("profit")
 
+    def chainFeeOpt: Rep[Option[CurrencyUnit]] = column("chain_fee")
+
     def * : ProvenShape[InvoiceDb] =
       (rHash,
        invoice,
@@ -91,6 +106,7 @@ case class InvoiceDAO()(implicit
        feeRate,
        transactionOpt,
        txIdOpt,
-       profitOpt).<>(InvoiceDb.tupled, InvoiceDb.unapply)
+       profitOpt,
+       chainFeeOpt).<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }

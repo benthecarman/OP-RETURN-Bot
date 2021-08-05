@@ -6,8 +6,7 @@ import play.api.data.FormError
 import play.api.mvc._
 import play.api.test._
 
-/**
-  * Unit tests that do not require a running Play application.
+/** Unit tests that do not require a running Play application.
   *
   * This is useful for testing forms and constraints.
   */

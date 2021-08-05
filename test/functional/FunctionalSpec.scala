@@ -13,8 +13,7 @@ import play.api.test._
 
 import scala.concurrent.Future
 
-/**
-  * Functional specification that has a running Play application.
+/** Functional specification that has a running Play application.
   *
   * This is good for testing filter functionality, such as CSRF token and template checks.
   *
