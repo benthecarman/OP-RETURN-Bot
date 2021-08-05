@@ -32,7 +32,8 @@ trait TelegramHandler extends Logging { self: Controller =>
       message: String,
       feeRate: SatoshisPerVirtualByte,
       txDetails: TxDetails,
-      totalProfit: CurrencyUnit): Future[Unit] = {
+      totalProfit: CurrencyUnit,
+      totalChainFees: CurrencyUnit): Future[Unit] = {
     val amount = invoice.amount.get.toSatoshis
     val profit = amount - txDetails.totalFees
 
@@ -50,6 +51,7 @@ trait TelegramHandler extends Logging { self: Controller =>
            |tx fee: ${txDetails.totalFees.satoshis}
            |profit: ${profit.satoshis}
            |
+           |total chain fees: ${totalChainFees.satoshis}
            |total profit: ${totalProfit.satoshis}
            |""".stripMargin
       case None =>
@@ -64,6 +66,7 @@ trait TelegramHandler extends Logging { self: Controller =>
            |tx fee: ${txDetails.totalFees.satoshis}
            |profit: ${profit.satoshis}
            |
+           |total chain fees: ${totalChainFees.satoshis}
            |total profit: ${totalProfit.satoshis}
            |""".stripMargin
     }

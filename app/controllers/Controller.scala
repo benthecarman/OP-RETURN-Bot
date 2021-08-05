@@ -76,24 +76,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
-  val dbF: Future[Unit] = for {
-    completed <- invoiceDAO.completed()
-    txs <- lnd.getTransactions
-    updates = completed.map { db =>
-      val detailsOpt = txs.find(tx => db.txIdOpt.contains(tx.txId))
-      detailsOpt match {
-        case Some(details) =>
-          db.copy(chainFeeOpt = Some(details.totalFees))
-        case None =>
-          println(s"NO DETAILS FOR ${db.txIdOpt.get}.")
-          db
-      }
-    }
-
-    _ <- invoiceDAO.updateAll(updates)
-    total <- invoiceDAO.totalOnChainFees()
-  } yield println(total.satoshis)
-
   // The URL to the request.  You can call this directly from the template, but it
   // can be more convenient to leave the template completely stateless i.e. all
   // of the "Controller" references are inside the .scala file.
@@ -404,13 +386,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           case Some(details) =>
             for {
               profit <- invoiceDAO.totalProfit()
-              _ <- handleTelegram(rHash.hash,
-                                  invoice,
-                                  tweetOpt,
-                                  message,
-                                  feeRate,
-                                  details,
-                                  profit)
+              chainFees <- invoiceDAO.totalChainFees()
+              _ <- handleTelegram(rHash = rHash.hash,
+                                  invoice = invoice,
+                                  tweetOpt = tweetOpt,
+                                  message = message,
+                                  feeRate = feeRate,
+                                  txDetails = details,
+                                  totalProfit = profit,
+                                  totalChainFees = chainFees)
             } yield ()
           case None =>
             val msg =

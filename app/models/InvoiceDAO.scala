@@ -71,7 +71,7 @@ case class InvoiceDAO()(implicit
     safeDatabase.runVec(query.result).map(_.flatten.sum)
   }
 
-  def totalOnChainFees(): Future[CurrencyUnit] = {
+  def totalChainFees(): Future[CurrencyUnit] = {
     val query = table.filter(_.chainFeeOpt.isDefined).map(_.chainFeeOpt)
 
     safeDatabase.runVec(query.result).map(_.flatten.sum)
