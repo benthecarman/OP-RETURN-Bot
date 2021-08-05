@@ -109,13 +109,14 @@ class TelegramHandler(implicit
   }
 
   protected def createReport(): Future[String] = {
-    for {
-      profit <- invoiceDAO.totalProfit()
-      chainFees <- invoiceDAO.totalChainFees()
-    } yield {
+    invoiceDAO.completed().map { completed =>
+      val chainFees = completed.flatMap(_.chainFeeOpt).sum
+      val profit = completed.flatMap(_.profitOpt).sum
+
       s"""
-         |total chain fees: ${printAmount(chainFees)}
-         |total profit: ${printAmount(profit)}
+         |Total OP_RETURNs: ${numberFormatter.format(completed.size)}
+         |Total chain fees: ${printAmount(chainFees)}
+         |Total profit: ${printAmount(profit)}
          |""".stripMargin
     }
   }
