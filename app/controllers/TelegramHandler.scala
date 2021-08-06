@@ -71,39 +71,28 @@ class TelegramHandler(implicit
     val amount = invoice.amount.get.toSatoshis
     val profit = amount - txDetails.totalFees
 
-    val telegramMsg = tweetOpt match {
+    val tweetLine = tweetOpt match {
       case Some(tweet) =>
-        s"""
-           |🔔 🔔 NEW OP_RETURN 🔔 🔔
-           |Message: $message
-           |rhash: ${rHash.hex}
-           |tx: https://mempool.space/tx/${txDetails.txId.hex}
-           |tweet: https://twitter.com/OP_RETURN_Bot/status/${tweet.id}
-           |
-           |fee rate: $feeRate
-           |invoice amount: ${printAmount(amount)}
-           |tx fee: ${printAmount(txDetails.totalFees)}
-           |profit: ${printAmount(profit)}
-           |
-           |total chain fees: ${printAmount(totalChainFees)}
-           |total profit: ${printAmount(totalProfit)}
-           |""".stripMargin
-      case None =>
-        s"""
-           |🔔 🔔 NEW OP_RETURN 🔔 🔔
-           |Message: $message
-           |rhash: ${rHash.hex}
-           |tx: https://mempool.space/tx/${txDetails.txId.hex}
-           |
-           |fee rate: $feeRate
-           |invoice amount: ${printAmount(amount)}
-           |tx fee: ${printAmount(txDetails.totalFees)}
-           |profit: ${printAmount(profit)}
-           |
-           |total chain fees: ${printAmount(totalChainFees)}
-           |total profit: ${printAmount(totalProfit)}
-           |""".stripMargin
+        s"https://twitter.com/OP_RETURN_Bot/status/${tweet.id}"
+      case None => "failed"
     }
+
+    val telegramMsg =
+      s"""
+         |🔔 🔔 NEW OP_RETURN 🔔 🔔
+         |Message: $message
+         |rhash: ${rHash.hex}
+         |tx: https://mempool.space/tx/${txDetails.txId.hex}
+         |tweet: $tweetLine
+         |
+         |fee rate: $feeRate
+         |invoice amount: ${printAmount(amount)}
+         |tx fee: ${printAmount(txDetails.totalFees)}
+         |profit: ${printAmount(profit)}
+         |
+         |total chain fees: ${printAmount(totalChainFees)}
+         |total profit: ${printAmount(totalProfit)}
+         |""".stripMargin
 
     sendTelegramMessage(telegramMsg)
   }
