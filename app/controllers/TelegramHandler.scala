@@ -11,7 +11,7 @@ import com.danielasfregola.twitter4s.entities.Tweet
 import config.OpReturnBotAppConfig
 import models.InvoiceDAO
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
-import org.bitcoins.core.currency.CurrencyUnit
+import org.bitcoins.core.currency.{CurrencyUnit, Satoshis}
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
@@ -101,11 +101,14 @@ class TelegramHandler(implicit
     invoiceDAO.completed().map { completed =>
       val chainFees = completed.flatMap(_.chainFeeOpt).sum
       val profit = completed.flatMap(_.profitOpt).sum
+      val bugged = completed.flatMap(_.profitOpt).filter(_ <= Satoshis.zero).sum
 
       s"""
          |Total OP_RETURNs: ${numberFormatter.format(completed.size)}
          |Total chain fees: ${printAmount(chainFees)}
          |Total profit: ${printAmount(profit)}
+         |Total bugged: ${printAmount(bugged)}
+         |Profit w/o bug: ${printAmount(profit - bugged)}
          |""".stripMargin
     }
   }

@@ -1,7 +1,7 @@
 package models
 
 import config.OpReturnBotAppConfig
-import org.bitcoins.core.currency.CurrencyUnit
+import org.bitcoins.core.currency.{CurrencyUnit, Satoshis}
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
