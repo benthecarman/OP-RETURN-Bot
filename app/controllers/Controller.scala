@@ -304,6 +304,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     lnd.monitorInvoice(rHash, 1.second, monitorDuration).flatMap {
       invoiceResult =>
         if (invoiceResult.state.isSettled) {
+          require(
+            invoiceResult.amtPaidSat >= invoice.amount.get.toSatoshis.toLong,
+            "User did not pay invoice in full")
           onInvoicePaid(rHash, invoice, message, feeRate).map(_ => ())
         } else Future.unit
     }
