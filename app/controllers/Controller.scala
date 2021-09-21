@@ -14,7 +14,7 @@ import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
-import org.bitcoins.core.util.BitcoinScriptUtil
+import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.feeprovider.MempoolSpaceProvider
@@ -212,7 +212,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       def success(input: OpReturnRequest): Future[Result] = {
         for {
-          invoiceDb <- processMessage(input.message)
+          invoiceDb <- processMessage(input.message, input.noTwitter)
         } yield {
           Ok(invoiceDb.invoice.toString())
         }
@@ -239,7 +239,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
           val message = data.message
-          processMessage(message).map { invoiceDb =>
+          processMessage(message, data.noTwitter).map { invoiceDb =>
             Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
           }
       }
@@ -249,7 +249,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  private def processMessage(message: String): Future[InvoiceDb] = {
+  private def processMessage(
+      message: String,
+      noTwitter: Boolean): Future[InvoiceDb] = {
     require(
       message.getBytes.length <= 80,
       "OP_Return message received was too long, must be less than 80 chars")
@@ -260,8 +262,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         val baseSize = 250
         val messageSize = message.getBytes.length
 
-        // tx fee + app fee (1337)
-        val sats = (feeRate * (baseSize + messageSize)) + Satoshis(1337)
+        // Add fee if no tweet
+        val noTwitterFee = if (noTwitter) Satoshis(1000) else Satoshis.zero
+
+        // tx fee + app fee (1337) + twitter fee
+        val sats =
+          (feeRate * (baseSize + messageSize)) + Satoshis(1337) + noTwitterFee
         val expiry = 60 * 5 // 5 minutes
 
         lnd
@@ -269,19 +275,22 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           .flatMap { invoiceResult =>
             val invoice = invoiceResult.invoice
             val db: InvoiceDb =
-              InvoiceDb(rHash = invoiceResult.rHash.hash,
-                        invoice = invoice,
-                        message = message,
-                        hash = false,
-                        feeRate = feeRate,
-                        txOpt = None,
-                        txIdOpt = None,
-                        profitOpt = None,
-                        chainFeeOpt = None)
+              InvoiceDb(
+                rHash = invoiceResult.rHash.hash,
+                invoice = invoice,
+                message = message,
+                noTwitter = noTwitter,
+                feeRate = feeRate,
+                txOpt = None,
+                txIdOpt = None,
+                profitOpt = None,
+                chainFeeOpt = None
+              )
             invoiceDAO.create(db).map { db =>
               startMonitor(rHash = invoiceResult.rHash,
                            invoice = invoice,
                            message = message,
+                           noTwitter = noTwitter,
                            feeRate = feeRate,
                            expiry = expiry)
               db
@@ -294,6 +303,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       rHash: PaymentHashTag,
       invoice: LnInvoice,
       message: String,
+      noTwitter: Boolean,
       feeRate: SatoshisPerVirtualByte,
       expiry: Int): Future[Unit] = {
     val monitorDuration = expiry + 60
@@ -307,7 +317,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           require(
             invoiceResult.amtPaidSat >= invoice.amount.get.toSatoshis.toLong,
             "User did not pay invoice in full")
-          onInvoicePaid(rHash, invoice, message, feeRate).map(_ => ())
+          onInvoicePaid(rHash, invoice, message, noTwitter, feeRate).map(_ =>
+            ())
         } else Future.unit
     }
   }
@@ -316,6 +327,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       rHash: PaymentHashTag,
       invoice: LnInvoice,
       message: String,
+      noTwitter: Boolean,
       feeRate: SatoshisPerVirtualByte): Future[InvoiceDb] = {
     logger.info(s"Received ${invoice.amount.get.toSatoshis}!")
 
@@ -373,7 +385,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       dbWithTx: InvoiceDb = InvoiceDb(rHash.hash,
                                       invoice,
                                       message,
-                                      hash = false,
+                                      noTwitter = noTwitter,
                                       feeRate,
                                       Some(transaction),
                                       Some(txId),
@@ -382,11 +394,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       res <- invoiceDAO.upsert(dbWithTx)
 
-      tweetOpt <- handleTweet(message, txId).map(Some(_)).recover { err =>
-        logger.error(
-          s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
-        None
-      }
+      tweetOpt <-
+        if (noTwitter) FutureUtil.none
+        else
+          handleTweet(message, txId).map(Some(_)).recover { err =>
+            logger.error(
+              s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
+            None
+          }
       _ <- {
         val telegramF = txDetailsOpt match {
           case Some(details) =>

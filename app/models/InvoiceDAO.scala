@@ -15,7 +15,7 @@ case class InvoiceDb(
     rHash: Sha256Digest,
     invoice: LnInvoice,
     message: String,
-    hash: Boolean,
+    noTwitter: Boolean,
     feeRate: SatoshisPerVirtualByte,
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE],
@@ -86,7 +86,7 @@ case class InvoiceDAO()(implicit
 
     def message: Rep[String] = column("message")
 
-    def hash: Rep[Boolean] = column("hash")
+    def noTwitter: Rep[Boolean] = column("hash")
 
     def feeRate: Rep[SatoshisPerVirtualByte] = column("fee_rate")
 
@@ -102,7 +102,7 @@ case class InvoiceDAO()(implicit
       (rHash,
        invoice,
        message,
-       hash,
+       noTwitter,
        feeRate,
        transactionOpt,
        txIdOpt,

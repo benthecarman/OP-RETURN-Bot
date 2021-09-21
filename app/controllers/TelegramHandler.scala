@@ -74,7 +74,7 @@ class TelegramHandler(implicit
     val tweetLine = tweetOpt match {
       case Some(tweet) =>
         s"https://twitter.com/OP_RETURN_Bot/status/${tweet.id}"
-      case None => "failed"
+      case None => "Hidden"
     }
 
     val telegramMsg =

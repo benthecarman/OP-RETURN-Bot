@@ -8,12 +8,17 @@ object Forms {
 
   case class WrappedInvoice(invoice: LnInvoice)
 
-  case class OpReturnRequest(message: String)
+  case class OpReturnRequest(
+      message: String,
+      private val noTwitterOpt: Option[Boolean]) {
+    val noTwitter: Boolean = noTwitterOpt.getOrElse(false)
+  }
 
   val opReturnRequestForm: Form[OpReturnRequest] = Form(
     mapping(
       "message" -> nonEmptyText.verifying("Message was too long",
-                                          _.getBytes.length <= 80)
+                                          _.getBytes.length <= 80),
+      "noTwitter" -> optional(boolean)
     )(OpReturnRequest.apply)(OpReturnRequest.unapply)
   )
 
