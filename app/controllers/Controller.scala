@@ -234,6 +234,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           // This is the bad case, where the form had validation errors.
           // Let's show the user the form again, with the errors highlighted.
           // Note how we pass the form with errors to the template.
+          logger.warn(
+            "From with errors: " + formWithErrors.errors.mkString(" "))
+
           Future.successful(
             BadRequest(views.html
               .index(recentTransactions.toSeq, formWithErrors, postUrl)))

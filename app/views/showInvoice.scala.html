@@ -1,17 +1,19 @@
 @import org.bitcoins.core.protocol.ln.LnInvoice
 @(invoice: LnInvoice)(implicit request: MessagesRequestHeader)
 
-@main("Invoice") {
+    @main("Invoice") {
 
-    <h1>Invoice</h1>
+        <h1>Invoice</h1>
 
-    <img id='barcode' src="https://api.qrserver.com/v1/create-qr-code/?data=@{invoice.toString()}&amp;size=1000x1000" alt="" title="invoce" width="300" height="300" />
-    <br>
-    <code>@invoice.toString()</code>
-    <br>
+        <img id='barcode' src="https://api.qrserver.com/v1/create-qr-code/?data=@{
+            invoice.toString()
+        }&amp;size=1000x1000" alt="" title="invoice" width="300" height="300" />
+        <br>
+        <code>@invoice.toString()</code>
+        <br>
 
-    <form method="get" action="invoice">
-        <input type="text" id="invoice" name="invoice" hidden value="@invoice.toString()"/>
-        <input type="submit" value="Paid"/>
-    </form>
-}
+        <form method="get" action="invoice">
+            <input type="text" id="invoice" name="invoice" hidden value="@invoice.toString()"/>
+            <input type="submit" value="Paid"/>
+        </form>
+    }

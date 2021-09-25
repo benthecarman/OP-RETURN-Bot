@@ -2,63 +2,67 @@
 
 @(recentTxs: Seq[org.bitcoins.crypto.DoubleSha256DigestBE], form: Form[OpReturnRequest], postUrl: Call)(implicit request: MessagesRequestHeader)
 
-@main("OP_RETURN Bot") {
-    @* Global errors are not tied to any particular form field *@
-    @if(form.hasGlobalErrors) {
-        @form.globalErrors.map { error: FormError =>
-            <div>
-                @error.key: @error.message
-            </div>
+    @main("OP_RETURN Bot") {
+        @* Global errors are not tied to any particular form field *@
+        @if(form.hasGlobalErrors) {
+            @form.globalErrors.map { error: FormError =>
+                <div>
+                    @error.key: @error.message
+                </div>
+            }
         }
-    }
 
-    <h2>OP_RETURN Bot</h2>
-    <p>
-        An OP_RETURN is an provably prune-able output, these outputs do not need to be stored in the UTXO set
-        but will be permanently part of the blockchain. These outputs can be used to add arbitrary data to the blockchain,
-        creating a timestamp that it existed at a given time.
-    </p>
-    <p>
-        OP_RETURN Bot will create an OP_RETURN output for you, you just need to pay the fees.
-    </p>
-    <hr/>
+        <h2>OP_RETURN Bot</h2>
+        <p>
+            An OP_RETURN is an provably prune-able output, these outputs do not need to be stored in the UTXO set
+            but will be permanently part of the blockchain. These outputs can be used to add arbitrary data to the blockchain,
+            creating a timestamp that it existed at a given time.
+        </p>
+        <p>
+            OP_RETURN Bot will create an OP_RETURN output for you, you just need to pay the fees.
+        </p>
+        <hr/>
 
-    <h3>Create OP_RETURN</h3>
-    <div class="jumbotron">
-        <div class="row">
-            <div class="col-md-4"></div>
-            <div class="col-md-4">
-                <form method="post" action="createRequest">
-                    @helper.CSRF.formField
-                    <div class="form-group">
-                        <label for="message">Message:</label>
-                        <input maxlength="80" minlength="1" type="text" class="form-control" placeholder="Max 80 characters" name="message" id="message">
-                        <div class="text-danger" style="float: right">
-                        @form.error("message").map(err => err.message)
+        <h3>Create OP_RETURN</h3>
+        <div class="jumbotron">
+            <div class="row">
+                <div class="col-md-4"></div>
+                <div class="col-md-4">
+                    <form method="post" action="createRequest">
+                        @helper.CSRF.formField
+                        <div class="form-group">
+                            <label for="message">Message:</label>
+                            <input maxlength="80" minlength="1" type="text" class="form-control" placeholder="Max 80 characters" name="message" id="message">
+                            <div class="text-danger" style="float: right">
+                            @form.error("message").map(err => err.message)
+                            </div>
                         </div>
-                    </div>
-                    <div class="form-group form-check" style="float: right">
-                        <label class="form-check-label" for="noTwitter">
-                            <input class="form-check-input" type="checkbox" name="noTwitter" id="noTwitter"> Disable Tweet
-                        </label>
-                    </div>
-                    <br/>
-                    <br/>
-                    <button style="float: right" type="submit" class="btn btn-primary">Create Invoice</button>
-                </form>
+                        <div class="form-group form-check" style="float: right">
+                            <label class="form-check-label" for="noTwitter">
+                                <input class="form-check-input" type="checkbox" name="noTwitter" id="noTwitter" value="false">
+                                Disable Tweet
+                            </label>
+                            <div class="text-danger" style="float: right">
+                            @form.error("noTwitter").map(err => err.message)
+                            </div>
+                        </div>
+                        <br/>
+                        <br/>
+                        <button style="float: right" type="submit" class="btn btn-primary">Create Invoice</button>
+                    </form>
+                </div>
+                <div class="col-md-4"></div>
             </div>
-            <div class="col-md-4"></div>
         </div>
-    </div>
 
-    <h3>Recent Transactions</h3>
-    <table class="table table-hover">
-        <tbody>
-        @for(txId <- recentTxs.reverse) {
-            <tr>
-                <td><a style="font-family: monospace" href="https://mempool.space/tx/@txId.hex">@txId.hex</a></td>
-            </tr>
-        }
-        </tbody>
-    </table>
-}
+        <h3>Recent Transactions</h3>
+        <table class="table table-hover">
+            <tbody>
+            @for(txId <- recentTxs.reverse) {
+                <tr>
+                    <td><a style="font-family: monospace" href="https://mempool.space/tx/@txId.hex">@txId.hex</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }

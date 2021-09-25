@@ -1,14 +1,14 @@
 @import org.bitcoins.core.protocol.transaction.Transaction
 @(tx: Transaction)(implicit request: MessagesRequestHeader)
 
-@main("Success") {
+    @main("Success") {
 
-    <h1>Success!</h1>
+        <h1>Success!</h1>
 
-    <label><a href="https://blockstream.info/tx/@tx.txIdBE.hex">@tx.txIdBE.hex</a></label>
+        <label><a href="https://mempool.space/tx/@tx.txIdBE.hex">@tx.txIdBE.hex</a></label>
 
-    <h3>Raw Transaction:</h3>
-    <div class="jumbotron">
-        <code>@tx.hex</code>
-    </div>
-}
+        <h3>Raw Transaction:</h3>
+        <div class="jumbotron">
+            <code>@tx.hex</code>
+        </div>
+    }
