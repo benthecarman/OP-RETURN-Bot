@@ -1,15 +1,17 @@
 package controllers
 
+import akka.Done
 import akka.actor.ActorSystem
+import akka.stream.scaladsl.Sink
 import com.google.protobuf.ByteString
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
+import lnrpc.InvoiceSubscription
 import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
-import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.core.script.constant.ScriptConstant
@@ -20,6 +22,7 @@ import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.feeprovider.MempoolSpaceProvider
 import org.bitcoins.feeprovider.MempoolSpaceTarget._
 import org.bitcoins.lnd.rpc.LndRpcClient
+import org.bitcoins.lnd.rpc.LndUtils._
 import play.api.data._
 import play.api.mvc._
 import scodec.bits.ByteVector
@@ -59,7 +62,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   }
 
   val feeProvider: MempoolSpaceProvider =
-    MempoolSpaceProvider(FastestFeeTarget, MainNet)
+    MempoolSpaceProvider(FastestFeeTarget, MainNet, None)
 
   val uriErrorString = "Error: try again"
   var uri: String = uriErrorString
@@ -92,6 +95,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   private val telegramHandler = new TelegramHandler()
 
   telegramHandler.run()
+  startSubscription()
 
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
@@ -271,7 +275,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         val expiry = 60 * 5 // 5 minutes
 
         lnd
-          .addInvoice(s"OP_RETURN Bot: $message", MilliSatoshis(sats), expiry)
+          .addInvoice(s"OP_RETURN Bot: $message", sats.satoshis, expiry)
           .flatMap { invoiceResult =>
             val invoice = invoiceResult.invoice
             val db: InvoiceDb =
@@ -286,41 +290,43 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                 profitOpt = None,
                 chainFeeOpt = None
               )
-            invoiceDAO.create(db).map { db =>
-              startMonitor(rHash = invoiceResult.rHash,
-                           invoice = invoice,
-                           message = message,
-                           noTwitter = noTwitter,
-                           feeRate = feeRate,
-                           expiry = expiry)
-              db
-            }
+            invoiceDAO.create(db)
           }
       }
   }
 
-  private def startMonitor(
-      rHash: PaymentHashTag,
-      invoice: LnInvoice,
-      message: String,
-      noTwitter: Boolean,
-      feeRate: SatoshisPerVirtualByte,
-      expiry: Int): Future[Unit] = {
-    val monitorDuration = expiry + 60
+  def startSubscription(): Future[Done] = {
+    val parallelism = Runtime.getRuntime.availableProcessors()
 
-    logger.info(
-      s"Starting monitor for invoice ${rHash.hash.hex} for $monitorDuration seconds")
+    lnd.lnd
+      .subscribeInvoices(InvoiceSubscription())
+      .filter(_.state.isSettled)
+      .mapAsync(parallelism) { invoice =>
+        invoiceDAO.read(Sha256Digest(invoice.rHash)).map {
+          case None =>
+            logger.warn(
+              s"Processed invoice not from OP_RETURN Bot, ${invoice.rHash.toHex}")
+          case Some(invoiceDb) =>
+            invoiceDb.txIdOpt match {
+              case Some(_) =>
+                logger.warn(
+                  s"Processed invoice that already has a tx associated with it, rHash: ${invoice.rHash.toHex}")
+              case None =>
+                require(invoice.amtPaidMsat >= invoice.valueMsat,
+                        "User did not pay invoice in full")
+                onInvoicePaid(invoiceDb).map(_ => ())
+            }
+        }
+      }
+      .runWith(Sink.ignore)
+  }
 
-    lnd.monitorInvoice(rHash, 1.second, monitorDuration).flatMap {
-      invoiceResult =>
-        if (invoiceResult.state.isSettled) {
-          require(
-            invoiceResult.amtPaidSat >= invoice.amount.get.toSatoshis.toLong,
-            "User did not pay invoice in full")
-          onInvoicePaid(rHash, invoice, message, noTwitter, feeRate).map(_ =>
-            ())
-        } else Future.unit
-    }
+  private def onInvoicePaid(invoiceDb: InvoiceDb): Future[InvoiceDb] = {
+    onInvoicePaid(rHash = PaymentHashTag(invoiceDb.rHash),
+                  invoice = invoiceDb.invoice,
+                  message = invoiceDb.message,
+                  noTwitter = invoiceDb.noTwitter,
+                  feeRate = invoiceDb.feeRate)
   }
 
   private def onInvoicePaid(
@@ -382,15 +388,17 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       chainFeeOpt = txDetailsOpt.map(_.totalFees)
       profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
 
-      dbWithTx: InvoiceDb = InvoiceDb(rHash.hash,
-                                      invoice,
-                                      message,
-                                      noTwitter = noTwitter,
-                                      feeRate,
-                                      Some(transaction),
-                                      Some(txId),
-                                      profitOpt,
-                                      chainFeeOpt)
+      dbWithTx: InvoiceDb = InvoiceDb(
+        rHash = rHash.hash,
+        invoice = invoice,
+        message = message,
+        noTwitter = noTwitter,
+        feeRate = feeRate,
+        txOpt = Some(transaction),
+        txIdOpt = Some(txId),
+        profitOpt = profitOpt,
+        chainFeeOpt = chainFeeOpt
+      )
 
       res <- invoiceDAO.upsert(dbWithTx)
 

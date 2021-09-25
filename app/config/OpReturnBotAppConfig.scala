@@ -1,21 +1,18 @@
 package config
 
+import akka.actor.ActorSystem
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
-import org.bitcoins.db.{
-  AppConfigFactory,
-  DbAppConfig,
-  DbManagement,
-  JdbcProfileComponent
-}
+import org.bitcoins.commons.config._
+import org.bitcoins.db._
 import org.bitcoins.lnd.rpc.LndRpcClient
-import org.bitcoins.lnd.rpc.config.LndInstance
+import org.bitcoins.lnd.rpc.config.{LndInstance, LndInstanceLocal}
 import org.bitcoins.rpc.client.common.BitcoindVersion
 
 import java.io.File
 import java.nio.file.{Files, Path, Paths}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent._
 import scala.util.Properties
 
 /** Configuration for the Bitcoin-S wallet
@@ -25,11 +22,12 @@ import scala.util.Properties
   */
 case class OpReturnBotAppConfig(
     private val directory: Path,
-    private val conf: Config*)(implicit ec: ExecutionContext)
+    private val conf: Config*)(implicit system: ActorSystem)
     extends DbAppConfig
     with JdbcProfileComponent[OpReturnBotAppConfig]
     with DbManagement
     with Logging {
+  implicit val ec: ExecutionContextExecutor = system.dispatcher
   override val configOverrides: List[Config] = conf.toList
   override val moduleName: String = OpReturnBotAppConfig.moduleName
   override type ConfigType = OpReturnBotAppConfig
@@ -86,7 +84,7 @@ case class OpReturnBotAppConfig(
   override lazy val dbPath: Path = baseDatadir
 
   lazy val lndInstance: LndInstance =
-    LndInstance.fromDataDir(lndDataDir.toFile)
+    LndInstanceLocal.fromDataDir(lndDataDir.toFile)
 
   lazy val lndRpcClient: LndRpcClient =
     LndRpcClient(lndInstance, Some(lndBinary))
@@ -95,17 +93,18 @@ case class OpReturnBotAppConfig(
     List(InvoiceDAO()(ec, this).table)
 }
 
-object OpReturnBotAppConfig extends AppConfigFactory[OpReturnBotAppConfig] {
+object OpReturnBotAppConfig
+    extends AppConfigFactoryBase[OpReturnBotAppConfig, ActorSystem] {
 
   val DEFAULT_DATADIR: Path = Paths.get(Properties.userHome, ".op-return-bot")
 
   override def fromDefaultDatadir(confs: Vector[Config] = Vector.empty)(implicit
-      ec: ExecutionContext): OpReturnBotAppConfig = {
+      ec: ActorSystem): OpReturnBotAppConfig = {
     fromDatadir(DEFAULT_DATADIR, confs)
   }
 
   override def fromDatadir(datadir: Path, confs: Vector[Config])(implicit
-      ec: ExecutionContext): OpReturnBotAppConfig =
+      ec: ActorSystem): OpReturnBotAppConfig =
     OpReturnBotAppConfig(datadir, confs: _*)
 
   override val moduleName: String = "opreturnbot"

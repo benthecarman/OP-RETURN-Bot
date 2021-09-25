@@ -1,5 +1,5 @@
-val bitcoinsV = "1.7.0-38-c1ce9ca1-SNAPSHOT"
-val akkaV = "2.6.15"
+val bitcoinsV = "1.7.0-176-f9cfd054-SNAPSHOT"
+val akkaV = "2.6.16"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
@@ -16,7 +16,7 @@ lazy val root = project
     maintainer := "benthecarman",
     libraryDependencies ++= Seq(
       guice,
-      "org.scalatestplus.play" %% "scalatestplus-play" % "5.0.0" % Test,
+      "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
@@ -25,7 +25,7 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
       "com.danielasfregola" %% "twitter4s" % "7.0",
-      "com.bot4s" %% "telegram-akka" % "5.0.1"
+      "com.bot4s" %% "telegram-akka" % "5.0.3"
     ),
     scalacOptions ++= Seq(
       "-feature",
