@@ -106,12 +106,24 @@ class TelegramHandler(implicit
 
       s"""
          |Total OP_RETURNs: ${numberFormatter.format(completed.size)}
-         |Total chain size: ${numberFormatter.format(vbytes)} vbytes
+         |Total chain size: ${printSize(vbytes)}
          |Total chain fees: ${printAmount(chainFees)}
          |Total profit: ${printAmount(profit)}
          |Total bugged: ${printAmount(bugged)}
          |Profit w/o bug: ${printAmount(profit - bugged)}
          |""".stripMargin
+    }
+  }
+
+  private def printSize(size: Long): String = {
+    if (size < 1000) {
+      s"${numberFormatter.format(size)} vbytes"
+    } else if (size < 1000000) {
+      s"${numberFormatter.format(size / 1000)} vKB"
+    } else if (size < 1000000000) {
+      s"${numberFormatter.format(size / 1000000)} vMB"
+    } else {
+      s"${numberFormatter.format(size / 1000000000)} vGB"
     }
   }
 
