@@ -102,9 +102,11 @@ class TelegramHandler(implicit
       val chainFees = completed.flatMap(_.chainFeeOpt).sum
       val profit = completed.flatMap(_.profitOpt).sum
       val bugged = completed.flatMap(_.profitOpt).filter(_ <= Satoshis.zero).sum
+      val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
 
       s"""
          |Total OP_RETURNs: ${numberFormatter.format(completed.size)}
+         |Total chain size: ${numberFormatter.format(vbytes)} vbytes
          |Total chain fees: ${printAmount(chainFees)}
          |Total profit: ${printAmount(profit)}
          |Total bugged: ${printAmount(bugged)}
