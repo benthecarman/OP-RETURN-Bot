@@ -31,7 +31,7 @@ class TelegramHandler(implicit
     with Polling
     with Commands[Future] {
 
-  val numericRegex: Regex = "-?([1-9,][0-9,]*)?".r
+  val numericRegex: Regex = "^[0-9]*\\.[0-9]{2}$ or ^[0-9]*\\.[0-9][0-9]$".r
   val numberFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
@@ -119,11 +119,11 @@ class TelegramHandler(implicit
     if (size < 1000) {
       s"${numberFormatter.format(size)} vbytes"
     } else if (size < 1000000) {
-      s"${numberFormatter.format(size / 1000)} vKB"
+      s"${numberFormatter.format(size / 1000.0)} vKB"
     } else if (size < 1000000000) {
-      s"${numberFormatter.format(size / 1000000)} vMB"
+      s"${numberFormatter.format(size / 1000000.0)} vMB"
     } else {
-      s"${numberFormatter.format(size / 1000000000)} vGB"
+      s"${numberFormatter.format(size / 1000000000.0)} vGB"
     }
   }
 
