@@ -99,15 +99,18 @@ class TelegramHandler(implicit
 
   protected def createReport(): Future[String] = {
     invoiceDAO.completed().map { completed =>
+      val buggedTxs = completed.filter(_.profitOpt.exists(_ <= Satoshis.zero))
       val chainFees = completed.flatMap(_.chainFeeOpt).sum
+      val buggedChainFees = buggedTxs.flatMap(_.chainFeeOpt).sum
       val profit = completed.flatMap(_.profitOpt).sum
-      val bugged = completed.flatMap(_.profitOpt).filter(_ <= Satoshis.zero).sum
+      val bugged = buggedTxs.flatMap(_.profitOpt).sum
       val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
 
       s"""
          |Total OP_RETURNs: ${numberFormatter.format(completed.size)}
          |Total chain size: ${printSize(vbytes)}
          |Total chain fees: ${printAmount(chainFees)}
+         |Chain fees w/o bug: ${printAmount(chainFees - buggedChainFees)}
          |Total profit: ${printAmount(profit)}
          |Total bugged: ${printAmount(bugged)}
          |Profit w/o bug: ${printAmount(profit - bugged)}
