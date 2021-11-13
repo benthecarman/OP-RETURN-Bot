@@ -6,11 +6,17 @@ import grizzled.slf4j.Logging
 import org.bitcoins.crypto.DoubleSha256DigestBE
 
 import java.util.concurrent.atomic.AtomicInteger
-import scala.concurrent.Future
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.{Await, Future}
 
 trait TwitterHandler extends Logging { self: Controller =>
 
-  val shillCounter: AtomicInteger = new AtomicInteger(0)
+  lazy val shillCounter: AtomicInteger = {
+    // set shill counter based off db
+    val f = invoiceDAO.numCompleted()
+    val res = Await.result(f, 60.seconds)
+    new AtomicInteger(res)
+  }
 
   protected def sendTweet(message: String): Future[Tweet] = {
     val client = TwitterRestClient()

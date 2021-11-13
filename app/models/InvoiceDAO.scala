@@ -59,6 +59,12 @@ case class InvoiceDAO()(implicit
     safeDatabase.runVec(query.result)
   }
 
+  def numCompleted(): Future[Int] = {
+    val query = table.filter(_.txIdOpt.isDefined).size
+
+    safeDatabase.run(query.result)
+  }
+
   def lastFiveCompleted(): Future[Vector[DoubleSha256DigestBE]] = {
     val query = table.filter(_.txIdOpt.isDefined).map(_.txIdOpt)
 
