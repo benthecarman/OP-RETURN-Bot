@@ -264,7 +264,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       "OP_Return message received was too long, must be less than 80 chars")
 
     feeProvider.getFeeRate
-      .flatMap { feeRate =>
+      .flatMap { rate =>
+        // add 4 so we get better odds of getting in next block
+        val feeRate = rate.copy(rate.currencyUnit + Satoshis(4))
+
         // 125 base tx fee * 2 just in case
         val baseSize = 250
         val messageSize = message.getBytes.length
