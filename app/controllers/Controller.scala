@@ -307,8 +307,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   def startSubscription(): Future[Done] = {
     val parallelism = Runtime.getRuntime.availableProcessors()
 
-    lnd.lnd
-      .subscribeInvoices(InvoiceSubscription())
+    lnd
+      .subscribeInvoices()
       .filter(_.state.isSettled)
       .mapAsync(parallelism) { invoice =>
         invoiceDAO.read(Sha256Digest(invoice.rHash)).map {

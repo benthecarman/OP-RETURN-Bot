@@ -1,4 +1,4 @@
-val bitcoinsV = "1.8.0-47-019c9b26-SNAPSHOT"
+val bitcoinsV = "1.8.0-55-b2bf190d-SNAPSHOT"
 val akkaV = "2.6.17"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
