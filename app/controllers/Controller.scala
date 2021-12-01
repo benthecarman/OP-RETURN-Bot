@@ -19,7 +19,7 @@ import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
-import org.bitcoins.feeprovider.MempoolSpaceProvider
+import org.bitcoins.feeprovider._
 import org.bitcoins.feeprovider.MempoolSpaceTarget._
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.LndUtils._
@@ -63,6 +63,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val feeProvider: MempoolSpaceProvider =
     MempoolSpaceProvider(FastestFeeTarget, MainNet, None)
+
+  val feeProviderBackup: BitcoinerLiveFeeRateProvider =
+    BitcoinerLiveFeeRateProvider(30, None)
 
   val uriErrorString = "Error: try again"
   var uri: String = uriErrorString
@@ -263,8 +266,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       message.getBytes.length <= 80,
       "OP_Return message received was too long, must be less than 80 chars")
 
-    feeProvider.getFeeRate
-      .flatMap { rate =>
+    fetchFeeRate()
+      .flatMap { rate: SatoshisPerVirtualByte =>
         // add 4 so we get better odds of getting in next block
         val feeRate = rate.copy(rate.currencyUnit + Satoshis(4))
 
@@ -452,5 +455,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
 
     createTxF
+  }
+
+  private def fetchFeeRate(): Future[SatoshisPerVirtualByte] = {
+    feeProvider.getFeeRate.recoverWith { case _: Throwable =>
+      feeProviderBackup.getFeeRate
+    }
   }
 }
