@@ -23,7 +23,7 @@ case class InvoiceDb(
     chainFeeOpt: Option[CurrencyUnit])
 
 case class InvoiceDAO()(implicit
-    val ec: ExecutionContext,
+    override val ec: ExecutionContext,
     override val appConfig: OpReturnBotAppConfig)
     extends CRUD[InvoiceDb, Sha256Digest]
     with SlickUtil[InvoiceDb, Sha256Digest] {
