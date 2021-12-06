@@ -54,7 +54,7 @@ class TelegramHandler(implicit
   def sendTelegramMessage(message: String): Future[Unit] = {
     val url = s"https://api.telegram.org/bot$telegramCreds/sendMessage" +
       s"?chat_id=${URLEncoder.encode(myTelegramId, "UTF-8")}" +
-      s"&text=${URLEncoder.encode(message, "UTF-8")}"
+      s"&text=${URLEncoder.encode(message.trim, "UTF-8")}"
 
     Http().singleRequest(Get(url)).map(_ => ())
   }
