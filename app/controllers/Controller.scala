@@ -11,6 +11,7 @@ import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
+import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.core.script.constant.ScriptConstant
@@ -38,6 +39,7 @@ import scala.util.{Failure, Success, Try}
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
     with TwitterHandler
+    with OnionMessageHandler
     with Logging {
 
   import controllers.Forms._
@@ -223,7 +225,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       def success(input: OpReturnRequest): Future[Result] = {
         for {
-          invoiceDb <- processMessage(input.message, input.noTwitter)
+          invoiceDb <- processMessage(input.message, input.noTwitter, None)
         } yield {
           Ok(invoiceDb.invoice.toString())
         }
@@ -253,7 +255,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       // This is the good case, where the form was successfully parsed as an OpReturnRequest
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
-          processMessage(data.message, data.noTwitter).map { invoiceDb =>
+          processMessage(data.message, data.noTwitter, None).map { invoiceDb =>
             Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
           }
       }
@@ -265,7 +267,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   protected def processMessage(
       message: String,
-      noTwitter: Boolean): Future[InvoiceDb] = {
+      noTwitter: Boolean,
+      nodeIdOpt: Option[NodeId]): Future[InvoiceDb] = {
     require(
       message.getBytes.length <= 80,
       "OP_Return message received was too long, must be less than 80 chars")
@@ -298,6 +301,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                 message = message,
                 noTwitter = noTwitter,
                 feeRate = feeRate,
+                nodeIdOpt = nodeIdOpt,
                 txOpt = None,
                 txIdOpt = None,
                 profitOpt = None,
@@ -367,6 +371,19 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     val createTxF = for {
       transaction <- lnd.sendOutputs(request)
       errorOpt <- lnd.publishTransaction(transaction)
+
+      // send if onion message
+      _ <- invoiceDb.nodeIdOpt match {
+        case Some(nodeId) =>
+          // recover so we can finish accounting
+          sendBroadcastTransactionTLV(nodeId, transaction).recover {
+            case err: Throwable =>
+              logger.error(
+                s"Error sending onion message back to nodeId $nodeId",
+                err)
+          }
+        case None => Future.unit
+      }
 
       txId = transaction.txIdBE
 

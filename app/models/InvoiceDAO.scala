@@ -3,6 +3,7 @@ package models
 import config.OpReturnBotAppConfig
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
+import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
@@ -17,6 +18,7 @@ case class InvoiceDb(
     message: String,
     noTwitter: Boolean,
     feeRate: SatoshisPerVirtualByte,
+    nodeIdOpt: Option[NodeId],
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE],
     profitOpt: Option[CurrencyUnit],
@@ -96,6 +98,12 @@ case class InvoiceDAO()(implicit
 
     def feeRate: Rep[SatoshisPerVirtualByte] = column("fee_rate")
 
+    implicit val nodeIdMapper: BaseColumnType[NodeId] = {
+      MappedColumnType.base[NodeId, String](_.hex, NodeId.fromHex)
+    }
+
+    def nodeId: Rep[Option[NodeId]] = column("node_id")
+
     def transactionOpt: Rep[Option[Transaction]] = column("transaction")
 
     def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
@@ -110,6 +118,7 @@ case class InvoiceDAO()(implicit
        message,
        noTwitter,
        feeRate,
+       nodeId,
        transactionOpt,
        txIdOpt,
        profitOpt,
