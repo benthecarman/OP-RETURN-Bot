@@ -6,7 +6,6 @@ import akka.stream.scaladsl.Sink
 import com.google.protobuf.ByteString
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
-import lnrpc.InvoiceSubscription
 import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
@@ -238,7 +237,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           // Let's show the user the form again, with the errors highlighted.
           // Note how we pass the form with errors to the template.
           logger.warn(
-            "From with errors: " + formWithErrors.errors.mkString(" "))
+            "From with errors: " + formWithErrors.errors.mkString(
+              " ") + s"\n${formWithErrors.data}")
 
           Future.successful(
             BadRequest(views.html
@@ -248,8 +248,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       // This is the good case, where the form was successfully parsed as an OpReturnRequest
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
-          val message = data.message
-          processMessage(message, data.noTwitter).map { invoiceDb =>
+          processMessage(data.message, data.noTwitter).map { invoiceDb =>
             Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
           }
       }
@@ -259,7 +258,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  private def processMessage(
+  protected def processMessage(
       message: String,
       noTwitter: Boolean): Future[InvoiceDb] = {
     require(
