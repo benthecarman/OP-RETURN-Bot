@@ -68,7 +68,11 @@ case class InvoiceDAO()(implicit
   }
 
   def lastFiveCompleted(): Future[Vector[DoubleSha256DigestBE]] = {
-    val query = table.filter(_.txIdOpt.isDefined).map(_.txIdOpt)
+    val query =
+      table
+        .filter(_.txIdOpt.isDefined) // get completed
+        .filterNot(_.noTwitter) // remove non-public ones
+        .map(_.txIdOpt) // just get txid
 
     safeDatabase.runVec(query.result).map(_.flatten.takeRight(5))
   }
