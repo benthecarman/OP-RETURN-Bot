@@ -141,10 +141,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       invoiceDAO.read(hash).map {
         case None =>
           BadRequest("Invoice not from OP_RETURN Bot")
-        case Some(InvoiceDb(_, _, _, _, _, _, None, _, _)) =>
-          BadRequest("Invoice has not been paid")
-        case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _, _)) =>
-          Ok(txId.hex)
+        case Some(invoiceDb) =>
+          invoiceDb.txIdOpt match {
+            case Some(txId) => Ok(txId.hex)
+            case None       => BadRequest("Invoice has not been paid")
+          }
       }
     }
   }
@@ -161,10 +162,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           invoiceDAO.read(invoice.lnTags.paymentHash.hash).map {
             case None =>
               BadRequest("Invoice not from OP_RETURN Bot")
-            case Some(InvoiceDb(_, _, _, _, _, _, None, _, _)) =>
-              Ok(views.html.showInvoice(invoice))
-            case Some(InvoiceDb(_, _, _, _, _, _, Some(txId), _, _)) =>
-              Redirect(routes.Controller.success(txId.hex))
+            case Some(invoiceDb) =>
+              invoiceDb.txIdOpt match {
+                case Some(txId) => Redirect(routes.Controller.success(txId.hex))
+                case None       => Ok(views.html.showInvoice(invoice))
+              }
           }
       }
     }
@@ -182,10 +184,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
-            case Some(InvoiceDb(_, _, _, _, _, Some(tx), _, _, _)) =>
-              Ok(views.html.success(tx))
-            case Some(InvoiceDb(_, invoice, _, _, _, None, _, _, _)) =>
-              throw new RuntimeException(s"This is impossible, $invoice")
+            case Some(invoiceDb) =>
+              invoiceDb.txOpt match {
+                case Some(tx) => Ok(views.html.success(tx))
+                case None =>
+                  throw new RuntimeException(
+                    s"This is impossible, ${invoiceDb.invoice}")
+              }
           }
       }
     }
@@ -330,19 +335,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   }
 
   private def onInvoicePaid(invoiceDb: InvoiceDb): Future[InvoiceDb] = {
-    onInvoicePaid(rHash = PaymentHashTag(invoiceDb.rHash),
-                  invoice = invoiceDb.invoice,
-                  message = invoiceDb.message,
-                  noTwitter = invoiceDb.noTwitter,
-                  feeRate = invoiceDb.feeRate)
-  }
+    val message = invoiceDb.message
+    val invoice = invoiceDb.invoice
+    val feeRate = invoiceDb.feeRate
+    val noTwitter = invoiceDb.noTwitter
+    val rHash = PaymentHashTag(invoiceDb.rHash)
 
-  private def onInvoicePaid(
-      rHash: PaymentHashTag,
-      invoice: LnInvoice,
-      message: String,
-      noTwitter: Boolean,
-      feeRate: SatoshisPerVirtualByte): Future[InvoiceDb] = {
     logger.info(s"Received ${invoice.amount.get.toSatoshis}!")
 
     val output = {
@@ -396,17 +394,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       chainFeeOpt = txDetailsOpt.map(_.totalFees)
       profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
 
-      dbWithTx: InvoiceDb = InvoiceDb(
-        rHash = rHash.hash,
-        invoice = invoice,
-        message = message,
-        noTwitter = noTwitter,
-        feeRate = feeRate,
-        txOpt = Some(transaction),
-        txIdOpt = Some(txId),
-        profitOpt = profitOpt,
-        chainFeeOpt = chainFeeOpt
-      )
+      dbWithTx: InvoiceDb = invoiceDb.copy(txOpt = Some(transaction),
+                                           txIdOpt = Some(txId),
+                                           profitOpt = profitOpt,
+                                           chainFeeOpt = chainFeeOpt)
 
       res <- invoiceDAO.upsert(dbWithTx)
 
