@@ -1,6 +1,8 @@
 package config
 
 import akka.actor.ActorSystem
+import com.danielasfregola.twitter4s.TwitterRestClient
+import com.danielasfregola.twitter4s.entities.{AccessToken, ConsumerToken}
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
@@ -8,7 +10,6 @@ import org.bitcoins.commons.config._
 import org.bitcoins.db._
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config.{LndInstance, LndInstanceLocal}
-import org.bitcoins.rpc.client.common.BitcoindVersion
 
 import java.io.File
 import java.nio.file.{Files, Path, Paths}
@@ -41,17 +42,11 @@ case class OpReturnBotAppConfig(
 
   val baseDatadir: Path = directory
 
-  lazy val startBinaries: Boolean =
-    config.getBoolean(s"bitcoin-s.$moduleName.startBinaries")
-
   lazy val lndDataDir: Path =
     Paths.get(config.getString(s"bitcoin-s.lnd.datadir"))
 
   lazy val lndBinary: File =
     Paths.get(config.getString(s"bitcoin-s.lnd.binary")).toFile
-
-  lazy val bitcoindBinary: File =
-    Paths.get(config.getString(s"bitcoin-s.bitcoind.binary")).toFile
 
   lazy val telegramCreds: String =
     config.getString(s"bitcoin-s.$moduleName.telegramCreds")
@@ -59,18 +54,31 @@ case class OpReturnBotAppConfig(
   lazy val telegramId: String =
     config.getString(s"bitcoin-s.$moduleName.telegramId")
 
-  lazy val bitcoindVersion: BitcoindVersion = BitcoindVersion.newest
+  lazy val twitterConsumerKey: String =
+    config.getString(s"twitter.consumer.key")
+
+  lazy val twitterConsumerSecret: String =
+    config.getString(s"twitter.consumer.secret")
+
+  lazy val consumerToken: ConsumerToken =
+    ConsumerToken(twitterConsumerKey, twitterConsumerSecret)
+
+  lazy val twitterAccessKey: String = config.getString(s"twitter.access.key")
+
+  lazy val twitterAccessSecret: String =
+    config.getString(s"twitter.access.secret")
+
+  lazy val accessToken: AccessToken =
+    AccessToken(twitterAccessKey, twitterAccessSecret)
+
+  lazy val twitterClient: TwitterRestClient =
+    TwitterRestClient.withActorSystem(consumerToken, accessToken)(system)
 
   override def start(): Future[Unit] = {
     logger.info(s"Initializing setup")
 
     if (Files.notExists(baseDatadir)) {
       Files.createDirectories(baseDatadir)
-    }
-
-    if (Files.notExists(lndDataDir)) {
-      throw new RuntimeException(
-        s"Cannot find lnd data dir at ${lndDataDir.toString}")
     }
 
     val numMigrations = migrate()

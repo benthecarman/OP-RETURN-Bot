@@ -58,10 +58,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val startF: Future[Unit] = config.start()
 
-  if (config.startBinaries) {
-    lnd.start()
-  }
-
   val feeProvider: MempoolSpaceProvider =
     MempoolSpaceProvider(FastestFeeTarget, MainNet, None)
 

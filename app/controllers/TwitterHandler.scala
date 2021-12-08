@@ -1,6 +1,5 @@
 package controllers
 
-import com.danielasfregola.twitter4s.TwitterRestClient
 import com.danielasfregola.twitter4s.entities.Tweet
 import grizzled.slf4j.Logging
 import org.bitcoins.crypto.DoubleSha256DigestBE
@@ -19,7 +18,7 @@ trait TwitterHandler extends Logging { self: Controller =>
   }
 
   protected def sendTweet(message: String): Future[Tweet] = {
-    val client = TwitterRestClient()
+    val client = config.twitterClient
 
     client.createTweet(status = message, possibly_sensitive = true)
   }
