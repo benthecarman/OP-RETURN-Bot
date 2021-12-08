@@ -77,7 +77,7 @@ object OpReturnBotTLV {
   }
 
   object RequestInvoiceTLV extends OpReturnBotTLVFactory[RequestInvoiceTLV] {
-    override val tpe: BigSizeUInt = BigSizeUInt(49342)
+    override val tpe: BigSizeUInt = BigSizeUInt(49343)
 
     override def fromUnknownTLV(tlv: UnknownTLV): RequestInvoiceTLV = {
       if (tlv.tpe == tpe) {
@@ -100,7 +100,7 @@ object OpReturnBotTLV {
   }
 
   object InvoiceTLV extends OpReturnBotTLVFactory[InvoiceTLV] {
-    override val tpe: BigSizeUInt = BigSizeUInt(49344)
+    override val tpe: BigSizeUInt = BigSizeUInt(49345)
 
     override def fromUnknownTLV(tlv: UnknownTLV): InvoiceTLV = {
       if (tlv.tpe == tpe) {
@@ -123,7 +123,7 @@ object OpReturnBotTLV {
 
   object BroadcastTransactionTLV
       extends OpReturnBotTLVFactory[BroadcastTransactionTLV] {
-    override val tpe: BigSizeUInt = BigSizeUInt(49346)
+    override val tpe: BigSizeUInt = BigSizeUInt(49347)
 
     override def fromUnknownTLV(tlv: UnknownTLV): BroadcastTransactionTLV = {
       if (tlv.tpe == tpe) {
