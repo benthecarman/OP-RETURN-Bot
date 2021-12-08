@@ -96,6 +96,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   telegramHandler.run()
   startSubscription()
+  startOnionMessageSubscription()
 
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
