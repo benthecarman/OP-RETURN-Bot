@@ -1,4 +1,4 @@
-val bitcoinsV = "1.8.0-55-b2bf190d-SNAPSHOT"
+val bitcoinsV = "1.8.0-62-afb51228-SNAPSHOT"
 val akkaV = "2.6.17"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
@@ -25,7 +25,7 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
       "com.danielasfregola" %% "twitter4s" % "7.0",
-      "com.bot4s" %% "telegram-akka" % "5.0.4"
+      "com.bot4s" %% "telegram-akka" % "5.1.0"
     ),
     scalacOptions ++= Seq(
       "-feature",

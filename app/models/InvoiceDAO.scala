@@ -102,10 +102,6 @@ case class InvoiceDAO()(implicit
 
     def feeRate: Rep[SatoshisPerVirtualByte] = column("fee_rate")
 
-    implicit val nodeIdMapper: BaseColumnType[NodeId] = {
-      MappedColumnType.base[NodeId, String](_.hex, NodeId.fromHex)
-    }
-
     def nodeId: Rep[Option[NodeId]] = column("node_id")
 
     def transactionOpt: Rep[Option[Transaction]] = column("transaction")
