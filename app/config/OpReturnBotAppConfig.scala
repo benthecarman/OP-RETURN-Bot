@@ -60,6 +60,11 @@ case class OpReturnBotAppConfig(
   lazy val twitterConsumerSecret: String =
     config.getString(s"twitter.consumer.secret")
 
+  lazy val bannedWords: Vector[String] = {
+    val list = config.getStringList(s"twitter.banned-words")
+    Vector.from(list.toArray)
+  }
+
   lazy val consumerToken: ConsumerToken =
     ConsumerToken(twitterConsumerKey, twitterConsumerSecret)
 
