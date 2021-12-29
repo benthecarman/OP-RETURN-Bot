@@ -10,6 +10,7 @@ import org.bitcoins.commons.config._
 import org.bitcoins.db._
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config.{LndInstance, LndInstanceLocal}
+import scala.jdk.CollectionConverters._
 
 import java.io.File
 import java.nio.file.{Files, Path, Paths}
@@ -62,7 +63,7 @@ case class OpReturnBotAppConfig(
 
   lazy val bannedWords: Vector[String] = {
     val list = config.getStringList(s"twitter.banned-words")
-    Vector.from(list.toArray)
+    list.asScala.toVector
   }
 
   lazy val consumerToken: ConsumerToken =
