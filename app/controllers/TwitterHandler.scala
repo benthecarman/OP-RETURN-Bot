@@ -7,14 +7,15 @@ import org.bitcoins.crypto.DoubleSha256DigestBE
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, Future}
+import scala.util.Try
 
 trait TwitterHandler extends Logging { self: Controller =>
 
   lazy val shillCounter: AtomicInteger = {
     // set shill counter based off db
     val f = invoiceDAO.numCompleted()
-    val res = Await.result(f, 60.seconds)
-    new AtomicInteger(res)
+    val res = Try(Await.result(f, 60.seconds))
+    new AtomicInteger(res.getOrElse(0))
   }
 
   protected def sendTweet(message: String): Future[Tweet] = {
