@@ -8,7 +8,7 @@ resolvers +=
 
 lazy val root = project
   .in(file("."))
-  .enablePlugins(PlayScala, DebianPlugin, FlywayPlugin)
+  .enablePlugins(PlayScala, DebianPlugin)
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
