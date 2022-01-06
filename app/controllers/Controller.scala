@@ -375,13 +375,17 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         }
       }
 
-      for {
+      val f = for {
         updates <- Future.sequence(updateFs)
         dbs <- invoiceDAO.updateAll(updates)
         took = System.currentTimeMillis() - time
         _ = logger.info(
           s"Processed ${dbs.size} unhandled invoices, took $took ms")
       } yield dbs
+
+      f.failed.map(logger.error("Error processing unhandled invoices", _))
+
+      f
     }
   }
 
