@@ -24,7 +24,7 @@ import java.text.NumberFormat
 import scala.concurrent.Future
 import scala.util.matching.Regex
 
-class TelegramHandler(implicit
+class TelegramHandler(controller: Controller)(implicit
     config: OpReturnBotAppConfig,
     system: ActorSystem)
     extends TelegramBot
@@ -48,6 +48,12 @@ class TelegramHandler(implicit
   onCommand("report") { implicit msg =>
     createReport().map { report =>
       reply(report)
+    }
+  }
+
+  onCommand("processUnhandled") { implicit msg =>
+    controller.processUnhandledInvoices().map { dbs =>
+      reply(s"Updated ${dbs.size} invoices")
     }
   }
 

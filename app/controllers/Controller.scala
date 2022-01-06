@@ -6,6 +6,8 @@ import akka.stream.scaladsl.Sink
 import com.google.protobuf.ByteString
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
+import lnrpc.Invoice.InvoiceState._
+import lnrpc.Invoice.InvoiceState
 import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
@@ -92,11 +94,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   final val onionAddr =
     "http://opreturnqfd4qdv745xy6ncwvogbtxddttqkqkp5gipby6uytzpxwzqd.onion"
 
-  private val telegramHandler = new TelegramHandler()
+  private val telegramHandler = new TelegramHandler(this)
 
   telegramHandler.run()
   startSubscription()
   startOnionMessageSubscription()
+  processUnhandledInvoices()
 
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
@@ -298,6 +301,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                 message = message,
                 noTwitter = noTwitter,
                 feeRate = feeRate,
+                closed = false,
                 nodeIdOpt = nodeIdOpt,
                 txOpt = None,
                 txIdOpt = None,
@@ -314,25 +318,63 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
     lnd
       .subscribeInvoices()
-      .filter(_.state.isSettled)
       .mapAsync(parallelism) { invoice =>
-        invoiceDAO.read(Sha256Digest(invoice.rHash)).map {
-          case None =>
-            logger.warn(
-              s"Processed invoice not from OP_RETURN Bot, ${invoice.rHash.toHex}")
-          case Some(invoiceDb) =>
-            invoiceDb.txIdOpt match {
-              case Some(_) =>
-                logger.warn(
-                  s"Processed invoice that already has a tx associated with it, rHash: ${invoice.rHash.toHex}")
+        invoice.state match {
+          case OPEN | Unrecognized(_) | InvoiceState.ACCEPTED => Future.unit
+          case CANCELED =>
+            invoiceDAO.read(Sha256Digest(invoice.rHash)).flatMap {
+              case None => Future.unit
+              case Some(invoiceDb) =>
+                invoiceDAO.update(invoiceDb.copy(closed = true))
+            }
+          case SETTLED =>
+            invoiceDAO.read(Sha256Digest(invoice.rHash)).flatMap {
               case None =>
-                require(invoice.amtPaidMsat >= invoice.valueMsat,
-                        "User did not pay invoice in full")
-                onInvoicePaid(invoiceDb).map(_ => ())
+                logger.warn(
+                  s"Processed invoice not from OP_RETURN Bot, ${invoice.rHash.toHex}")
+                Future.unit
+              case Some(invoiceDb) =>
+                invoiceDb.txIdOpt match {
+                  case Some(_) =>
+                    logger.warn(
+                      s"Processed invoice that already has a tx associated with it, rHash: ${invoice.rHash.toHex}")
+                    Future.unit
+                  case None =>
+                    require(invoice.amtPaidMsat >= invoice.valueMsat,
+                            "User did not pay invoice in full")
+                    onInvoicePaid(invoiceDb).map(_ => ())
+                }
             }
         }
+
       }
       .runWith(Sink.ignore)
+  }
+
+  def processUnhandledInvoices(): Future[Vector[InvoiceDb]] = {
+    invoiceDAO.findUnclosed().flatMap { unclosed =>
+      val updateFs = unclosed.map { db =>
+        if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
+        else {
+          lnd.lookupInvoice(db.paymentHashTag).flatMap { inv =>
+            inv.state match {
+              case OPEN | Unrecognized(_) => Future.successful(db)
+              case CANCELED | InvoiceState.ACCEPTED =>
+                Future.successful(db.copy(closed = false))
+              case SETTLED =>
+                if (inv.amtPaidMsat >= inv.valueMsat) {
+                  onInvoicePaid(db)
+                } else Future.successful(db.copy(closed = true))
+            }
+          }
+        }
+      }
+
+      for {
+        updates <- Future.sequence(updateFs)
+        dbs <- invoiceDAO.updateAll(updates)
+      } yield dbs
+    }
   }
 
   private def onInvoicePaid(invoiceDb: InvoiceDb): Future[InvoiceDb] = {
@@ -408,7 +450,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       chainFeeOpt = txDetailsOpt.map(_.totalFees)
       profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
 
-      dbWithTx: InvoiceDb = invoiceDb.copy(txOpt = Some(transaction),
+      dbWithTx: InvoiceDb = invoiceDb.copy(closed = true,
+                                           txOpt = Some(transaction),
                                            txIdOpt = Some(txId),
                                            profitOpt = profitOpt,
                                            chainFeeOpt = chainFeeOpt)

@@ -1,0 +1,2 @@
+ALTER TABLE "invoices"
+    ADD COLUMN `closed` INTEGER NOT NULL DEFAULT 0;

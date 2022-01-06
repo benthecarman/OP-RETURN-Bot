@@ -3,6 +3,7 @@ package models
 import config.OpReturnBotAppConfig
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
+import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
 import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
@@ -18,11 +19,14 @@ case class InvoiceDb(
     message: String,
     noTwitter: Boolean,
     feeRate: SatoshisPerVirtualByte,
+    closed: Boolean,
     nodeIdOpt: Option[NodeId],
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE],
     profitOpt: Option[CurrencyUnit],
-    chainFeeOpt: Option[CurrencyUnit])
+    chainFeeOpt: Option[CurrencyUnit]) {
+  lazy val paymentHashTag: PaymentHashTag = PaymentHashTag(rHash)
+}
 
 case class InvoiceDAO()(implicit
     override val ec: ExecutionContext,
@@ -89,6 +93,12 @@ case class InvoiceDAO()(implicit
     safeDatabase.runVec(query.result).map(_.flatten.sum)
   }
 
+  def findUnclosed(): Future[Vector[InvoiceDb]] = {
+    val query = table.filterNot(_.closed)
+
+    safeDatabase.runVec(query.result)
+  }
+
   class InvoiceTable(tag: Tag)
       extends Table[InvoiceDb](tag, schemaName, "invoices") {
 
@@ -101,6 +111,8 @@ case class InvoiceDAO()(implicit
     def noTwitter: Rep[Boolean] = column("hash")
 
     def feeRate: Rep[SatoshisPerVirtualByte] = column("fee_rate")
+
+    def closed: Rep[Boolean] = column("closed")
 
     def nodeId: Rep[Option[NodeId]] = column("node_id")
 
@@ -118,6 +130,7 @@ case class InvoiceDAO()(implicit
        message,
        noTwitter,
        feeRate,
+       closed,
        nodeId,
        transactionOpt,
        txIdOpt,
