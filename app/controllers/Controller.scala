@@ -355,6 +355,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def processUnhandledInvoices(): Future[Vector[InvoiceDb]] = {
     invoiceDAO.findUnclosed().flatMap { unclosed =>
+      val time = System.currentTimeMillis()
+      logger.info(s"Processing ${unclosed.size} unhandled invoices")
+
       val updateFs = unclosed.map { db =>
         if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
         else {
@@ -375,7 +378,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       for {
         updates <- Future.sequence(updateFs)
         dbs <- invoiceDAO.updateAll(updates)
-        _ = logger.info(s"Processed ${dbs.size} unhandled invoices")
+        took = System.currentTimeMillis() - time
+        _ = logger.info(
+          s"Processed ${dbs.size} unhandled invoices, took $took ms")
       } yield dbs
     }
   }
