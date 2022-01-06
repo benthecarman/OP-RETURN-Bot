@@ -96,7 +96,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   private val telegramHandler = new TelegramHandler(this)
 
-  telegramHandler.run()
+  telegramHandler
+    .run()
+    .flatMap(_ => telegramHandler.sendTelegramMessage("Connected!"))
   startSubscription()
   startOnionMessageSubscription()
   processUnhandledInvoices()
