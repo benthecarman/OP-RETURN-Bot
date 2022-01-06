@@ -373,6 +373,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       for {
         updates <- Future.sequence(updateFs)
         dbs <- invoiceDAO.updateAll(updates)
+        _ = logger.info(s"Processed ${dbs.size} unhandled invoices")
       } yield dbs
     }
   }
