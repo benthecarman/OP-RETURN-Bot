@@ -361,17 +361,20 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val updateFs = unclosed.map { db =>
         if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
         else {
-          lnd.lookupInvoice(db.paymentHashTag).flatMap { inv =>
-            inv.state match {
-              case OPEN | Unrecognized(_) => Future.successful(db)
-              case CANCELED | InvoiceState.ACCEPTED =>
-                Future.successful(db.copy(closed = false))
-              case SETTLED =>
-                if (inv.amtPaidMsat >= inv.valueMsat) {
-                  onInvoicePaid(db)
-                } else Future.successful(db.copy(closed = true))
+          lnd
+            .lookupInvoice(db.paymentHashTag)
+            .flatMap { inv =>
+              inv.state match {
+                case OPEN | Unrecognized(_) => Future.successful(db)
+                case CANCELED | InvoiceState.ACCEPTED =>
+                  Future.successful(db.copy(closed = false))
+                case SETTLED =>
+                  if (inv.amtPaidMsat >= inv.valueMsat) {
+                    onInvoicePaid(db)
+                  } else Future.successful(db.copy(closed = true))
+              }
             }
-          }
+            .recover { case _: Throwable => db.copy(closed = true) }
         }
       }
 
