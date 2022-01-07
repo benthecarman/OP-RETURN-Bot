@@ -1,9 +1,13 @@
 @import org.bitcoins.core.protocol.ln.LnInvoice
-@(invoice: LnInvoice)(implicit request: MessagesRequestHeader)
+@import org.bitcoins.crypto.CryptoUtil
+@(message: String, invoice: LnInvoice)(implicit request: MessagesRequestHeader)
 
     @main("Invoice") {
 
         <h1>Invoice</h1>
+
+        <h3>Message: @message</h3>
+        <h4>SHA256: @{CryptoUtil.sha256(message).hex}</h4>
 
         <img id='barcode' src="https://api.qrserver.com/v1/create-qr-code/?data=@{
             invoice.toString()

@@ -3,7 +3,6 @@ package controllers
 import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
-import com.google.protobuf.ByteString
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import lnrpc.Invoice.InvoiceState._
@@ -20,7 +19,7 @@ import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
-import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
+import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.feeprovider._
 import org.bitcoins.feeprovider.MempoolSpaceTarget._
 import org.bitcoins.lnd.rpc.LndRpcClient
@@ -169,7 +168,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case Some(invoiceDb) =>
               invoiceDb.txIdOpt match {
                 case Some(txId) => Redirect(routes.Controller.success(txId.hex))
-                case None       => Ok(views.html.showInvoice(invoice))
+                case None =>
+                  Ok(views.html.showInvoice(invoiceDb.message, invoice))
               }
           }
       }
@@ -292,8 +292,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           (feeRate * (baseSize + messageSize)) + Satoshis(1337) + noTwitterFee
         val expiry = 60 * 5 // 5 minutes
 
+        val hash = CryptoUtil.sha256(message)
+
         lnd
-          .addInvoice(s"OP_RETURN Bot: $message", sats.satoshis, expiry)
+          .addInvoice(hash, sats.satoshis, expiry)
           .flatMap { invoiceResult =>
             val invoice = invoiceResult.invoice
             val db: InvoiceDb =
@@ -413,13 +415,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
 
     val txOut =
-      TxOut(output.value.satoshis.toLong,
-            ByteString.copyFrom(output.scriptPubKey.asmBytes.toArray))
+      TxOut(output.value.satoshis.toLong, output.scriptPubKey.asmBytes)
 
     val request: SendOutputsRequest = SendOutputsRequest(
       satPerKw = feeRate.toSatoshisPerKW.toLong,
       outputs = Vector(txOut),
-      label = invoice.lnTags.description.map(_.string).getOrElse(""),
+      label = s"OP_RETURN Bot: $message",
       spendUnconfirmed = true)
 
     val createTxF = for {
