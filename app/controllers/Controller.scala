@@ -5,8 +5,8 @@ import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
-import lnrpc.Invoice.InvoiceState._
 import lnrpc.Invoice.InvoiceState
+import lnrpc.Invoice.InvoiceState._
 import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
@@ -20,14 +20,15 @@ import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE, Sha256Digest}
-import org.bitcoins.feeprovider._
 import org.bitcoins.feeprovider.MempoolSpaceTarget._
+import org.bitcoins.feeprovider._
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.LndUtils._
 import play.api.data._
 import play.api.mvc._
 import scodec.bits.ByteVector
 import signrpc.TxOut
+import slick.dbio.DBIOAction
 import walletrpc.SendOutputsRequest
 
 import javax.inject.Inject
@@ -326,11 +327,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         invoice.state match {
           case OPEN | Unrecognized(_) | InvoiceState.ACCEPTED => Future.unit
           case CANCELED =>
-            invoiceDAO.read(Sha256Digest(invoice.rHash)).flatMap {
-              case None => Future.unit
-              case Some(invoiceDb) =>
-                invoiceDAO.update(invoiceDb.copy(closed = true))
-            }
+            val action = invoiceDAO
+              .findByPrimaryKeyAction(Sha256Digest(invoice.rHash))
+              .flatMap {
+                case None => DBIOAction.successful(())
+                case Some(invoiceDb) =>
+                  invoiceDAO.updateAction(invoiceDb.copy(closed = true))
+              }
+
+            invoiceDAO.safeDatabase.run(action)
           case SETTLED =>
             invoiceDAO.read(Sha256Digest(invoice.rHash)).flatMap {
               case None =>
@@ -485,9 +490,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       _ <- {
         val telegramF = txDetailsOpt match {
           case Some(details) =>
+            val action = for {
+              profit <- invoiceDAO.totalProfitAction()
+              chainFees <- invoiceDAO.totalChainFeesAction()
+            } yield (profit, chainFees)
             for {
-              profit <- invoiceDAO.totalProfit()
-              chainFees <- invoiceDAO.totalChainFees()
+              (profit, chainFees) <- invoiceDAO.safeDatabase.run(action)
               _ <- telegramHandler.handleTelegram(rHash = rHash.hash,
                                                   invoice = invoice,
                                                   tweetOpt = tweetOpt,

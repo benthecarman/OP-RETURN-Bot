@@ -77,20 +77,29 @@ case class InvoiceDAO()(implicit
         .filter(_.txIdOpt.isDefined) // get completed
         .filterNot(_.noTwitter) // remove non-public ones
         .map(_.txIdOpt) // just get txid
+        .result
+        .map(_.flatten.takeRight(5))
 
-    safeDatabase.runVec(query.result).map(_.flatten.takeRight(5))
+    safeDatabase.runVec(query)
   }
 
-  def totalProfit(): Future[CurrencyUnit] = {
-    val query = table.filter(_.profitOpt.isDefined).map(_.profitOpt)
-
-    safeDatabase.runVec(query.result).map(_.flatten.sum)
+  def totalProfitAction(): DBIOAction[CurrencyUnit, NoStream, Effect.Read] = {
+    table
+      .filter(_.profitOpt.isDefined)
+      .map(_.profitOpt)
+      .result
+      .map(_.flatten.sum)
   }
 
-  def totalChainFees(): Future[CurrencyUnit] = {
-    val query = table.filter(_.chainFeeOpt.isDefined).map(_.chainFeeOpt)
-
-    safeDatabase.runVec(query.result).map(_.flatten.sum)
+  def totalChainFeesAction(): DBIOAction[
+    CurrencyUnit,
+    NoStream,
+    Effect.Read] = {
+    table
+      .filter(_.chainFeeOpt.isDefined)
+      .map(_.chainFeeOpt)
+      .result
+      .map(_.flatten.sum)
   }
 
   def findUnclosed(): Future[Vector[InvoiceDb]] = {
