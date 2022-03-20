@@ -46,14 +46,14 @@ class TelegramHandler(controller: Controller)(implicit
     telegramCreds)
 
   onCommand("report") { implicit msg =>
-    createReport().map { report =>
-      reply(report)
+    createReport().flatMap { report =>
+      reply(report).map(_ => ())
     }
   }
 
   onCommand("processunhandled") { implicit msg =>
-    controller.processUnhandledInvoices().map { dbs =>
-      reply(s"Updated ${dbs.size} invoices")
+    controller.processUnhandledInvoices().flatMap { dbs =>
+      reply(s"Updated ${dbs.size} invoices").map(_ => ())
     }
   }
 
