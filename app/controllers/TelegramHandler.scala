@@ -21,6 +21,7 @@ import sttp.client3.okhttp.OkHttpFutureBackend
 
 import java.net.URLEncoder
 import java.text.NumberFormat
+import java.util.Locale
 import scala.concurrent.Future
 import scala.util.matching.Regex
 
@@ -35,7 +36,7 @@ class TelegramHandler(controller: Controller)(implicit
   val intFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
 
   val currencyFormatter: NumberFormat =
-    java.text.NumberFormat.getCurrencyInstance
+    java.text.NumberFormat.getCurrencyInstance(Locale.US)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
@@ -129,13 +130,13 @@ class TelegramHandler(controller: Controller)(implicit
 
   private def printSize(size: Long): String = {
     if (size < 1000) {
-      s"${currencyFormatter.format(size)} vbytes"
+      s"${currencyFormatter.format(size).tail} vbytes"
     } else if (size < 1000000) {
-      s"${currencyFormatter.format(size / 1000.0)} vKB"
+      s"${currencyFormatter.format(size / 1000.0).tail} vKB"
     } else if (size < 1000000000) {
-      s"${currencyFormatter.format(size / 1000000.0)} vMB"
+      s"${currencyFormatter.format(size / 1000000.0).tail} vMB"
     } else {
-      s"${currencyFormatter.format(size / 1000000000.0)} vGB"
+      s"${currencyFormatter.format(size / 1000000000.0).tail} vGB"
     }
   }
 
