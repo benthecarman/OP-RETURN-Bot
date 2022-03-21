@@ -32,7 +32,10 @@ class TelegramHandler(controller: Controller)(implicit
     with Commands[Future] {
 
   val numericRegex: Regex = "^[0-9]*\\.[0-9]{2}$ or ^[0-9]*\\.[0-9][0-9]$".r
-  val numberFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
+  val intFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
+
+  val currencyFormatter: NumberFormat =
+    java.text.NumberFormat.getCurrencyInstance
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
@@ -113,7 +116,7 @@ class TelegramHandler(controller: Controller)(implicit
       val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
 
       s"""
-         |Total OP_RETURNs: ${numberFormatter.format(completed.size)}
+         |Total OP_RETURNs: ${intFormatter.format(completed.size)}
          |Total chain size: ${printSize(vbytes)}
          |Total chain fees: ${printAmount(chainFees)}
          |Chain fees w/o bug: ${printAmount(chainFees - buggedChainFees)}
@@ -126,17 +129,17 @@ class TelegramHandler(controller: Controller)(implicit
 
   private def printSize(size: Long): String = {
     if (size < 1000) {
-      s"${numberFormatter.format(size)} vbytes"
+      s"${currencyFormatter.format(size)} vbytes"
     } else if (size < 1000000) {
-      s"${numberFormatter.format(size / 1000.0)} vKB"
+      s"${currencyFormatter.format(size / 1000.0)} vKB"
     } else if (size < 1000000000) {
-      s"${numberFormatter.format(size / 1000000.0)} vMB"
+      s"${currencyFormatter.format(size / 1000000.0)} vMB"
     } else {
-      s"${numberFormatter.format(size / 1000000000.0)} vGB"
+      s"${currencyFormatter.format(size / 1000000000.0)} vGB"
     }
   }
 
   private def printAmount(amount: CurrencyUnit): String = {
-    numberFormatter.format(amount.satoshis.toLong) + " sats"
+    intFormatter.format(amount.satoshis.toLong) + " sats"
   }
 }
