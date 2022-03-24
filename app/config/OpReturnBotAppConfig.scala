@@ -24,13 +24,12 @@ import scala.util.Properties
   */
 case class OpReturnBotAppConfig(
     private val directory: Path,
-    private val conf: Config*)(implicit system: ActorSystem)
+    override val configOverrides: Vector[Config])(implicit system: ActorSystem)
     extends DbAppConfig
     with JdbcProfileComponent[OpReturnBotAppConfig]
     with DbManagement
     with Logging {
   implicit val ec: ExecutionContextExecutor = system.dispatcher
-  override val configOverrides: List[Config] = conf.toList
   override val moduleName: String = OpReturnBotAppConfig.moduleName
   override type ConfigType = OpReturnBotAppConfig
 
@@ -38,8 +37,8 @@ case class OpReturnBotAppConfig(
 
   import profile.api._
 
-  override def newConfigOfType(configs: Seq[Config]): OpReturnBotAppConfig =
-    OpReturnBotAppConfig(directory, configs: _*)
+  override def newConfigOfType(configs: Vector[Config]): OpReturnBotAppConfig =
+    OpReturnBotAppConfig(directory, configs)
 
   val baseDatadir: Path = directory
 
@@ -119,7 +118,7 @@ object OpReturnBotAppConfig
 
   override def fromDatadir(datadir: Path, confs: Vector[Config])(implicit
       ec: ActorSystem): OpReturnBotAppConfig =
-    OpReturnBotAppConfig(datadir, confs: _*)
+    OpReturnBotAppConfig(datadir, confs)
 
   override val moduleName: String = "opreturnbot"
 }

@@ -535,8 +535,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   }
 
   private def fetchFeeRate(): Future[SatoshisPerVirtualByte] = {
-    feeProvider.getFeeRate.recoverWith { case _: Throwable =>
-      feeProviderBackup.getFeeRate
+    feeProvider.getFeeRate().recoverWith { case _: Throwable =>
+      feeProviderBackup.getFeeRate()
     }
   }
 }
