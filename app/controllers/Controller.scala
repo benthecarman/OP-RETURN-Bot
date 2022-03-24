@@ -101,7 +101,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     .flatMap(_ => telegramHandler.sendTelegramMessage("Connected!"))
   startSubscription()
   startOnionMessageSubscription()
-  processUnhandledInvoices()
+
+  // unhandled invoice scheduler
+  // needed until https://github.com/lightningnetwork/lnd/issues/6299
+  system.scheduler.scheduleAtFixedRate(0.seconds, 10.minutes) { () =>
+    processUnhandledInvoices()
+    ()
+  }
 
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
