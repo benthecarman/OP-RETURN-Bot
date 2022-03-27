@@ -329,7 +329,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
     lnd
       .subscribeInvoices()
-      .mapAsync(parallelism) { invoice =>
+      .mapAsyncUnordered(parallelism) { invoice =>
         invoice.state match {
           case OPEN | Unrecognized(_) | InvoiceState.ACCEPTED => Future.unit
           case CANCELED =>
