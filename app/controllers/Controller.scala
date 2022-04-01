@@ -528,7 +528,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
     createTxF.failed.foreach { err =>
       logger.error(
-        s"Failed to create tx for invoice ${rHash.hash.hex}, got error $err")
+        s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ",
+        err)
     }
 
     createTxF
