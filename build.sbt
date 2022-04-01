@@ -25,8 +25,8 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
       "com.danielasfregola" %% "twitter4s" % "7.0",
-      "com.softwaremill.sttp.client3" %% "okhttp-backend" % "3.4.2",
-      "com.bot4s" %% "telegram-akka" % "5.3.0"
+      "com.softwaremill.sttp.client3" %% "okhttp-backend" % "3.5.1",
+      "com.bot4s" %% "telegram-akka" % "5.4.0"
     ),
     scalacOptions ++= Seq(
       "-feature",
