@@ -7,12 +7,15 @@ import com.bot4s.telegram.api.RequestHandler
 import com.bot4s.telegram.api.declarative.Commands
 import com.bot4s.telegram.clients.FutureSttpClient
 import com.bot4s.telegram.future.{Polling, TelegramBot}
+import com.bot4s.telegram.methods.SetMyCommands
+import com.bot4s.telegram.models.BotCommand
 import com.danielasfregola.twitter4s.entities.Tweet
 import config.OpReturnBotAppConfig
 import models.InvoiceDAO
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency.{CurrencyUnit, Satoshis}
 import org.bitcoins.core.protocol.ln.LnInvoice
+import org.bitcoins.core.util.StartStopAsync
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
 import sttp.capabilities._
@@ -30,7 +33,8 @@ class TelegramHandler(controller: Controller)(implicit
     system: ActorSystem)
     extends TelegramBot
     with Polling
-    with Commands[Future] {
+    with Commands[Future]
+    with StartStopAsync[Unit] {
 
   val numericRegex: Regex = "^[0-9]*\\.[0-9]{2}$ or ^[0-9]*\\.[0-9][0-9]$".r
   val intFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
@@ -49,13 +53,28 @@ class TelegramHandler(controller: Controller)(implicit
   override val client: RequestHandler[Future] = new FutureSttpClient(
     telegramCreds)
 
+  override def start(): Future[Unit] = {
+    for {
+      _ <- run()
+      commands = List(
+        BotCommand("report",
+                   "Generate report of profit and total on chain fees"),
+        BotCommand("processUnhandled", "Forces processing of invoices")
+      )
+      _ <- request(SetMyCommands(commands))
+      _ <- sendTelegramMessage("Connected!")
+    } yield ()
+  }
+
+  override def stop(): Future[Unit] = Future.unit
+
   onCommand("report") { implicit msg =>
     createReport().flatMap { report =>
       reply(report).map(_ => ())
     }
   }
 
-  onCommand("processunhandled") { implicit msg =>
+  onCommand("processUnhandled") { implicit msg =>
     controller.processUnhandledInvoices().flatMap { dbs =>
       reply(s"Updated ${dbs.size} invoices").map(_ => ())
     }
