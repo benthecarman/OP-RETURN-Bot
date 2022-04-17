@@ -59,7 +59,7 @@ class TelegramHandler(controller: Controller)(implicit
       commands = List(
         BotCommand("report",
                    "Generate report of profit and total on chain fees"),
-        BotCommand("processUnhandled", "Forces processing of invoices")
+        BotCommand("processunhandled", "Forces processing of invoices")
       )
       _ <- request(SetMyCommands(commands))
       _ <- sendTelegramMessage("Connected!")
@@ -74,7 +74,7 @@ class TelegramHandler(controller: Controller)(implicit
     }
   }
 
-  onCommand("processUnhandled") { implicit msg =>
+  onCommand("processunhandled") { implicit msg =>
     controller.processUnhandledInvoices().flatMap { dbs =>
       reply(s"Updated ${dbs.size} invoices").map(_ => ())
     }
