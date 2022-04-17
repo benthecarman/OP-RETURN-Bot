@@ -366,40 +366,42 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def processUnhandledInvoices(): Future[Vector[InvoiceDb]] = {
     invoiceDAO.findUnclosed().flatMap { unclosed =>
-      val time = System.currentTimeMillis()
-      logger.info(s"Processing ${unclosed.size} unhandled invoices")
+      if (unclosed.nonEmpty) {
+        val time = System.currentTimeMillis()
+        logger.info(s"Processing ${unclosed.size} unhandled invoices")
 
-      val updateFs = unclosed.map { db =>
-        if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
-        else {
-          lnd
-            .lookupInvoice(db.paymentHashTag)
-            .flatMap { inv =>
-              inv.state match {
-                case OPEN | Unrecognized(_) => Future.successful(db)
-                case CANCELED | InvoiceState.ACCEPTED =>
-                  Future.successful(db.copy(closed = false))
-                case SETTLED =>
-                  if (inv.amtPaidMsat >= inv.valueMsat) {
-                    onInvoicePaid(db)
-                  } else Future.successful(db.copy(closed = true))
+        val updateFs = unclosed.map { db =>
+          if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
+          else {
+            lnd
+              .lookupInvoice(db.paymentHashTag)
+              .flatMap { inv =>
+                inv.state match {
+                  case OPEN | Unrecognized(_) => Future.successful(db)
+                  case CANCELED | InvoiceState.ACCEPTED =>
+                    Future.successful(db.copy(closed = false))
+                  case SETTLED =>
+                    if (inv.amtPaidMsat >= inv.valueMsat) {
+                      onInvoicePaid(db)
+                    } else Future.successful(db.copy(closed = true))
+                }
               }
-            }
-            .recover { case _: Throwable => db.copy(closed = true) }
+              .recover { case _: Throwable => db.copy(closed = true) }
+          }
         }
-      }
 
-      val f = for {
-        updates <- Future.sequence(updateFs)
-        dbs <- invoiceDAO.updateAll(updates)
-        took = System.currentTimeMillis() - time
-        _ = logger.info(
-          s"Processed ${dbs.size} unhandled invoices, took $took ms")
-      } yield dbs
+        val f = for {
+          updates <- Future.sequence(updateFs)
+          dbs <- invoiceDAO.updateAll(updates)
+          took = System.currentTimeMillis() - time
+          _ = logger.info(
+            s"Processed ${dbs.size} unhandled invoices, took $took ms")
+        } yield dbs
 
-      f.failed.map(logger.error("Error processing unhandled invoices", _))
+        f.failed.map(logger.error("Error processing unhandled invoices", _))
 
-      f
+        f
+      } else Future.successful(Vector.empty)
     }
   }
 
