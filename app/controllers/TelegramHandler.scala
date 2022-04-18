@@ -54,13 +54,13 @@ class TelegramHandler(controller: Controller)(implicit
     telegramCreds)
 
   override def start(): Future[Unit] = {
+    val commands = List(
+      BotCommand("report", "Generate report of profit and total on chain fees"),
+      BotCommand("processunhandled", "Forces processing of invoices")
+    )
+
     for {
       _ <- run()
-      commands = List(
-        BotCommand("report",
-                   "Generate report of profit and total on chain fees"),
-        BotCommand("processunhandled", "Forces processing of invoices")
-      )
       _ <- request(SetMyCommands(commands))
       _ <- sendTelegramMessage("Connected!")
     } yield ()
