@@ -60,7 +60,7 @@
             <tbody>
             @for(txId <- recentTxs.reverse) {
                 <tr>
-                    <td><a style="font-family: monospace" href="https://mempool.space/tx/@txId.hex">@txId.hex</a></td>
+                    <td><a style="font-family: monospace" href="https://mempool.space/tx/@txId.hex" target="_blank" rel="noopener noreferrer">@txId.hex</a></td>
                 </tr>
             }
             </tbody>
