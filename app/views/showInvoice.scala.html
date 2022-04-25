@@ -9,7 +9,7 @@
         <h3>Message: @message</h3>
         <h4>SHA256: @{CryptoUtil.sha256(message).hex}</h4>
 
-        <img id='barcode' src="https://api.qrserver.com/v1/create-qr-code/?data=@{
+        <img id='barcode' src="https://api.qrserver.com/v1/create-qr-code/?data=lightning:@{
             invoice.toString()
         }&amp;size=1000x1000" alt="" title="invoice" width="300" height="300" />
         <br>
