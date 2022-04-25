@@ -377,8 +377,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               .lookupInvoice(db.paymentHashTag)
               .flatMap { inv =>
                 inv.state match {
-                  case OPEN | Unrecognized(_) => Future.successful(db)
-                  case CANCELED | InvoiceState.ACCEPTED =>
+                  case OPEN | InvoiceState.ACCEPTED | Unrecognized(_) =>
+                    Future.successful(db)
+                  case CANCELED =>
                     Future.successful(db.copy(closed = false))
                   case SETTLED =>
                     if (inv.amtPaidMsat >= inv.valueMsat) {
