@@ -386,7 +386,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                     } else Future.successful(db.copy(closed = true))
                 }
               }
-              .recover { case _: Throwable => db.copy(closed = true) }
+              .recover { case _: Throwable => db.copy(closed = false) }
           }
         }
 
@@ -526,13 +526,17 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       }
     } yield res
 
-    createTxF.failed.foreach { err =>
+    createTxF.recoverWith { case err: Throwable =>
       logger.error(
         s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ",
         err)
+      for {
+        _ <- telegramHandler.sendTelegramMessage(
+          s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ${err.getMessage}")
+        updated = invoiceDb.copy(closed = false)
+        newDb <- invoiceDAO.update(updated)
+      } yield newDb
     }
-
-    createTxF
   }
 
   private def fetchFeeRate(): Future[SatoshisPerVirtualByte] = {
