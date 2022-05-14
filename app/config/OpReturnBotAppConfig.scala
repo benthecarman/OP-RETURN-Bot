@@ -100,7 +100,7 @@ case class OpReturnBotAppConfig(
     LndInstanceLocal.fromDataDir(lndDataDir.toFile)
 
   lazy val lndRpcClient: LndRpcClient =
-    LndRpcClient(lndInstance, Some(lndBinary))
+    new LndRpcClient(lndInstance, Some(lndBinary))
 
   override val allTables: List[TableQuery[Table[_]]] =
     List(InvoiceDAO()(ec, this).table)
