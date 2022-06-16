@@ -42,7 +42,9 @@ trait OnionMessageHandler extends Logging { self: Controller =>
                 }
             }
           case _: InitTLV | _: ErrorTLV | _: PingTLV | _: PongTLV |
-              _: DLCOracleTLV | _: DLCSetupPieceTLV | _: DLCSetupTLV =>
+              _: DLCOracleTLV | _: DLCSetupPieceTLV | _: DLCSetupTLV |
+              _: AmtToForwardTLV | _: OutgoingCLTVValueTLV | _: PaymentDataTLV |
+              _: ShortChannelIdTLV =>
             () // ignore
         }
       }

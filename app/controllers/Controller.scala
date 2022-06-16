@@ -3,15 +3,16 @@ package controllers
 import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
+import com.translnd.htlc.{HTLCInterceptor, InvoiceState}
+import com.translnd.htlc.InvoiceState._
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
-import lnrpc.Invoice.InvoiceState
-import lnrpc.Invoice.InvoiceState._
 import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
+import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction._
@@ -56,7 +57,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   implicit lazy val config: OpReturnBotAppConfig =
     OpReturnBotAppConfig.fromDefaultDatadir()
 
+  import config.transLndConfig
+
   val lnd: LndRpcClient = config.lndRpcClient
+
+  lazy val translnd: HTLCInterceptor = HTLCInterceptor(lnd)
 
   val startF: Future[Unit] = config.start()
 
@@ -299,13 +304,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
         val hash = CryptoUtil.sha256(message)
 
-        lnd
-          .addInvoice(hash, sats.satoshis, expiry)
-          .flatMap { invoiceResult =>
-            val invoice = invoiceResult.invoice
+        translnd
+          .createInvoice(hash, sats, expiry)
+          .flatMap { invoice =>
             val db: InvoiceDb =
               InvoiceDb(
-                rHash = invoiceResult.rHash.hash,
+                rHash = invoice.lnTags.paymentHash.hash,
                 invoice = invoice,
                 message = message,
                 noTwitter = noTwitter,
@@ -325,14 +329,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   def startSubscription(): Future[Done] = {
     val parallelism = Runtime.getRuntime.availableProcessors()
 
-    lnd
+    translnd
       .subscribeInvoices()
       .mapAsyncUnordered(parallelism) { invoice =>
         invoice.state match {
-          case OPEN | Unrecognized(_) | InvoiceState.ACCEPTED => Future.unit
-          case CANCELED =>
+          case Unpaid | InvoiceState.Accepted => Future.unit
+          case Cancelled | Expired =>
             val action = invoiceDAO
-              .findByPrimaryKeyAction(Sha256Digest(invoice.rHash))
+              .findByPrimaryKeyAction(invoice.hash)
               .flatMap {
                 case None => DBIOAction.successful(())
                 case Some(invoiceDb) =>
@@ -340,20 +344,22 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               }
 
             invoiceDAO.safeDatabase.run(action)
-          case SETTLED =>
-            invoiceDAO.read(Sha256Digest(invoice.rHash)).flatMap {
+          case Paid =>
+            invoiceDAO.read(invoice.hash).flatMap {
               case None =>
                 logger.warn(
-                  s"Processed invoice not from OP_RETURN Bot, ${invoice.rHash.toHex}")
+                  s"Processed invoice not from OP_RETURN Bot, ${invoice.hash.hex}")
                 Future.unit
               case Some(invoiceDb) =>
                 invoiceDb.txIdOpt match {
                   case Some(_) =>
                     logger.warn(
-                      s"Processed invoice that already has a tx associated with it, rHash: ${invoice.rHash.toHex}")
+                      s"Processed invoice that already has a tx associated with it, rHash: ${invoice.hash.hex}")
                     Future.unit
                   case None =>
-                    require(invoice.amtPaidMsat >= invoice.valueMsat,
+                    val amtPaid =
+                      invoice.amountPaidOpt.getOrElse(MilliSatoshis.zero)
+                    require(amtPaid >= invoice.amountOpt.get,
                             "User did not pay invoice in full")
                     onInvoicePaid(invoiceDb).map(_ => ())
                 }
@@ -373,21 +379,24 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         val updateFs = unclosed.map { db =>
           if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
           else {
-            lnd
-              .lookupInvoice(db.paymentHashTag)
-              .flatMap { inv =>
-                inv.state match {
-                  case OPEN | InvoiceState.ACCEPTED | Unrecognized(_) =>
-                    Future.successful(db)
-                  case CANCELED =>
-                    Future.successful(db.copy(closed = false))
-                  case SETTLED =>
-                    if (inv.amtPaidMsat >= inv.valueMsat) {
-                      onInvoicePaid(db)
-                    } else Future.successful(db.copy(closed = true))
-                }
+            translnd
+              .lookupInvoice(db.rHash)
+              .flatMap {
+                case None => Future.successful(db.copy(closed = false))
+                case Some(inv) =>
+                  inv.state match {
+                    case Unpaid | InvoiceState.Accepted =>
+                      Future.successful(db)
+                    case Cancelled | Expired =>
+                      Future.successful(db.copy(closed = false))
+                    case Paid =>
+                      val amtPaid =
+                        inv.amountPaidOpt.getOrElse(MilliSatoshis.zero)
+                      if (amtPaid >= inv.amountOpt.get) {
+                        onInvoicePaid(db)
+                      } else Future.successful(db.copy(closed = true))
+                  }
               }
-              .recover { case _: Throwable => db.copy(closed = false) }
           }
         }
 

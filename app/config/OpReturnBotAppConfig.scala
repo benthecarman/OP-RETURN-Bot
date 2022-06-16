@@ -3,6 +3,7 @@ package config
 import akka.actor.ActorSystem
 import com.danielasfregola.twitter4s.TwitterRestClient
 import com.danielasfregola.twitter4s.entities.{AccessToken, ConsumerToken}
+import com.translnd.htlc.config.TransLndAppConfig
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
@@ -10,8 +11,8 @@ import org.bitcoins.commons.config._
 import org.bitcoins.db._
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config.{LndInstance, LndInstanceLocal}
-import scala.jdk.CollectionConverters._
 
+import scala.jdk.CollectionConverters._
 import java.io.File
 import java.nio.file.{Files, Path, Paths}
 import scala.concurrent._
@@ -41,6 +42,9 @@ case class OpReturnBotAppConfig(
     OpReturnBotAppConfig(directory, configs)
 
   val baseDatadir: Path = directory
+
+  implicit lazy val transLndConfig: TransLndAppConfig =
+    TransLndAppConfig(directory, configOverrides)
 
   lazy val lndDataDir: Path =
     Paths.get(config.getString(s"bitcoin-s.lnd.datadir"))

@@ -1,10 +1,11 @@
-val bitcoinsV = "1.9.1-16-587bca87-SNAPSHOT"
+val bitcoinsV = "1.9.1-99-24a9e6a5-SNAPSHOT"
+val translndV = "0.1.0-30-66121bde-SNAPSHOT"
 val akkaV = "2.6.19"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
 resolvers +=
-  "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
+  "Sonatype OSS Snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots"
 
 lazy val root = project
   .in(file("."))
@@ -17,6 +18,7 @@ lazy val root = project
     libraryDependencies ++= Seq(
       guice,
       "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
+      "com.translnd" %% "htlc-interceptor" % translndV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
@@ -26,7 +28,7 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
       "com.danielasfregola" %% "twitter4s" % "7.0",
       "com.softwaremill.sttp.client3" %% "okhttp-backend" % "3.5.2",
-      "com.bot4s" %% "telegram-akka" % "5.4.1"
+      "com.bot4s" %% "telegram-akka" % "5.4.2"
     ),
     scalacOptions ++= Seq(
       "-feature",
