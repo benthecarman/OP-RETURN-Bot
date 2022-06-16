@@ -81,7 +81,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       uri = torAddrOpt.getOrElse(info.uris.head)
     }
   }
-  setURI()
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
@@ -101,15 +100,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   private val telegramHandler = new TelegramHandler(this)
 
-  telegramHandler.start()
-  startSubscription()
-  startOnionMessageSubscription()
-
-  // unhandled invoice scheduler
-  // needed until https://github.com/lightningnetwork/lnd/issues/6299
-  system.scheduler.scheduleAtFixedRate(0.seconds, 10.minutes) { () =>
-    processUnhandledInvoices()
-    ()
+  startF.map { _ =>
+    setURI()
+    telegramHandler.start()
+    startSubscription()
+    startOnionMessageSubscription()
   }
 
   def index: Action[AnyContent] = {

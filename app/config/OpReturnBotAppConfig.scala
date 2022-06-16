@@ -84,16 +84,16 @@ case class OpReturnBotAppConfig(
     TwitterRestClient.withActorSystem(consumerToken, accessToken)(system)
 
   override def start(): Future[Unit] = {
-    logger.info(s"Initializing setup")
+    transLndConfig.start().map { _ =>
+      logger.info(s"Initializing setup")
 
-    if (Files.notExists(baseDatadir)) {
-      Files.createDirectories(baseDatadir)
+      if (Files.notExists(baseDatadir)) {
+        Files.createDirectories(baseDatadir)
+      }
+
+      val numMigrations = migrate().migrationsExecuted
+      logger.info(s"Applied $numMigrations")
     }
-
-    val numMigrations = migrate()
-    logger.info(s"Applied $numMigrations")
-
-    Future.unit
   }
 
   override def stop(): Future[Unit] = Future.unit
