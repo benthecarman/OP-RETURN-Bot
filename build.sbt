@@ -1,5 +1,5 @@
 val bitcoinsV = "1.9.1-99-24a9e6a5-SNAPSHOT"
-val translndV = "0.1.0-35-8859ee92-SNAPSHOT"
+val translndV = "0.1.0-41-cdc05eea-SNAPSHOT"
 val akkaV = "2.6.19"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
@@ -18,7 +18,7 @@ lazy val root = project
     libraryDependencies ++= Seq(
       guice,
       "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
-      "com.translnd" %% "htlc-interceptor" % translndV withSources () withJavadoc (),
+      "com.translnd" %% "pubkey-rotator" % translndV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),

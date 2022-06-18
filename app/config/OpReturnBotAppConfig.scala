@@ -3,7 +3,7 @@ package config
 import akka.actor.ActorSystem
 import com.danielasfregola.twitter4s.TwitterRestClient
 import com.danielasfregola.twitter4s.entities.{AccessToken, ConsumerToken}
-import com.translnd.htlc.config.TransLndAppConfig
+import com.translnd.rotator.config.TransLndAppConfig
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO

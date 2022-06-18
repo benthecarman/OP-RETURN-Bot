@@ -3,8 +3,8 @@ package controllers
 import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
-import com.translnd.htlc.{HTLCInterceptor, InvoiceState}
-import com.translnd.htlc.InvoiceState._
+import com.translnd.rotator.InvoiceState._
+import com.translnd.rotator.{InvoiceState, PubkeyRotator}
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
@@ -61,7 +61,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val lnd: LndRpcClient = config.lndRpcClient
 
-  lazy val translnd: HTLCInterceptor = HTLCInterceptor(lnd)
+  lazy val translnd: PubkeyRotator = PubkeyRotator(lnd)
 
   val startF: Future[Unit] = config.start()
 
