@@ -1,4 +1,4 @@
-val bitcoinsV = "1.9.2-17-828d03c7-SNAPSHOT"
+val bitcoinsV = "1.9.2-20-b9a1de91-SNAPSHOT"
 val translndV = "0.1.0-48-3dcd6ca9-SNAPSHOT"
 val akkaV = "2.6.19"
 
@@ -22,6 +22,7 @@ lazy val root = project
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),

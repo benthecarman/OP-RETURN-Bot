@@ -9,6 +9,7 @@ import config.OpReturnBotAppConfig
 import controllers.OpReturnBotTLV.BroadcastTransactionTLV
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
+import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
@@ -18,7 +19,13 @@ import org.bitcoins.core.protocol.transaction.{Transaction, TransactionOutput}
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
-import org.bitcoins.crypto.DoubleSha256DigestBE
+import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
+import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE}
+import org.bitcoins.feeprovider.{
+  BitcoinerLiveFeeRateProvider,
+  MempoolSpaceProvider
+}
+import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
 import org.bitcoins.lnd.rpc.{LndRpcClient, LndUtils}
 import scodec.bits.ByteVector
 import signrpc.TxOut
@@ -29,6 +36,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 
 class InvoiceMonitor(
+    val lnd: LndRpcClient,
+    pubkeyRotator: PubkeyRotator,
     telegramHandlerOpt: Option[TelegramHandler],
     recentTransactions: ArrayBuffer[DoubleSha256DigestBE])(implicit
     val system: ActorSystem,
@@ -36,18 +45,20 @@ class InvoiceMonitor(
     extends Logging
     with LndUtils
     with TwitterHandler {
-  import config.transLndConfig
   import system.dispatcher
 
-  val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val feeProvider: MempoolSpaceProvider =
+    MempoolSpaceProvider(FastestFeeTarget, MainNet, None)
 
-  val lnd: LndRpcClient = config.lndRpcClient
-  lazy val translnd: PubkeyRotator = PubkeyRotator(lnd)
+  val feeProviderBackup: BitcoinerLiveFeeRateProvider =
+    BitcoinerLiveFeeRateProvider(30, None)
+
+  val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
   def startSubscription(): Future[Done] = {
     val parallelism = Runtime.getRuntime.availableProcessors()
 
-    translnd
+    pubkeyRotator
       .subscribeInvoices()
       .mapAsyncUnordered(parallelism) { invoice =>
         invoice.state match {
@@ -97,7 +108,7 @@ class InvoiceMonitor(
         val updateFs = unclosed.map { db =>
           if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
           else {
-            translnd
+            pubkeyRotator
               .lookupInvoice(db.rHash)
               .flatMap {
                 case None => Future.successful(db.copy(closed = false))
@@ -133,7 +144,7 @@ class InvoiceMonitor(
     }
   }
 
-  private def onInvoicePaid(invoiceDb: InvoiceDb): Future[InvoiceDb] = {
+  def onInvoicePaid(invoiceDb: InvoiceDb): Future[InvoiceDb] = {
     val message = invoiceDb.message
     val invoice = invoiceDb.invoice
     val feeRate = invoiceDb.feeRate
@@ -211,7 +222,7 @@ class InvoiceMonitor(
                                            profitOpt = profitOpt,
                                            chainFeeOpt = chainFeeOpt)
 
-      res <- invoiceDAO.upsert(dbWithTx)
+      res <- invoiceDAO.update(dbWithTx)
 
       tweetOpt <-
         if (noTwitter) FutureUtil.none
@@ -272,6 +283,61 @@ class InvoiceMonitor(
         updated = invoiceDb.copy(closed = false)
         newDb <- invoiceDAO.update(updated)
       } yield newDb
+    }
+  }
+
+  def processMessage(
+      message: String,
+      noTwitter: Boolean,
+      nodeIdOpt: Option[NodeId]): Future[InvoiceDb] = {
+    require(
+      message.getBytes.length <= 80,
+      "OP_Return message received was too long, must be less than 80 chars")
+
+    fetchFeeRate()
+      .flatMap { rate: SatoshisPerVirtualByte =>
+        // add 4 so we get better odds of getting in next block
+        val feeRate = rate.copy(rate.currencyUnit + Satoshis(4))
+
+        // 125 base tx fee * 2 just in case
+        val baseSize = 250
+        val messageSize = message.getBytes.length
+
+        // Add fee if no tweet
+        val noTwitterFee = if (noTwitter) Satoshis(1000) else Satoshis.zero
+
+        // tx fee + app fee (1337) + twitter fee
+        val sats =
+          (feeRate * (baseSize + messageSize)) + Satoshis(1337) + noTwitterFee
+        val expiry = 60 * 5 // 5 minutes
+
+        val hash = CryptoUtil.sha256(message)
+
+        pubkeyRotator
+          .createInvoice(hash, sats, expiry)
+          .flatMap { invoice =>
+            val db: InvoiceDb =
+              InvoiceDb(
+                rHash = invoice.lnTags.paymentHash.hash,
+                invoice = invoice,
+                message = message,
+                noTwitter = noTwitter,
+                feeRate = feeRate,
+                closed = false,
+                nodeIdOpt = nodeIdOpt,
+                txOpt = None,
+                txIdOpt = None,
+                profitOpt = None,
+                chainFeeOpt = None
+              )
+            invoiceDAO.create(db)
+          }
+      }
+  }
+
+  private def fetchFeeRate(): Future[SatoshisPerVirtualByte] = {
+    feeProvider.getFeeRate().recoverWith { case _: Throwable =>
+      feeProviderBackup.getFeeRate()
     }
   }
 

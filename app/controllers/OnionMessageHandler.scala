@@ -29,7 +29,8 @@ trait OnionMessageHandler extends Logging { self: Controller =>
                 // handle
                 opReturnBotTLV match {
                   case RequestInvoiceTLV(message) =>
-                    processMessage(message, noTwitter = false, Some(nodeId))
+                    invoiceMonitor
+                      .processMessage(message, noTwitter = false, Some(nodeId))
                       .flatMap { db =>
                         val invoiceTLV = InvoiceTLV(db.invoice)
                         lnd.sendCustomMessage(nodeId, invoiceTLV.toUnknownTLV)

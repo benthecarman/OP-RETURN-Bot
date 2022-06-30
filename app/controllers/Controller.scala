@@ -5,15 +5,9 @@ import com.translnd.rotator.PubkeyRotator
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
-import org.bitcoins.core.config.MainNet
-import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.transaction._
-import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
-import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE, Sha256Digest}
-import org.bitcoins.feeprovider.MempoolSpaceTarget._
-import org.bitcoins.feeprovider._
+import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.lnd.rpc.LndRpcClient
 import play.api.data._
 import play.api.mvc._
@@ -46,15 +40,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val lnd: LndRpcClient = config.lndRpcClient
 
-  lazy val translnd: PubkeyRotator = PubkeyRotator(lnd)
+  lazy val pubkeyRotator: PubkeyRotator = PubkeyRotator(lnd)
 
   val startF: Future[Unit] = config.start()
-
-  val feeProvider: MempoolSpaceProvider =
-    MempoolSpaceProvider(FastestFeeTarget, MainNet, None)
-
-  val feeProviderBackup: BitcoinerLiveFeeRateProvider =
-    BitcoinerLiveFeeRateProvider(30, None)
 
   val uriErrorString = "Error: try again"
   var uri: String = uriErrorString
@@ -86,7 +74,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   private val telegramHandler = new TelegramHandler(this)
 
   val invoiceMonitor =
-    new InvoiceMonitor(Some(telegramHandler), recentTransactions)
+    new InvoiceMonitor(lnd,
+                       pubkeyRotator,
+                       Some(telegramHandler),
+                       recentTransactions)
 
   startF.map { _ =>
     setURI()
@@ -220,7 +211,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       def success(input: OpReturnRequest): Future[Result] = {
         for {
-          invoiceDb <- processMessage(input.message, input.noTwitter, None)
+          invoiceDb <- invoiceMonitor.processMessage(input.message,
+                                                     input.noTwitter,
+                                                     None)
         } yield {
           Ok(invoiceDb.invoice.toString())
         }
@@ -250,68 +243,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       // This is the good case, where the form was successfully parsed as an OpReturnRequest
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
-          processMessage(data.message, data.noTwitter, None).map { invoiceDb =>
-            Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
-          }
+          invoiceMonitor
+            .processMessage(data.message, data.noTwitter, None)
+            .map { invoiceDb =>
+              Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
+            }
       }
 
       val formValidationResult = opReturnRequestForm.bindFromRequest()
       formValidationResult.fold(errorFunction, successFunction)
-    }
-  }
-
-  protected def processMessage(
-      message: String,
-      noTwitter: Boolean,
-      nodeIdOpt: Option[NodeId]): Future[InvoiceDb] = {
-    require(
-      message.getBytes.length <= 80,
-      "OP_Return message received was too long, must be less than 80 chars")
-
-    fetchFeeRate()
-      .flatMap { rate: SatoshisPerVirtualByte =>
-        // add 4 so we get better odds of getting in next block
-        val feeRate = rate.copy(rate.currencyUnit + Satoshis(4))
-
-        // 125 base tx fee * 2 just in case
-        val baseSize = 250
-        val messageSize = message.getBytes.length
-
-        // Add fee if no tweet
-        val noTwitterFee = if (noTwitter) Satoshis(1000) else Satoshis.zero
-
-        // tx fee + app fee (1337) + twitter fee
-        val sats =
-          (feeRate * (baseSize + messageSize)) + Satoshis(1337) + noTwitterFee
-        val expiry = 60 * 5 // 5 minutes
-
-        val hash = CryptoUtil.sha256(message)
-
-        translnd
-          .createInvoice(hash, sats, expiry)
-          .flatMap { invoice =>
-            val db: InvoiceDb =
-              InvoiceDb(
-                rHash = invoice.lnTags.paymentHash.hash,
-                invoice = invoice,
-                message = message,
-                noTwitter = noTwitter,
-                feeRate = feeRate,
-                closed = false,
-                nodeIdOpt = nodeIdOpt,
-                txOpt = None,
-                txIdOpt = None,
-                profitOpt = None,
-                chainFeeOpt = None
-              )
-            invoiceDAO.create(db)
-          }
-      }
-  }
-
-  private def fetchFeeRate(): Future[SatoshisPerVirtualByte] = {
-    feeProvider.getFeeRate().recoverWith { case _: Throwable =>
-      feeProviderBackup.getFeeRate()
     }
   }
 }
