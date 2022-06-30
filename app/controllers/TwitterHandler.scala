@@ -9,13 +9,25 @@ import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, Future}
 import scala.util.Try
 
-trait TwitterHandler extends Logging { self: Controller =>
+trait TwitterHandler extends Logging { self: InvoiceMonitor =>
+  import system.dispatcher
 
   lazy val shillCounter: AtomicInteger = {
     // set shill counter based off db
     val f = invoiceDAO.numCompleted()
     val res = Try(Await.result(f, 60.seconds))
     new AtomicInteger(res.getOrElse(0))
+  }
+
+  val uriErrorString = "Error: try again"
+  var uri: String = uriErrorString
+
+  def setURI(): Future[Unit] = {
+    lnd.getInfo.map { info =>
+      val torAddrOpt = info.uris.find(_.contains(".onion"))
+
+      uri = torAddrOpt.getOrElse(info.uris.head)
+    }
   }
 
   protected def sendTweet(message: String): Future[Tweet] = {

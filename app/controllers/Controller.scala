@@ -1,36 +1,22 @@
 package controllers
 
-import akka.Done
 import akka.actor.ActorSystem
-import akka.stream.scaladsl.Sink
-import com.translnd.rotator.InvoiceState._
-import com.translnd.rotator.{InvoiceState, PubkeyRotator}
+import com.translnd.rotator.PubkeyRotator
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
-import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.ln.node.NodeId
-import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction._
-import org.bitcoins.core.script.constant.ScriptConstant
-import org.bitcoins.core.script.control.OP_RETURN
-import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE, Sha256Digest}
 import org.bitcoins.feeprovider.MempoolSpaceTarget._
 import org.bitcoins.feeprovider._
 import org.bitcoins.lnd.rpc.LndRpcClient
-import org.bitcoins.lnd.rpc.LndUtils._
 import play.api.data._
 import play.api.mvc._
-import scodec.bits.ByteVector
-import signrpc.TxOut
-import slick.dbio.DBIOAction
-import walletrpc.SendOutputsRequest
 
 import javax.inject.Inject
 import scala.collection._
@@ -41,7 +27,6 @@ import scala.util.{Failure, Success, Try}
 
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
-    with TwitterHandler
     with OnionMessageHandler
     with Logging {
 
@@ -100,10 +85,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   private val telegramHandler = new TelegramHandler(this)
 
+  val invoiceMonitor =
+    new InvoiceMonitor(Some(telegramHandler), recentTransactions)
+
   startF.map { _ =>
     setURI()
     telegramHandler.start()
-    startSubscription()
+    invoiceMonitor.startSubscription()
     startOnionMessageSubscription()
   }
 
@@ -319,229 +307,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             invoiceDAO.create(db)
           }
       }
-  }
-
-  def startSubscription(): Future[Done] = {
-    val parallelism = Runtime.getRuntime.availableProcessors()
-
-    translnd
-      .subscribeInvoices()
-      .mapAsyncUnordered(parallelism) { invoice =>
-        invoice.state match {
-          case Unpaid | InvoiceState.Accepted => Future.unit
-          case Cancelled | Expired =>
-            val action = invoiceDAO
-              .findByPrimaryKeyAction(invoice.hash)
-              .flatMap {
-                case None => DBIOAction.successful(())
-                case Some(invoiceDb) =>
-                  invoiceDAO.updateAction(invoiceDb.copy(closed = true))
-              }
-
-            invoiceDAO.safeDatabase.run(action)
-          case Paid =>
-            invoiceDAO.read(invoice.hash).flatMap {
-              case None =>
-                logger.warn(
-                  s"Processed invoice not from OP_RETURN Bot, ${invoice.hash.hex}")
-                Future.unit
-              case Some(invoiceDb) =>
-                invoiceDb.txIdOpt match {
-                  case Some(_) =>
-                    logger.warn(
-                      s"Processed invoice that already has a tx associated with it, rHash: ${invoice.hash.hex}")
-                    Future.unit
-                  case None =>
-                    val amtPaid =
-                      invoice.amountPaidOpt.getOrElse(MilliSatoshis.zero)
-                    require(amtPaid >= invoice.amountOpt.get,
-                            "User did not pay invoice in full")
-                    onInvoicePaid(invoiceDb).map(_ => ())
-                }
-            }
-        }
-
-      }
-      .runWith(Sink.ignore)
-  }
-
-  def processUnhandledInvoices(): Future[Vector[InvoiceDb]] = {
-    invoiceDAO.findUnclosed().flatMap { unclosed =>
-      if (unclosed.nonEmpty) {
-        val time = System.currentTimeMillis()
-        logger.info(s"Processing ${unclosed.size} unhandled invoices")
-
-        val updateFs = unclosed.map { db =>
-          if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
-          else {
-            translnd
-              .lookupInvoice(db.rHash)
-              .flatMap {
-                case None => Future.successful(db.copy(closed = false))
-                case Some(inv) =>
-                  inv.state match {
-                    case Unpaid | InvoiceState.Accepted =>
-                      Future.successful(db)
-                    case Cancelled | Expired =>
-                      Future.successful(db.copy(closed = false))
-                    case Paid =>
-                      val amtPaid =
-                        inv.amountPaidOpt.getOrElse(MilliSatoshis.zero)
-                      if (amtPaid >= inv.amountOpt.get) {
-                        onInvoicePaid(db)
-                      } else Future.successful(db.copy(closed = true))
-                  }
-              }
-          }
-        }
-
-        val f = for {
-          updates <- Future.sequence(updateFs)
-          dbs <- invoiceDAO.updateAll(updates)
-          took = System.currentTimeMillis() - time
-          _ = logger.info(
-            s"Processed ${dbs.size} unhandled invoices, took $took ms")
-        } yield dbs
-
-        f.failed.map(logger.error("Error processing unhandled invoices", _))
-
-        f
-      } else Future.successful(Vector.empty)
-    }
-  }
-
-  private def onInvoicePaid(invoiceDb: InvoiceDb): Future[InvoiceDb] = {
-    val message = invoiceDb.message
-    val invoice = invoiceDb.invoice
-    val feeRate = invoiceDb.feeRate
-    val noTwitter = invoiceDb.noTwitter
-    val rHash = PaymentHashTag(invoiceDb.rHash)
-
-    logger.info(s"Received ${invoice.amount.get.toSatoshis}!")
-
-    val output = {
-      val messageBytes = ByteVector(message.getBytes)
-
-      val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
-        messageBytes) :+ ScriptConstant(messageBytes)
-
-      val scriptPubKey = ScriptPubKey(asm.toVector)
-
-      TransactionOutput(Satoshis.zero, scriptPubKey)
-    }
-
-    val txOut =
-      TxOut(output.value.satoshis.toLong, output.scriptPubKey.asmBytes)
-
-    val request: SendOutputsRequest = SendOutputsRequest(
-      satPerKw = feeRate.toSatoshisPerKW.toLong,
-      outputs = Vector(txOut),
-      label = s"OP_RETURN Bot: $message",
-      spendUnconfirmed = true)
-
-    val createTxF = for {
-      transaction <- lnd.sendOutputs(request)
-      errorOpt <- lnd.publishTransaction(transaction)
-
-      // send if onion message
-      _ <- invoiceDb.nodeIdOpt match {
-        case Some(nodeId) =>
-          // recover so we can finish accounting
-          sendBroadcastTransactionTLV(nodeId, transaction).recover {
-            case err: Throwable =>
-              logger.error(
-                s"Error sending onion message back to nodeId $nodeId",
-                err)
-          }
-        case None => Future.unit
-      }
-
-      txId = transaction.txIdBE
-
-      _ = errorOpt match {
-        case Some(error) =>
-          logger.error(
-            s"Error when broadcasting transaction ${txId.hex}, $error")
-        case None =>
-          logger.info(s"Successfully created tx: ${txId.hex}")
-      }
-
-      txDetailsOpt <- lnd.getTransaction(txId)
-
-      _ = {
-        recentTransactions += txId
-        if (recentTransactions.size >= 5) {
-          val old = recentTransactions.takeRight(5)
-          recentTransactions.clear()
-          recentTransactions ++= old
-        }
-      }
-
-      amount = invoice.amount.get.toSatoshis
-      // Need to make sure we upsert the tx and txid even if this fails, so we can't call .get
-      chainFeeOpt = txDetailsOpt.map(_.totalFees)
-      profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
-
-      dbWithTx: InvoiceDb = invoiceDb.copy(closed = true,
-                                           txOpt = Some(transaction),
-                                           txIdOpt = Some(txId),
-                                           profitOpt = profitOpt,
-                                           chainFeeOpt = chainFeeOpt)
-
-      res <- invoiceDAO.upsert(dbWithTx)
-
-      tweetOpt <-
-        if (noTwitter) FutureUtil.none
-        else
-          handleTweet(message, txId).map(Some(_)).recover { err =>
-            logger.error(
-              s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
-            None
-          }
-      _ <- {
-        val telegramF = txDetailsOpt match {
-          case Some(details) =>
-            val action = for {
-              profit <- invoiceDAO.totalProfitAction()
-              chainFees <- invoiceDAO.totalChainFeesAction()
-            } yield (profit, chainFees)
-            for {
-              (profit, chainFees) <- invoiceDAO.safeDatabase.run(action)
-              _ <- telegramHandler.handleTelegram(rHash = rHash.hash,
-                                                  invoice = invoice,
-                                                  tweetOpt = tweetOpt,
-                                                  message = message,
-                                                  feeRate = feeRate,
-                                                  txDetails = details,
-                                                  totalProfit = profit,
-                                                  totalChainFees = chainFees)
-            } yield ()
-          case None =>
-            val msg =
-              s"Failed to get transaction details for ${rHash.hash.hex}\n" +
-                s"Transaction (${txId.hex}): ${transaction.hex}"
-            logger.warn(msg)
-            telegramHandler.sendTelegramMessage(msg)
-        }
-
-        telegramF.recover { err =>
-          logger.error(
-            s"Failed to send telegram message for invoice ${rHash.hash.hex}, got error $err")
-        }
-      }
-    } yield res
-
-    createTxF.recoverWith { case err: Throwable =>
-      logger.error(
-        s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ",
-        err)
-      for {
-        _ <- telegramHandler.sendTelegramMessage(
-          s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ${err.getMessage}")
-        updated = invoiceDb.copy(closed = false)
-        newDb <- invoiceDAO.update(updated)
-      } yield newDb
-    }
   }
 
   private def fetchFeeRate(): Future[SatoshisPerVirtualByte] = {

@@ -75,7 +75,7 @@ class TelegramHandler(controller: Controller)(implicit
   }
 
   onCommand("processunhandled") { implicit msg =>
-    controller.processUnhandledInvoices().flatMap { dbs =>
+    controller.invoiceMonitor.processUnhandledInvoices().flatMap { dbs =>
       reply(s"Updated ${dbs.size} invoices").map(_ => ())
     }
   }

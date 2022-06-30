@@ -6,7 +6,6 @@ import controllers.OpReturnBotTLV._
 import grizzled.slf4j.Logging
 import org.bitcoins.core.protocol.BigSizeUInt
 import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.tlv._
 import org.bitcoins.core.protocol.transaction.Transaction
 import scodec.bits.ByteVector
@@ -49,13 +48,6 @@ trait OnionMessageHandler extends Logging { self: Controller =>
         }
       }
       .runWith(Sink.ignore)
-  }
-
-  def sendBroadcastTransactionTLV(
-      nodeId: NodeId,
-      tx: Transaction): Future[Unit] = {
-    val tlv = BroadcastTransactionTLV(tx)
-    lnd.sendCustomMessage(nodeId, tlv.toUnknownTLV)
   }
 }
 
