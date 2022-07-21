@@ -8,6 +8,7 @@ import com.translnd.rotator.{InvoiceState, PubkeyRotator}
 import config.OpReturnBotAppConfig
 import controllers.OpReturnBotTLV.BroadcastTransactionTLV
 import grizzled.slf4j.Logging
+import lnrpc.Invoice
 import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency.Satoshis
@@ -21,10 +22,7 @@ import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE}
-import org.bitcoins.feeprovider.{
-  BitcoinerLiveFeeRateProvider,
-  MempoolSpaceProvider
-}
+import org.bitcoins.feeprovider._
 import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
 import org.bitcoins.lnd.rpc.{LndRpcClient, LndUtils}
 import scodec.bits.ByteVector
@@ -111,13 +109,31 @@ class InvoiceMonitor(
             pubkeyRotator
               .lookupInvoice(db.rHash)
               .flatMap {
-                case None => Future.successful(db.copy(closed = false))
+                case None =>
+                  lnd
+                    .lookupInvoice(PaymentHashTag(db.rHash))
+                    .flatMap { inv =>
+                      inv.state match {
+                        case Invoice.InvoiceState.OPEN |
+                            Invoice.InvoiceState.ACCEPTED =>
+                          Future.successful(db)
+                        case Invoice.InvoiceState.SETTLED =>
+                          if (inv.amtPaidMsat >= inv.valueMsat) {
+                            onInvoicePaid(db)
+                          } else Future.successful(db.copy(closed = true))
+                        case Invoice.InvoiceState.CANCELED =>
+                          Future.successful(db.copy(closed = false))
+                        case Invoice.InvoiceState.Unrecognized(_) =>
+                          Future.successful(db)
+                      }
+                    }
+                    .recover { case _: Throwable => db.copy(closed = true) }
                 case Some(inv) =>
                   inv.state match {
                     case Unpaid | InvoiceState.Accepted =>
                       Future.successful(db)
                     case Cancelled | Expired =>
-                      Future.successful(db.copy(closed = false))
+                      Future.successful(db.copy(closed = true))
                     case Paid =>
                       val amtPaid =
                         inv.amountPaidOpt.getOrElse(MilliSatoshis.zero)
