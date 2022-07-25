@@ -29,7 +29,7 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process an invoice" in { param =>
-    val (bitcoind, lndA, _) = param
+    val (_, lndA, _) = param
     val pubkeyRotator = PubkeyRotator(lndA)
     val monitor =
       new InvoiceMonitor(lndA, pubkeyRotator, None, ArrayBuffer.empty)
