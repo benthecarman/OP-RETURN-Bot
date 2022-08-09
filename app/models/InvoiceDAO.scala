@@ -21,6 +21,7 @@ case class InvoiceDb(
     feeRate: SatoshisPerVirtualByte,
     closed: Boolean,
     nodeIdOpt: Option[NodeId],
+    telegramIdOpt: Option[Long],
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE],
     profitOpt: Option[CurrencyUnit],
@@ -125,6 +126,8 @@ case class InvoiceDAO()(implicit
 
     def nodeId: Rep[Option[NodeId]] = column("node_id")
 
+    def telegramId: Rep[Option[Long]] = column("telegram_id")
+
     def transactionOpt: Rep[Option[Transaction]] = column("transaction")
 
     def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
@@ -141,6 +144,7 @@ case class InvoiceDAO()(implicit
        feeRate,
        closed,
        nodeId,
+       telegramId,
        transactionOpt,
        txIdOpt,
        profitOpt,

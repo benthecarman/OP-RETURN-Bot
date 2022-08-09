@@ -213,6 +213,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         for {
           invoiceDb <- invoiceMonitor.processMessage(input.message,
                                                      input.noTwitter,
+                                                     None,
                                                      None)
         } yield {
           Ok(invoiceDb.invoice.toString())
@@ -244,7 +245,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
           invoiceMonitor
-            .processMessage(data.message, data.noTwitter, None)
+            .processMessage(data.message, data.noTwitter, None, None)
             .map { invoiceDb =>
               Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
             }

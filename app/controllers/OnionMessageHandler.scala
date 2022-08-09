@@ -30,7 +30,10 @@ trait OnionMessageHandler extends Logging { self: Controller =>
                 opReturnBotTLV match {
                   case RequestInvoiceTLV(message) =>
                     invoiceMonitor
-                      .processMessage(message, noTwitter = false, Some(nodeId))
+                      .processMessage(message,
+                                      noTwitter = false,
+                                      Some(nodeId),
+                                      None)
                       .flatMap { db =>
                         val invoiceTLV = InvoiceTLV(db.invoice)
                         lnd.sendCustomMessage(nodeId, invoiceTLV.toUnknownTLV)

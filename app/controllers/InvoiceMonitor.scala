@@ -268,6 +268,12 @@ class InvoiceMonitor(
                                    totalProfit = profit,
                                    totalChainFees = chainFees))
                 .getOrElse(Future.unit)
+
+              _ <- invoiceDb.telegramIdOpt
+                .flatMap(telegramId =>
+                  telegramHandlerOpt.map(
+                    _.handleTelegramUserPurchase(telegramId, details)))
+                .getOrElse(Future.unit)
             } yield ()
           case None =>
             val msg =
@@ -305,7 +311,8 @@ class InvoiceMonitor(
   def processMessage(
       message: String,
       noTwitter: Boolean,
-      nodeIdOpt: Option[NodeId]): Future[InvoiceDb] = {
+      nodeIdOpt: Option[NodeId],
+      telegramId: Option[Long]): Future[InvoiceDb] = {
     require(
       message.getBytes.length <= 80,
       "OP_Return message received was too long, must be less than 80 chars")
@@ -341,6 +348,7 @@ class InvoiceMonitor(
                 feeRate = feeRate,
                 closed = false,
                 nodeIdOpt = nodeIdOpt,
+                telegramIdOpt = telegramId,
                 txOpt = None,
                 txIdOpt = None,
                 profitOpt = None,
