@@ -3,6 +3,7 @@ package controllers
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.Get
+import com.bot4s.telegram.models.Message
 import com.bot4s.telegram.api.RequestHandler
 import com.bot4s.telegram.api.declarative.Commands
 import com.bot4s.telegram.clients.FutureSttpClient
@@ -56,33 +57,69 @@ class TelegramHandler(controller: Controller)(implicit
   override def start(): Future[Unit] = {
     val commands = List(
       BotCommand("report", "Generate report of profit and total on chain fees"),
-      BotCommand("processunhandled", "Forces processing of invoices")
+      BotCommand("processunhandled", "Forces processing of invoices"),
+      BotCommand("create", "Creating an invoice with the given message")
     )
 
     for {
       _ <- run()
       _ <- request(SetMyCommands(commands))
-      _ <- sendTelegramMessage("Connected!")
+      _ <- sendTelegramMessage("Connected!", myTelegramId)
     } yield ()
   }
 
   override def stop(): Future[Unit] = Future.unit
 
+  def checkAdminMessage(msg: Message): Boolean = {
+    msg.from match {
+      case Some(user) => user.id.toString == myTelegramId
+      case None       => false
+    }
+  }
+
   onCommand("report") { implicit msg =>
-    createReport().flatMap { report =>
-      reply(report).map(_ => ())
+    if (!checkAdminMessage(msg)) {
+      createReport().flatMap { report =>
+        reply(report).map(_ => ())
+      }
+    } else {
+      reply("You are not allowed to use this command!").map(_ => ())
     }
   }
 
   onCommand("processunhandled") { implicit msg =>
-    controller.invoiceMonitor.processUnhandledInvoices().flatMap { dbs =>
-      reply(s"Updated ${dbs.size} invoices").map(_ => ())
+    if (!checkAdminMessage(msg)) {
+      controller.invoiceMonitor.processUnhandledInvoices().flatMap { dbs =>
+        reply(s"Updated ${dbs.size} invoices").map(_ => ())
+      }
+    } else {
+      reply("You are not allowed to use this command!").map(_ => ())
     }
   }
 
-  def sendTelegramMessage(message: String): Future[Unit] = {
+  onCommand("create") { implicit msg =>
+    val vec = msg.text.get.trim.split(" ", 2).toVector
+    if (vec.size != 2) {
+      reply("Usage: /create <message>").map(_ => ())
+    } else {
+      val str = vec(1)
+      val id = msg.from.map(_.id)
+      controller.invoiceMonitor
+        .processMessage(message = str,
+                        noTwitter = false,
+                        nodeIdOpt = None,
+                        telegramId = id)
+        .flatMap { db =>
+          reply(db.invoice.toString()).map(_ => ())
+        }
+    }
+  }
+
+  def sendTelegramMessage(
+      message: String,
+      telegramId: String = myTelegramId): Future[Unit] = {
     val url = s"https://api.telegram.org/bot$telegramCreds/sendMessage" +
-      s"?chat_id=${URLEncoder.encode(myTelegramId, "UTF-8")}" +
+      s"?chat_id=${URLEncoder.encode(telegramId, "UTF-8")}" +
       s"&text=${URLEncoder.encode(message.trim, "UTF-8")}"
 
     Http().singleRequest(Get(url)).map(_ => ())
@@ -123,7 +160,20 @@ class TelegramHandler(controller: Controller)(implicit
          |total profit: ${printAmount(totalProfit)}
          |""".stripMargin
 
-    sendTelegramMessage(telegramMsg)
+    sendTelegramMessage(telegramMsg, myTelegramId)
+  }
+
+  def handleTelegramUserPurchase(
+      telegramId: Long,
+      txDetails: TxDetails): Future[Unit] = {
+    val telegramMsg =
+      s"""
+         |OP_RETURN Created!
+         |
+         |https://mempool.space/tx/${txDetails.txId.hex}
+         |""".stripMargin
+
+    sendTelegramMessage(telegramMsg, telegramId.toString)
   }
 
   protected def createReport(): Future[String] = {
