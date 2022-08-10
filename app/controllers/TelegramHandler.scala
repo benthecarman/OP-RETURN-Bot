@@ -103,12 +103,12 @@ class TelegramHandler(controller: Controller)(implicit
       reply("Usage: /create <message>").map(_ => ())
     } else {
       val str = vec(1)
-      val id = msg.from.map(_.id)
+      val id = msg.chat.id
       controller.invoiceMonitor
         .processMessage(message = str,
                         noTwitter = false,
                         nodeIdOpt = None,
-                        telegramId = id)
+                        telegramId = Some(id))
         .flatMap { db =>
           reply(db.invoice.toString()).map(_ => ())
         }
