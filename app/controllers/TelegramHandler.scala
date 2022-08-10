@@ -78,7 +78,7 @@ class TelegramHandler(controller: Controller)(implicit
   }
 
   onCommand("report") { implicit msg =>
-    if (!checkAdminMessage(msg)) {
+    if (checkAdminMessage(msg)) {
       createReport().flatMap { report =>
         reply(report).map(_ => ())
       }
@@ -88,7 +88,7 @@ class TelegramHandler(controller: Controller)(implicit
   }
 
   onCommand("processunhandled") { implicit msg =>
-    if (!checkAdminMessage(msg)) {
+    if (checkAdminMessage(msg)) {
       controller.invoiceMonitor.processUnhandledInvoices().flatMap { dbs =>
         reply(s"Updated ${dbs.size} invoices").map(_ => ())
       }
