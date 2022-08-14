@@ -3,13 +3,12 @@ package controllers
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.Get
-import com.bot4s.telegram.models.Message
 import com.bot4s.telegram.api.RequestHandler
 import com.bot4s.telegram.api.declarative.Commands
 import com.bot4s.telegram.clients.FutureSttpClient
 import com.bot4s.telegram.future.{Polling, TelegramBot}
 import com.bot4s.telegram.methods.SetMyCommands
-import com.bot4s.telegram.models.BotCommand
+import com.bot4s.telegram.models.{BotCommand, Message}
 import com.danielasfregola.twitter4s.entities.Tweet
 import config.OpReturnBotAppConfig
 import models.InvoiceDAO
@@ -19,9 +18,9 @@ import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.util.StartStopAsync
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
-import sttp.capabilities._
+import sttp.capabilities.akka.AkkaStreams
 import sttp.client3.SttpBackend
-import sttp.client3.okhttp.OkHttpFutureBackend
+import sttp.client3.akkahttp.AkkaHttpBackend
 
 import java.net.URLEncoder
 import java.text.NumberFormat
@@ -37,7 +36,6 @@ class TelegramHandler(controller: Controller)(implicit
     with Commands[Future]
     with StartStopAsync[Unit] {
 
-  val numericRegex: Regex = "^[0-9]*\\.[0-9]{2}$ or ^[0-9]*\\.[0-9][0-9]$".r
   val intFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
 
   val currencyFormatter: NumberFormat =
@@ -48,8 +46,8 @@ class TelegramHandler(controller: Controller)(implicit
   private val myTelegramId = config.telegramId
   private val telegramCreds = config.telegramCreds
 
-  implicit val backend: SttpBackend[Future, WebSockets] =
-    OkHttpFutureBackend()
+  implicit private val backend: SttpBackend[Future, AkkaStreams] =
+    AkkaHttpBackend.usingActorSystem(system)
 
   override val client: RequestHandler[Future] = new FutureSttpClient(
     telegramCreds)
