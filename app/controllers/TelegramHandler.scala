@@ -26,7 +26,6 @@ import java.net.URLEncoder
 import java.text.NumberFormat
 import java.util.Locale
 import scala.concurrent.Future
-import scala.util.matching.Regex
 
 class TelegramHandler(controller: Controller)(implicit
     config: OpReturnBotAppConfig,

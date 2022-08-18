@@ -34,6 +34,18 @@ lazy val root = project
     scalacOptions ++= Seq(
       "-feature",
       "-deprecation",
-      "-Xfatal-warnings"
+      "-Xfatal-warnings",
+      "-Xlint:adapted-args",
+      "-Xlint:nullary-unit",
+      "-Xlint:inaccessible",
+      "-Xlint:infer-any",
+      "-Xlint:missing-interpolator",
+      "-Xlint:eta-sam",
+      "-Xfatal-warnings",
+      "-unchecked",
+      "-Ywarn-dead-code",
+      "-Ywarn-value-discard",
+      "-Ypatmat-exhaust-depth",
+      "off"
     )
   )
