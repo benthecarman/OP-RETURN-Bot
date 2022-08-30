@@ -3,6 +3,7 @@ package controllers
 import org.bitcoins.core.protocol.ln.LnInvoice
 
 object Forms {
+
   import play.api.data.Form
   import play.api.data.Forms._
 

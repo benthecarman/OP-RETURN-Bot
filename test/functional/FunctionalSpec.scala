@@ -15,9 +15,12 @@ import scala.concurrent.Future
 
 /** Functional specification that has a running Play application.
   *
-  * This is good for testing filter functionality, such as CSRF token and template checks.
+  * This is good for testing filter functionality, such as CSRF token and
+  * template checks.
   *
-  * See https://www.playframework.com/documentation/2.8.x/ScalaFunctionalTestingWithScalaTest for more details.
+  * See
+  * https://www.playframework.com/documentation/2.8.x/ScalaFunctionalTestingWithScalaTest
+  * for more details.
   */
 class FunctionalSpec
     extends PlaySpec

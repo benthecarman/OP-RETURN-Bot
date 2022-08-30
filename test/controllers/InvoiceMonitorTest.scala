@@ -23,6 +23,7 @@ class InvoiceMonitorTest extends DualLndFixture {
     startF.failed.foreach(_.printStackTrace())
     Await.result(startF, 10.seconds)
   }
+
   after {
     val f = config.dropAll().map(_ => config.clean())
     Await.result(f, 10.seconds)

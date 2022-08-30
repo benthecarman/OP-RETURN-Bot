@@ -20,8 +20,10 @@ import scala.util.Properties
 
 /** Configuration for the Bitcoin-S wallet
   *
-  * @param directory The data directory of the wallet
-  * @param conf      Optional sequence of configuration overrides
+  * @param directory
+  *   The data directory of the wallet
+  * @param conf
+  *   Optional sequence of configuration overrides
   */
 case class OpReturnBotAppConfig(
     private val directory: Path,

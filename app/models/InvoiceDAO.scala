@@ -92,10 +92,9 @@ case class InvoiceDAO()(implicit
       .map(_.flatten.sum)
   }
 
-  def totalChainFeesAction(): DBIOAction[
-    CurrencyUnit,
-    NoStream,
-    Effect.Read] = {
+  def totalChainFeesAction(): DBIOAction[CurrencyUnit,
+                                         NoStream,
+                                         Effect.Read] = {
     table
       .filter(_.chainFeeOpt.isDefined)
       .map(_.chainFeeOpt)
