@@ -2,9 +2,11 @@ package controllers
 
 import com.danielasfregola.twitter4s.entities.Tweet
 import grizzled.slf4j.Logging
+import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto.DoubleSha256DigestBE
 
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.regex.Pattern
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, Future}
 import scala.util.Try
@@ -38,7 +40,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
 
   protected def handleTweet(
       message: String,
-      txId: DoubleSha256DigestBE): Future[Tweet] = {
+      txId: DoubleSha256DigestBE): Future[Tweet] = FutureUtil.makeAsync { () =>
     // Every 15th OP_RETURN we shill
     val count = shillCounter.getAndIncrement()
     if (count % 15 == 0 && count != 0) {
@@ -57,7 +59,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
          |""".stripMargin
 
     sendTweet(tweet)
-  }
+  }.flatten
 
   protected def shillTweet(): Future[Unit] = {
     if (uri != uriErrorString) {
@@ -78,8 +80,8 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     val replacement = "$#@!&"
 
     config.bannedWords.foldLeft(message) { case (msg, bannedWord) =>
-      val regex = s"(?i)$bannedWord"
-      msg.replaceAll(regex, replacement)
+      val myPattern = Pattern.compile(bannedWord, Pattern.CASE_INSENSITIVE)
+      myPattern.matcher(msg).replaceAll(replacement)
     }
   }
 }
