@@ -3,6 +3,7 @@ package controllers
 import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
+import com.danielasfregola.twitter4s.entities.Tweet
 import com.translnd.rotator.InvoiceState._
 import com.translnd.rotator.{InvoiceState, PubkeyRotator}
 import config.OpReturnBotAppConfig
@@ -32,6 +33,7 @@ import walletrpc.SendOutputsRequest
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
+import scala.concurrent.duration.DurationInt
 
 class InvoiceMonitor(
     val lnd: LndRpcClient,
@@ -240,40 +242,61 @@ class InvoiceMonitor(
 
       res <- invoiceDAO.update(dbWithTx)
 
-      tweetOpt <-
+      tweetF =
         if (noTwitter) FutureUtil.none
-        else
-          handleTweet(message, txId).map(Some(_)).recover { err =>
-            logger.error(
-              s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
-            None
+        else {
+          val p = Promise[Option[Tweet]]()
+
+          // add a 15 second delay for tweet so mempool.space has time
+          // to index the transaction
+          // - requested by the mempool.space team
+          system.scheduler.scheduleOnce(15.seconds) {
+            handleTweet(message, txId)
+              .map(Some(_))
+              .recover { err =>
+                logger.error(
+                  s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
+                None
+              }
+              .onComplete(t => p.tryComplete(t))
+            ()
           }
+
+          p.future
+        }
       _ <- {
         val telegramF = txDetailsOpt match {
           case Some(details) =>
-            val action = for {
+            lazy val action = for {
               profit <- invoiceDAO.totalProfitAction()
               chainFees <- invoiceDAO.totalChainFeesAction()
             } yield (profit, chainFees)
-            for {
-              (profit, chainFees) <- invoiceDAO.safeDatabase.run(action)
-              _ <- telegramHandlerOpt
-                .map(
-                  _.handleTelegram(rHash = rHash.hash,
-                                   invoice = invoice,
-                                   tweetOpt = tweetOpt,
-                                   message = message,
-                                   feeRate = feeRate,
-                                   txDetails = details,
-                                   totalProfit = profit,
-                                   totalChainFees = chainFees))
-                .getOrElse(Future.unit)
 
+            val accountingTelegramF = telegramHandlerOpt
+              .map { handler =>
+                for {
+                  (profit, chainFees) <- invoiceDAO.safeDatabase.run(action)
+                  tweetOpt <- tweetF
+                  _ <- handler.handleTelegram(rHash = rHash.hash,
+                                              invoice = invoice,
+                                              tweetOpt = tweetOpt,
+                                              message = message,
+                                              feeRate = feeRate,
+                                              txDetails = details,
+                                              totalProfit = profit,
+                                              totalChainFees = chainFees)
+                } yield ()
+              }
+              .getOrElse(Future.unit)
+
+            for {
               _ <- invoiceDb.telegramIdOpt
                 .flatMap(telegramId =>
                   telegramHandlerOpt.map(
                     _.handleTelegramUserPurchase(telegramId, details)))
                 .getOrElse(Future.unit)
+
+              _ <- accountingTelegramF
             } yield ()
           case None =>
             val msg =
