@@ -55,10 +55,10 @@ case class OpReturnBotAppConfig(
     Paths.get(config.getString(s"bitcoin-s.lnd.binary")).toFile
 
   lazy val telegramCreds: String =
-    config.getString(s"bitcoin-s.$moduleName.telegramCreds")
+    config.getStringOrElse(s"bitcoin-s.$moduleName.telegramCreds", "")
 
   lazy val telegramId: String =
-    config.getString(s"bitcoin-s.$moduleName.telegramId")
+    config.getStringOrElse(s"bitcoin-s.$moduleName.telegramId", "")
 
   lazy val twitterConsumerKey: String =
     config.getString(s"twitter.consumer.key")

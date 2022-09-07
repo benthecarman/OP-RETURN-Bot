@@ -60,7 +60,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   // The URL to the request.  You can call this directly from the template, but it
   // can be more convenient to leave the template completely stateless i.e. all
   // of the "Controller" references are inside the .scala file.
-  private val postUrl = routes.Controller.createRequest()
+  private val postUrl = routes.Controller.createRequest
 
   private val recentTransactions: ArrayBuffer[DoubleSha256DigestBE] = {
     val f = startF.flatMap(_ => invoiceDAO.lastFiveCompleted())

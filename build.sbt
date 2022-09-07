@@ -1,6 +1,6 @@
-val bitcoinsV = "1.9.2-195-2cae3f80-SNAPSHOT"
-val translndV = "0.1.0-63-1ee1c31b-SNAPSHOT"
-val akkaV = "2.6.19"
+val bitcoinsV = "1.9.3-17-018a6e58-SNAPSHOT"
+val translndV = "0.1.0-65-2577e579-SNAPSHOT"
+val akkaV = "2.6.20"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
@@ -19,9 +19,7 @@ lazy val root = project
       guice,
       "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
       "com.translnd" %% "pubkey-rotator" % translndV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
@@ -29,7 +27,11 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
       "com.danielasfregola" %% "twitter4s" % "8.0",
       "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.7.6",
-      "com.bot4s" %% "telegram-akka" % "5.6.0"
+      "com.bot4s" %% "telegram-akka" % "5.6.0",
+      "ch.qos.logback" % "logback-classic" % "1.2.11"
+    ),
+    dependencyOverrides ++= Seq(
+      "ch.qos.logback" % "logback-classic" % "1.2.11"
     ),
     scalacOptions ++= Seq(
       "-feature",
@@ -47,5 +49,6 @@ lazy val root = project
       "-Ywarn-value-discard",
       "-Ypatmat-exhaust-depth",
       "off"
-    )
+    ),
+    Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
   )
