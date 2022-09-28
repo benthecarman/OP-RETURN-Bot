@@ -35,7 +35,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
   protected def sendTweet(message: String): Future[Tweet] = {
     val client = config.twitterClient
 
-    client.createTweet(status = message, possibly_sensitive = true)
+    client.createTweet(status = message)
   }
 
   protected def handleTweet(
