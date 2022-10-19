@@ -1,5 +1,5 @@
-val bitcoinsV = "1.9.4"
-val translndV = "0.1.0-65-2577e579-SNAPSHOT"
+val bitcoinsV = "1.9.6-17-f4fff050-SNAPSHOT"
+val translndV = "0.1.0-79-8aef5404-SNAPSHOT"
 val akkaV = "2.6.20"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
@@ -13,7 +13,7 @@ lazy val root = project
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
-    scalaVersion := "2.13.8",
+    scalaVersion := "2.13.10",
     maintainer := "benthecarman",
     libraryDependencies ++= Seq(
       guice,
@@ -26,8 +26,8 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
       "com.danielasfregola" %% "twitter4s" % "8.0",
-      "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.0",
-      "com.bot4s" %% "telegram-akka" % "5.6.0",
+      "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.2",
+      "com.bot4s" %% "telegram-akka" % "5.6.1",
       "ch.qos.logback" % "logback-classic" % "1.2.11"
     ),
     dependencyOverrides ++= Seq(
