@@ -22,7 +22,7 @@ import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
-import org.bitcoins.crypto.{CryptoUtil, DoubleSha256DigestBE}
+import org.bitcoins.crypto._
 import org.bitcoins.feeprovider._
 import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
 import org.bitcoins.lnd.rpc.{LndRpcClient, LndUtils}
@@ -89,6 +89,47 @@ class InvoiceMonitor(
                     val amtPaid =
                       invoice.amountPaidOpt.getOrElse(MilliSatoshis.zero)
                     require(amtPaid >= invoice.amountOpt.get,
+                            "User did not pay invoice in full")
+                    onInvoicePaid(invoiceDb).map(_ => ())
+                }
+            }
+        }
+
+      }
+      .runWith(Sink.ignore)
+
+    lnd
+      .subscribeInvoices()
+      .mapAsyncUnordered(parallelism) { invoice =>
+        invoice.state match {
+          case lnrpc.Invoice.InvoiceState.OPEN |
+              lnrpc.Invoice.InvoiceState.ACCEPTED |
+              _: lnrpc.Invoice.InvoiceState.Unrecognized =>
+            Future.unit
+          case lnrpc.Invoice.InvoiceState.CANCELED =>
+            val action = invoiceDAO
+              .findByPrimaryKeyAction(Sha256Digest(invoice.rHash))
+              .flatMap {
+                case None => DBIOAction.successful(())
+                case Some(invoiceDb) =>
+                  invoiceDAO.updateAction(invoiceDb.copy(closed = true))
+              }
+
+            invoiceDAO.safeDatabase.run(action)
+          case lnrpc.Invoice.InvoiceState.SETTLED =>
+            invoiceDAO.read(Sha256Digest(invoice.rHash)).flatMap {
+              case None =>
+                logger.warn(
+                  s"Processed invoice not from OP_RETURN Bot, ${invoice.rHash.toBase16}")
+                Future.unit
+              case Some(invoiceDb) =>
+                invoiceDb.txIdOpt match {
+                  case Some(_) =>
+                    logger.warn(
+                      s"Processed invoice that already has a tx associated with it, rHash: ${invoice.rHash.toBase16}")
+                    Future.unit
+                  case None =>
+                    require(invoice.amtPaidMsat >= invoice.valueMsat,
                             "User did not pay invoice in full")
                     onInvoicePaid(invoiceDb).map(_ => ())
                 }
@@ -359,8 +400,12 @@ class InvoiceMonitor(
 
         val hash = CryptoUtil.sha256(message)
 
-        pubkeyRotator
-          .createInvoice(hash, sats, expiry)
+//        val createInvoiceF = pubkeyRotator
+//          .createInvoice(hash, sats, expiry)
+        val createInvoiceF =
+          lnd.addInvoice(hash, sats.satoshis, expiry).map(_.invoice)
+
+        createInvoiceF
           .flatMap { invoice =>
             val db: InvoiceDb =
               InvoiceDb(
