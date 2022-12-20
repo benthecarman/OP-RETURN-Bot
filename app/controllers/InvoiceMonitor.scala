@@ -44,6 +44,7 @@ class InvoiceMonitor(
     val config: OpReturnBotAppConfig)
     extends Logging
     with LndUtils
+    with NostrHandler
     with TwitterHandler {
   import system.dispatcher
 
@@ -300,6 +301,8 @@ class InvoiceMonitor(
                 None
               }
               .onComplete(t => p.tryComplete(t))
+
+            handleNostrMessage(message, txId)
             ()
           }
 

@@ -32,7 +32,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  protected def sendTweet(message: String): Future[Tweet] = {
+  private def sendTweet(message: String): Future[Tweet] = {
     val client = config.twitterClient
 
     client.createTweet(status = message)
@@ -61,7 +61,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     sendTweet(tweet)
   }.flatten
 
-  protected def shillTweet(): Future[Unit] = {
+  private def shillTweet(): Future[Unit] = {
     if (uri != uriErrorString) {
       val tweet =
         s"""
@@ -76,7 +76,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     } else Future.unit
   }
 
-  private def censorMessage(message: String): String = {
+  protected def censorMessage(message: String): String = {
     val replacement = "$#@!&"
 
     config.bannedWords.foldLeft(message) { case (msg, bannedWord) =>
