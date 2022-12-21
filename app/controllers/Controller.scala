@@ -95,6 +95,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     startOnionMessageSubscription()
   }
 
+  def notFound(route: String): Action[AnyContent] = {
+    Action { implicit request: MessagesRequest[AnyContent] =>
+      NotFound(views.html.notFound())
+        .withHeaders(("Onion-Location", onionAddr))
+    }
+  }
+
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
       // Pass an unpopulated form to the template
