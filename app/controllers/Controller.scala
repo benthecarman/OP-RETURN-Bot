@@ -131,13 +131,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   def nip5: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       val json = Json.obj(
-        "name" -> JsArray(Seq(Json.obj(
+        "names" -> Json.obj(
           "me" -> invoiceMonitor.pubKey.hex,
           "opreturnbot" -> invoiceMonitor.pubKey.hex,
           "op_return_bot" -> invoiceMonitor.pubKey.hex,
           "OP_RETURN bot" -> invoiceMonitor.pubKey.hex,
           "OP_RETURN Bot" -> invoiceMonitor.pubKey.hex
-        ))))
+        ))
 
       Future.successful(Ok(json))
     }
