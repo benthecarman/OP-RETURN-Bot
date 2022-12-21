@@ -1,5 +1,6 @@
 val bitcoinsV = "1.9.7-31-f8247c42-SNAPSHOT"
 val translndV = "0.1.0-103-985efec8-SNAPSHOT"
+val scalastrV = "0.0.0-31-b5ea90d2-SNAPSHOT"
 val akkaV = "2.6.20"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
@@ -20,7 +21,9 @@ lazy val root = project
       "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
       "com.translnd" %% "pubkey-rotator" % translndV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-lnurl" % bitcoinsV withSources () withJavadoc (),
+      "org.scalastr" %% "client" % scalastrV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-key-manager" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
