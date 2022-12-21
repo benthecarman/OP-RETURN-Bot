@@ -168,7 +168,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           metadata = metadata
         )
 
-      Future.successful(Ok(Json.toJson(response)))
+      val result = Ok(Json.toJson(response)).withHeaders(
+        "Access-Control-Allow-Origin" -> "*",
+        "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+        "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+        "Access-Control-Allow-Credentials" -> "true"
+      )
+
+      Future.successful(result)
     }
   }
 
@@ -181,7 +188,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
           lnd.addInvoice(hash, amount, 360).map { invoice =>
             val response = LnURLPayInvoice(invoice.invoice, None)
-            Ok(Json.toJson(response))
+            Ok(Json.toJson(response)).withHeaders(
+              "Access-Control-Allow-Origin" -> "*",
+              "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+              "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+              "Access-Control-Allow-Credentials" -> "true"
+            )
           }
         case None =>
           val error =
