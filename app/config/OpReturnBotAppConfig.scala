@@ -185,21 +185,6 @@ case class OpReturnBotAppConfig(
     } else Vector.empty
   }
 
-  lazy val nostrClients: Vector[NostrClient] = {
-    nostrRelays.map { relay =>
-      new NostrClient(relay, None) {
-
-        override def processEvent(
-            subscriptionId: String,
-            event: NostrEvent): Future[Unit] = {
-          Future.unit
-        }
-
-        override def processNotice(notice: String): Future[Unit] = Future.unit
-      }
-    }
-  }
-
   def seedExists(): Boolean = {
     WalletStorage.seedExists(seedPath)
   }

@@ -120,16 +120,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  def hello: Action[AnyContent] = {
-    Action.async { implicit request: MessagesRequest[AnyContent] =>
-      println("My nostr pubkey is: " + invoiceMonitor.pubKey.hex)
-      invoiceMonitor.sendNostrMessage("Just setting up my nostr").map {
-        case Some(id) => Ok(JsString(id.hex))
-        case None     => InternalServerError("Failed to send nostr message")
-      }
-    }
-  }
-
   def nip5: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       val json = Json.obj(

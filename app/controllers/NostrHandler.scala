@@ -14,7 +14,18 @@ import scala.concurrent.Future
 trait NostrHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
 
-  lazy val clients: Vector[NostrClient] = config.nostrClients
+  def clients: Vector[NostrClient] = config.nostrRelays.map { relay =>
+    new NostrClient(relay, None) {
+
+      override def processEvent(
+          subscriptionId: String,
+          event: NostrEvent): Future[Unit] = {
+        Future.unit
+      }
+
+      override def processNotice(notice: String): Future[Unit] = Future.unit
+    }
+  }
 
   private[this] lazy val privateKey: ECPrivateKey =
     WalletStorage
@@ -26,69 +37,45 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
   lazy val pubKey: SchnorrPublicKey = privateKey.schnorrPublicKey
 
-  def sendNostrMessage(message: String): Future[Option[Sha256Digest]] = {
+  protected def handleNostrMessage(
+      message: String,
+      txId: DoubleSha256DigestBE): Future[Option[Sha256Digest]] = {
+    val content =
+      s"""
+         |🔔 🔔 NEW OP_RETURN 🔔 🔔
+         |
+         |$message
+         |
+         |https://mempool.space/tx/${txId.hex}
+         |""".stripMargin
+
     val event = NostrEvent.build(
       privateKey = privateKey,
       created_at = TimeUtil.currentEpochSecond,
       kind = NostrKind.TextNote,
       tags = JsArray.empty,
-      content = message
+      content = content
     )
 
     val fs = clients.map { client =>
-      client
-        .publishEvent(event)
-        .map(_ => Some(event.id))
-        .recover(_ => None)
+      client.start().flatMap { _ =>
+        for {
+          opt <- client
+            .publishEvent(event)
+            .map(_ => Some(event.id))
+            .recover(_ => None)
+
+          _ = opt match {
+            case Some(id) =>
+              logger.info(s"Sent nostr message ${id.hex} for txid ${txId.hex}")
+            case None =>
+              logger.error("Failed to send nostr message for txid " + txId.hex)
+          }
+          _ <- client.stop()
+        } yield opt
+      }
     }
 
     Future.sequence(fs).map(_.flatten.headOption)
-  }
-
-  protected def handleNostrMessage(
-      message: String,
-      txId: DoubleSha256DigestBE): Future[Option[Sha256Digest]] = {
-    Future.sequence(clients.map(_.start().recover(_ => ()))).flatMap { _ =>
-      // Every 15th OP_RETURN we shill
-      val count = shillCounter.getAndIncrement()
-      if (count % 15 == 0 && count != 0) {
-        shillNostrMessage()
-      }
-
-      val tweet =
-        s"""
-           |🔔 🔔 NEW OP_RETURN 🔔 🔔
-           |
-           |$message
-           |
-           |https://mempool.space/tx/${txId.hex}
-           |""".stripMargin
-
-      for {
-        opt <- sendNostrMessage(tweet)
-        _ = opt match {
-          case Some(id) =>
-            logger.info(s"Sent nostr message ${id.hex} for txid ${txId.hex}")
-          case None =>
-            logger.error("Failed to send nostr message for txid " + txId.hex)
-        }
-        _ <- Future.sequence(clients.map(_.stop()))
-      } yield opt
-    }
-  }
-
-  private def shillNostrMessage(): Future[Option[Sha256Digest]] = {
-    if (uri != uriErrorString) {
-      val tweet =
-        s"""
-           |Like OP_RETURN Bot?
-           |
-           |Consider connecting and opening a lightning channel!
-           |
-           |$uri
-           |""".stripMargin
-
-      sendNostrMessage(tweet)
-    } else FutureUtil.none
   }
 }
