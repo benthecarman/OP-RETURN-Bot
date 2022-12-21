@@ -27,16 +27,15 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
   lazy val pubKey: SchnorrPublicKey = privateKey.schnorrPublicKey
 
   def sendNostrMessage(message: String): Future[Sha256Digest] = {
-    val fs = clients.map { client =>
-      val event =
-        NostrEvent.build(
-          privateKey = privateKey,
-          created_at = TimeUtil.currentEpochSecond,
-          kind = NostrKind.TextNote,
-          tags = JsArray.empty,
-          content = message
-        )
+    val event = NostrEvent.build(
+      privateKey = privateKey,
+      created_at = TimeUtil.currentEpochSecond,
+      kind = NostrKind.TextNote,
+      tags = JsArray.empty,
+      content = message
+    )
 
+    val fs = clients.map { client =>
       client
         .publishEvent(event)
         .recover(_ => ())
@@ -48,8 +47,8 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
   protected def handleNostrMessage(
       message: String,
-      txId: DoubleSha256DigestBE): Future[Sha256Digest] = FutureUtil.makeAsync {
-    () =>
+      txId: DoubleSha256DigestBE): Future[Sha256Digest] =
+    Future.sequence(clients.map(_.start().recover(_ => ()))).flatMap { _ =>
       // Every 15th OP_RETURN we shill
       val count = shillCounter.getAndIncrement()
       if (count % 15 == 0 && count != 0) {
@@ -65,8 +64,12 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
            |https://mempool.space/tx/${txId.hex}
            |""".stripMargin
 
-      sendNostrMessage(tweet)
-  }.flatten
+      for {
+        id <- sendNostrMessage(tweet)
+        _ = logger.info(s"Sent nostr message ${id.hex} for txid ${txId.hex}")
+        _ <- Future.sequence(clients.map(_.stop()))
+      } yield id
+    }
 
   private def shillNostrMessage(): Future[Option[Sha256Digest]] = {
     if (uri != uriErrorString) {

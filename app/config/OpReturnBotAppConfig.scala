@@ -220,7 +220,7 @@ case class OpReturnBotAppConfig(
   }
 
   override def start(): Future[Unit] = {
-    transLndConfig.start().flatMap { _ =>
+    transLndConfig.start().map { _ =>
       logger.info(s"Initializing setup")
 
       if (Files.notExists(baseDatadir)) {
@@ -231,8 +231,6 @@ case class OpReturnBotAppConfig(
       logger.info(s"Applied $numMigrations")
 
       initialize()
-
-      Future.sequence(nostrClients.map(_.start())).map(_ => ())
     }
   }
 
