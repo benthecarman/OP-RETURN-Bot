@@ -131,6 +131,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       val json = Json.obj(
         "names" -> Json.obj(
+          "_" -> invoiceMonitor.pubKey.hex,
           "me" -> invoiceMonitor.pubKey.hex,
           "opreturnbot" -> invoiceMonitor.pubKey.hex,
           "op_return_bot" -> invoiceMonitor.pubKey.hex,
