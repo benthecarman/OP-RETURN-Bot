@@ -139,7 +139,16 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           "OP_RETURN Bot" -> invoiceMonitor.pubKey.hex
         ))
 
-      Future.successful(Ok(json))
+      val result = Ok(json)
+        .withHeaders(("Onion-Location", onionAddr))
+        .withHeaders(
+          "Access-Control-Allow-Origin" -> "*",
+          "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+          "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+          "Access-Control-Allow-Credentials" -> "true"
+        )
+
+      Future.successful(result)
     }
   }
 
