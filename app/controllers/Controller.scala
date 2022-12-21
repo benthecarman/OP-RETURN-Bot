@@ -5,13 +5,22 @@ import com.translnd.rotator.PubkeyRotator
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models.{InvoiceDAO, InvoiceDb}
+import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
+import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.transaction._
-import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
+import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc.LndRpcClient
+import org.bitcoins.lnurl.json.LnURLJsonModels.{
+  LnURLPayInvoice,
+  LnURLPayResponse
+}
 import play.api.data._
+import play.api.libs.json._
 import play.api.mvc._
+import scodec.bits.ByteVector
 
+import java.net.URL
 import javax.inject.Inject
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
@@ -106,6 +115,45 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         Future.successful(
           Ok(views.html.connect(uri))
             .withHeaders(("Onion-Location", onionAddr)))
+      }
+    }
+  }
+
+  def getLnurlPay(user: String): Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      val proto = if (request.secure) "https" else "http"
+
+      val metadata =
+        s"[[\"text/plain\",\"A donation to ben!\"],[\"text/identifier\",\"$user@${request.host}\"]]"
+      val hash = CryptoUtil.sha256(ByteVector(metadata.getBytes("UTF-8"))).hex
+
+      val response =
+        LnURLPayResponse(
+          callback = new URL(s"$proto://${request.host}/lnurlp/$hash"),
+          maxSendable = MilliSatoshis(Bitcoins.one),
+          minSendable = MilliSatoshis(Satoshis.one),
+          metadata = metadata
+        )
+
+      Future.successful(Ok(Json.toJson(response)))
+    }
+  }
+
+  def lnurlPay(meta: String): Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      request.getQueryString("amount") match {
+        case Some(amountStr) =>
+          val amount = MilliSatoshis(amountStr.toLong)
+          val hash = Sha256Digest(meta)
+
+          lnd.addInvoice(hash, amount, 360).map { invoice =>
+            val response = LnURLPayInvoice(invoice.invoice, None)
+            Ok(Json.toJson(response))
+          }
+        case None =>
+          val error =
+            Json.obj("status" -> "ERROR", "reason" -> "no amount given")
+          Future.successful(BadRequest(error))
       }
     }
   }
