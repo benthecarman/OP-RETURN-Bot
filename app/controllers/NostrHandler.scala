@@ -26,7 +26,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
   lazy val pubKey: SchnorrPublicKey = privateKey.schnorrPublicKey
 
-  def sendNostrMessage(message: String): Future[Sha256Digest] = {
+  def sendNostrMessage(message: String): Future[Option[Sha256Digest]] = {
     val event = NostrEvent.build(
       privateKey = privateKey,
       created_at = TimeUtil.currentEpochSecond,
@@ -38,16 +38,16 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     val fs = clients.map { client =>
       client
         .publishEvent(event)
-        .recover(_ => ())
-        .map(_ => event.id)
+        .map(_ => Some(event.id))
+        .recover(_ => None)
     }
 
-    Future.sequence(fs).map(_.head)
+    Future.sequence(fs).map(_.flatten.headOption)
   }
 
   protected def handleNostrMessage(
       message: String,
-      txId: DoubleSha256DigestBE): Future[Sha256Digest] =
+      txId: DoubleSha256DigestBE): Future[Option[Sha256Digest]] = {
     Future.sequence(clients.map(_.start().recover(_ => ()))).flatMap { _ =>
       // Every 15th OP_RETURN we shill
       val count = shillCounter.getAndIncrement()
@@ -65,11 +65,17 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
            |""".stripMargin
 
       for {
-        id <- sendNostrMessage(tweet)
-        _ = logger.info(s"Sent nostr message ${id.hex} for txid ${txId.hex}")
+        opt <- sendNostrMessage(tweet)
+        _ = opt match {
+          case Some(id) =>
+            logger.info(s"Sent nostr message ${id.hex} for txid ${txId.hex}")
+          case None =>
+            logger.error("Failed to send nostr message for txid " + txId.hex)
+        }
         _ <- Future.sequence(clients.map(_.stop()))
-      } yield id
+      } yield opt
     }
+  }
 
   private def shillNostrMessage(): Future[Option[Sha256Digest]] = {
     if (uri != uriErrorString) {
@@ -82,7 +88,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
            |$uri
            |""".stripMargin
 
-      sendNostrMessage(tweet).map(Some(_))
+      sendNostrMessage(tweet)
     } else FutureUtil.none
   }
 }
