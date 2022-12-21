@@ -56,13 +56,11 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         shillNostrMessage()
       }
 
-      val usedMessage = censorMessage(message)
-
       val tweet =
         s"""
            |🔔 🔔 NEW OP_RETURN 🔔 🔔
            |
-           |$usedMessage
+           |$message
            |
            |https://mempool.space/tx/${txId.hex}
            |""".stripMargin
