@@ -8,6 +8,7 @@ import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
 import org.bitcoins.commons.config._
+import org.bitcoins.commons.util.NativeProcessFactory
 import org.bitcoins.core.hd.HDPurposes
 import org.bitcoins.core.wallet.keymanagement.KeyManagerParams
 import org.bitcoins.crypto.AesPassword
@@ -16,21 +17,28 @@ import org.bitcoins.keymanager.WalletStorage
 import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
 import org.bitcoins.lnd.rpc.LndRpcClient
-import org.bitcoins.lnd.rpc.config.{LndInstance, LndInstanceLocal}
+import org.bitcoins.lnd.rpc.config.{
+  LndConfig,
+  LndInstance,
+  LndInstanceLocal,
+  LndInstanceRemote
+}
 import org.scalastr.client.NostrClient
 import org.scalastr.core.NostrEvent
+import scodec.bits.ByteVector
 
 import scala.jdk.CollectionConverters._
 import java.io.File
+import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import scala.concurrent._
-import scala.util.Properties
+import scala.util.{Properties, Try}
 
 /** Configuration for the Bitcoin-S wallet
   *
   * @param directory
   *   The data directory of the wallet
-  * @param conf
+  * @param configOverrides
   *   Optional sequence of configuration overrides
   */
 case class OpReturnBotAppConfig(
@@ -56,11 +64,76 @@ case class OpReturnBotAppConfig(
   implicit lazy val transLndConfig: TransLndAppConfig =
     TransLndAppConfig(directory, configOverrides)
 
-  lazy val lndDataDir: Path =
-    Paths.get(config.getString(s"bitcoin-s.lnd.datadir"))
+  private lazy val lndDataDir: Path = {
+    config.getStringOrNone(s"bitcoin-s.lnd.datadir") match {
+      case Some(str) => Paths.get(str.replace("~", Properties.userHome))
+      case None      => LndInstanceLocal.DEFAULT_DATADIR
+    }
+  }
 
-  lazy val lndBinary: File =
-    Paths.get(config.getString(s"bitcoin-s.lnd.binary")).toFile
+  private lazy val lndRpcUri: Option[URI] = {
+    config.getStringOrNone(s"bitcoin-s.lnd.rpcUri").map { str =>
+      if (str.startsWith("http") || str.startsWith("https")) {
+        new URI(str)
+      } else {
+        new URI(s"http://$str")
+      }
+    }
+  }
+
+  private lazy val lndMacaroonOpt: Option[String] = {
+    config.getStringOrNone(s"bitcoin-s.lnd.macaroonFile").map { pathStr =>
+      val path = Paths.get(pathStr.replace("~", Properties.userHome))
+      val bytes = Files.readAllBytes(path)
+
+      ByteVector(bytes).toHex
+    }
+  }
+
+  private lazy val lndTlsCertOpt: Option[File] = {
+    config.getStringOrNone(s"bitcoin-s.lnd.tlsCert").map { pathStr =>
+      val path = Paths.get(pathStr.replace("~", Properties.userHome))
+      path.toFile
+    }
+  }
+
+  private lazy val lndBinary: File = {
+    config.getStringOrNone(s"bitcoin-s.lnd.binary") match {
+      case Some(str) => new File(str.replace("~", Properties.userHome))
+      case None =>
+        NativeProcessFactory
+          .findExecutableOnPath("lnd")
+          .getOrElse(sys.error("Could not find lnd binary"))
+    }
+  }
+
+  private lazy val lndInstance: LndInstance = {
+    lndMacaroonOpt match {
+      case Some(value) =>
+        LndInstanceRemote(
+          rpcUri = lndRpcUri.getOrElse(new URI("http://127.0.0.1:10009")),
+          macaroon = value,
+          certFileOpt = lndTlsCertOpt,
+          certificateOpt = None)
+      case None =>
+        val dir = lndDataDir.toFile
+        require(dir.exists, s"$lndDataDir does not exist!")
+        require(dir.isDirectory, s"$lndDataDir is not a directory!")
+
+        val confFile = lndDataDir.resolve("lnd.conf").toFile
+        val config = LndConfig(confFile, dir)
+
+        val remoteConfig = config.lndInstanceRemote
+
+        lndRpcUri match {
+          case Some(uri) => remoteConfig.copy(rpcUri = uri)
+          case None      => remoteConfig
+        }
+    }
+  }
+
+  lazy val lndRpcClient: LndRpcClient =
+    new LndRpcClient(lndInstance, Try(lndBinary).toOption)
 
   lazy val telegramCreds: String =
     config.getStringOrElse(s"bitcoin-s.$moduleName.telegramCreds", "")
@@ -74,10 +147,10 @@ case class OpReturnBotAppConfig(
   lazy val twitterConsumerSecret: String =
     config.getString(s"twitter.consumer.secret")
 
-  lazy val bannedWords: Vector[String] = {
+  lazy val bannedWords: Vector[String] = Try {
     val list = config.getStringList(s"twitter.banned-words")
     list.asScala.toVector
-  }
+  }.getOrElse(Vector.empty)
 
   lazy val consumerToken: ConsumerToken =
     ConsumerToken(twitterConsumerKey, twitterConsumerSecret)
@@ -166,12 +239,6 @@ case class OpReturnBotAppConfig(
   override def stop(): Future[Unit] = Future.unit
 
   override lazy val dbPath: Path = baseDatadir
-
-  lazy val lndInstance: LndInstance =
-    LndInstanceLocal.fromDataDir(lndDataDir.toFile)
-
-  lazy val lndRpcClient: LndRpcClient =
-    new LndRpcClient(lndInstance, Some(lndBinary))
 
   override val allTables: List[TableQuery[Table[_]]] =
     List(InvoiceDAO()(ec, this).table)
