@@ -303,6 +303,12 @@ class InvoiceMonitor(
               .onComplete(t => p.tryComplete(t))
 
             handleNostrMessage(message, txId)
+              .map(Some(_))
+              .recover { err =>
+                logger.error(
+                  s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
+                None
+              }
             ()
           }
 
