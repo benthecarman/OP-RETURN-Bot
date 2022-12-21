@@ -1,36 +1,64 @@
-@(uri: String)(implicit request: MessagesRequestHeader)
+@import org.bitcoins.crypto.SchnorrPublicKey
+@(uri: String, pubkey: SchnorrPublicKey)(implicit request: MessagesRequestHeader)
 
-    @main("Connect") {
+@main("Connect") {
 
 
-        <div class="text-center">
-            <h1>Connect to OP_RETURN Bot</h1>
-            <br>
+    <div class="text-center">
+        <h1>Connect to OP_RETURN Bot</h1>
+        <br>
 
-            <div class="form-group -align-center">
-                <label>
-                    <input style="width: 680px" class="form-control" type="text" value="@uri" readonly>
-                </label>
-            </div>
-            <br>
-
-            <h2>Contact the developer</h2>
-            <div>
-                <ul class="foo-socials clearfix" style="list-style: none;
-                    line-height: 45px;">
-                    <li>
-                        <a style="width: 300px" href="https://twitter.com/benthecarman" class="btn btn-primary tra-hover">
-                            <i class="fab fa-twitter" style="padding-right: 10px"></i><span>@{
-                            "@benthecarman"
-                        }</span></a>
-                    </li>
-                    <li>
-                        <a style="width: 300px" href="https://github.com/benthecarman" class="btn btn-primary tra-hover">
-                            <i class="fab fa-github" style="padding-right: 22px"></i><span>&nbsp;@{
-                            "benthecarman"
-                        }</span></a>
-                    </li>
-                </ul>
-            </div>
+        <div class="form-group -align-center">
+            <label>
+                <input style="width: 680px" class="form-control" type="text" value="@uri" readonly>
+            </label>
         </div>
-    }
+        <br>
+
+        <h2>Follow OP_RETURN Bot</h2>
+        <div>
+            <ul class="foo-socials clearfix" style="list-style: none;
+                line-height: 45px;">
+                <li>
+                    <a style="width: 300px" href="https://twitter.com/OP_RETURN_BOT" class="btn btn-primary tra-hover">
+                        <i class="fab fa-twitter" aria-hidden="true" style="padding-right: 10px"></i><span>@{
+                        "@OP_RETURN_BOT"
+                    }</span></a>
+                </li>
+                <li>
+                    <a style="width: 300px" href="https://astral.ninja/@{
+                        pubkey.hex
+                    }" class="btn btn-primary tra-hover">
+                        <i class="fa fa-paper-plane" aria-hidden="true" style="padding-right: 22px"></i><span>&nbsp;@{
+                        "@OP-RETURN-Bot"
+                    }</span></a>
+                </li>
+                <li>
+                    <a style="width: 300px" href="https://github.com/benthecarman/OP-RETURN-Bot" class="btn btn-primary tra-hover">
+                        <i class="fab fa-github" aria-hidden="true" style="padding-right: 22px"></i><span>&nbsp;@{
+                        "OP-RETURN-Bot"
+                    }</span></a>
+                </li>
+            </ul>
+        </div>
+
+        <h2>Contact the developer</h2>
+        <div>
+            <ul class="foo-socials clearfix" style="list-style: none;
+                line-height: 45px;">
+                <li>
+                    <a style="width: 300px" href="https://twitter.com/benthecarman" class="btn btn-primary tra-hover">
+                        <i class="fab fa-twitter" aria-hidden="true" style="padding-right: 10px"></i><span>@{
+                        "@benthecarman"
+                    }</span></a>
+                </li>
+                <li>
+                    <a style="width: 300px" href="https://github.com/benthecarman" class="btn btn-primary tra-hover">
+                        <i class="fab fa-github" aria-hidden="true" style="padding-right: 22px"></i><span>&nbsp;@{
+                        "benthecarman"
+                    }</span></a>
+                </li>
+            </ul>
+        </div>
+    </div>
+}

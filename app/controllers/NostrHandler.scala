@@ -3,7 +3,11 @@ package controllers
 import grizzled.slf4j.Logging
 import org.bitcoins.core.crypto.ExtKeyVersion.SegWitMainNetPriv
 import org.bitcoins.core.util.{FutureUtil, TimeUtil}
-import org.bitcoins.crypto.{DoubleSha256DigestBE, ECPrivateKey}
+import org.bitcoins.crypto.{
+  DoubleSha256DigestBE,
+  ECPrivateKey,
+  SchnorrPublicKey
+}
 import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
 import org.scalastr.core.{NostrEvent, NostrKind}
@@ -23,6 +27,8 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                              config.aesPasswordOpt,
                              config.bip39PasswordOpt)
       .key
+
+  lazy val pubKey: SchnorrPublicKey = privateKey.schnorrPublicKey
 
   private def sendNostrMessage(message: String): Future[Unit] = {
     val fs = clients.map { client =>
