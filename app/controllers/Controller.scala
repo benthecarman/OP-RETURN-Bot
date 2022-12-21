@@ -120,6 +120,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
+  def hello: Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      invoiceMonitor.sendNostrMessage("Just setting up my nostr").map { id =>
+        Ok(JsString(id.hex))
+      }
+    }
+  }
+
   def nip5: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       val json = Json.obj(

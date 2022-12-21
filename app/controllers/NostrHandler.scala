@@ -3,11 +3,7 @@ package controllers
 import grizzled.slf4j.Logging
 import org.bitcoins.core.crypto.ExtKeyVersion.SegWitMainNetPriv
 import org.bitcoins.core.util.{FutureUtil, TimeUtil}
-import org.bitcoins.crypto.{
-  DoubleSha256DigestBE,
-  ECPrivateKey,
-  SchnorrPublicKey
-}
+import org.bitcoins.crypto._
 import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
 import org.scalastr.core.{NostrEvent, NostrKind}
@@ -30,7 +26,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
   lazy val pubKey: SchnorrPublicKey = privateKey.schnorrPublicKey
 
-  private def sendNostrMessage(message: String): Future[Unit] = {
+  def sendNostrMessage(message: String): Future[Sha256Digest] = {
     val fs = clients.map { client =>
       val event =
         NostrEvent.build(
@@ -41,36 +37,40 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
           content = message
         )
 
-      client.publishEvent(event)
+      client
+        .publishEvent(event)
+        .recover(_ => ())
+        .map(_ => event.id)
     }
 
-    Future.sequence(fs).map(_ => ())
+    Future.sequence(fs).map(_.head)
   }
 
   protected def handleNostrMessage(
       message: String,
-      txId: DoubleSha256DigestBE): Future[Unit] = FutureUtil.makeAsync { () =>
-    // Every 15th OP_RETURN we shill
-    val count = shillCounter.getAndIncrement()
-    if (count % 15 == 0 && count != 0) {
-      shillNostrMessage()
-    }
+      txId: DoubleSha256DigestBE): Future[Sha256Digest] = FutureUtil.makeAsync {
+    () =>
+      // Every 15th OP_RETURN we shill
+      val count = shillCounter.getAndIncrement()
+      if (count % 15 == 0 && count != 0) {
+        shillNostrMessage()
+      }
 
-    val usedMessage = censorMessage(message)
+      val usedMessage = censorMessage(message)
 
-    val tweet =
-      s"""
-         |🔔 🔔 NEW OP_RETURN 🔔 🔔
-         |
-         |$usedMessage
-         |
-         |https://mempool.space/tx/${txId.hex}
-         |""".stripMargin
+      val tweet =
+        s"""
+           |🔔 🔔 NEW OP_RETURN 🔔 🔔
+           |
+           |$usedMessage
+           |
+           |https://mempool.space/tx/${txId.hex}
+           |""".stripMargin
 
-    sendNostrMessage(tweet)
+      sendNostrMessage(tweet)
   }.flatten
 
-  private def shillNostrMessage(): Future[Unit] = {
+  private def shillNostrMessage(): Future[Option[Sha256Digest]] = {
     if (uri != uriErrorString) {
       val tweet =
         s"""
@@ -81,7 +81,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
            |$uri
            |""".stripMargin
 
-      sendNostrMessage(tweet)
-    } else Future.unit
+      sendNostrMessage(tweet).map(Some(_))
+    } else FutureUtil.none
   }
 }
