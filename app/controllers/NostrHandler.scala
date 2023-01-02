@@ -58,22 +58,27 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     )
 
     val fs = clients.map { client =>
-      client.start().flatMap { _ =>
-        for {
-          opt <- client
-            .publishEvent(event)
-            .map(_ => Some(event.id))
-            .recover(_ => None)
+      client
+        .start()
+        .flatMap { _ =>
+          for {
+            opt <- client
+              .publishEvent(event)
+              .map(_ => Some(event.id))
+              .recover(_ => None)
 
-          _ = opt match {
-            case Some(id) =>
-              logger.info(s"Sent nostr message ${id.hex} for txid ${txId.hex}")
-            case None =>
-              logger.error("Failed to send nostr message for txid " + txId.hex)
-          }
-          _ <- client.stop()
-        } yield opt
-      }
+            _ = opt match {
+              case Some(id) =>
+                logger.info(
+                  s"Sent nostr message ${id.hex} for txid ${txId.hex}")
+              case None =>
+                logger.error(
+                  "Failed to send nostr message for txid " + txId.hex)
+            }
+            _ <- client.stop()
+          } yield opt
+        }
+        .recover(_ => None)
     }
 
     Future.sequence(fs).map(_.flatten.headOption)
