@@ -12,3 +12,6 @@ CREATE TABLE invoices
     node_id     TEXT,
     closed      BOOLEAN          NOT NULL DEFAULT false
 );
+
+CREATE INDEX txid_index on invoices (txid);
+CREATE INDEX closed_index on invoices (closed);
