@@ -285,9 +285,10 @@ class InvoiceMonitor(
       res <- invoiceDAO.update(dbWithTx)
 
       tweetF =
-        if (noTwitter) FutureUtil.none
+        if (noTwitter) Future.successful((None, None))
         else {
-          val p = Promise[Option[Tweet]]()
+          val tweetP = Promise[Option[Tweet]]()
+          val nostrP = Promise[Option[Sha256Digest]]()
 
           // add a 15 second delay for tweet so mempool.space has time
           // to index the transaction
@@ -300,19 +301,27 @@ class InvoiceMonitor(
                   s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
                 None
               }
-              .onComplete(t => p.tryComplete(t))
+              .onComplete(t => tweetP.tryComplete(t))
 
             handleNostrMessage(message, txId)
-              .map(Some(_))
               .recover { err =>
                 logger.error(
                   s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
                 None
               }
+              .onComplete(t => nostrP.tryComplete(t))
             ()
           }
 
-          p.future
+          tweetP.future
+            .recover(_ => None)
+            .flatMap { tweetOpt =>
+              nostrP.future
+                .recover(_ => None)
+                .map { nostrOpt =>
+                  (tweetOpt, nostrOpt)
+                }
+            }
         }
       _ <- {
         val telegramF = txDetailsOpt match {
@@ -326,15 +335,18 @@ class InvoiceMonitor(
               .map { handler =>
                 for {
                   (profit, chainFees) <- invoiceDAO.safeDatabase.run(action)
-                  tweetOpt <- tweetF
-                  _ <- handler.handleTelegram(rHash = rHash.hash,
-                                              invoice = invoice,
-                                              tweetOpt = tweetOpt,
-                                              message = message,
-                                              feeRate = feeRate,
-                                              txDetails = details,
-                                              totalProfit = profit,
-                                              totalChainFees = chainFees)
+                  (tweetOpt, nostrOpt) <- tweetF
+                  _ <- handler.handleTelegram(
+                    rHash = rHash.hash,
+                    invoice = invoice,
+                    tweetOpt = tweetOpt,
+                    nostrOpt = nostrOpt,
+                    message = message,
+                    feeRate = feeRate,
+                    txDetails = details,
+                    totalProfit = profit,
+                    totalChainFees = chainFees
+                  )
                 } yield ()
               }
               .getOrElse(Future.unit)

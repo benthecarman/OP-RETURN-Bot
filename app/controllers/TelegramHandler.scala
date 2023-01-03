@@ -126,6 +126,7 @@ class TelegramHandler(controller: Controller)(implicit
       rHash: Sha256Digest,
       invoice: LnInvoice,
       tweetOpt: Option[Tweet],
+      nostrOpt: Option[Sha256Digest],
       message: String,
       feeRate: SatoshisPerVirtualByte,
       txDetails: TxDetails,
@@ -140,6 +141,11 @@ class TelegramHandler(controller: Controller)(implicit
       case None => "Hidden"
     }
 
+    val nostrLine = nostrOpt match {
+      case Some(nostr) => nostr.hex
+      case None        => "Hidden"
+    }
+
     val telegramMsg =
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
@@ -147,6 +153,7 @@ class TelegramHandler(controller: Controller)(implicit
          |rhash: ${rHash.hex}
          |tx: https://mempool.space/tx/${txDetails.txId.hex}
          |tweet: $tweetLine
+         |nostr: $nostrLine
          |
          |fee rate: $feeRate
          |invoice amount: ${printAmount(amount)}
