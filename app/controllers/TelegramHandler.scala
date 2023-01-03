@@ -13,7 +13,7 @@ import com.danielasfregola.twitter4s.entities.Tweet
 import config.OpReturnBotAppConfig
 import models.InvoiceDAO
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
-import org.bitcoins.core.currency.{CurrencyUnit, Satoshis}
+import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.util.StartStopAsync
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
@@ -35,9 +35,9 @@ class TelegramHandler(controller: Controller)(implicit
     with Commands[Future]
     with StartStopAsync[Unit] {
 
-  val intFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
+  private val intFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
 
-  val currencyFormatter: NumberFormat =
+  private val currencyFormatter: NumberFormat =
     java.text.NumberFormat.getCurrencyInstance(Locale.US)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
@@ -67,7 +67,7 @@ class TelegramHandler(controller: Controller)(implicit
 
   override def stop(): Future[Unit] = Future.unit
 
-  def checkAdminMessage(msg: Message): Boolean = {
+  private def checkAdminMessage(msg: Message): Boolean = {
     msg.from match {
       case Some(user) => user.id.toString == myTelegramId
       case None       => false
@@ -180,23 +180,17 @@ class TelegramHandler(controller: Controller)(implicit
     sendTelegramMessage(telegramMsg, telegramId.toString)
   }
 
-  protected def createReport(): Future[String] = {
+   private def createReport(): Future[String] = {
     invoiceDAO.completed().map { completed =>
-      val buggedTxs = completed.filter(_.profitOpt.exists(_ <= Satoshis.zero))
       val chainFees = completed.flatMap(_.chainFeeOpt).sum
-      val buggedChainFees = buggedTxs.flatMap(_.chainFeeOpt).sum
       val profit = completed.flatMap(_.profitOpt).sum
-      val bugged = buggedTxs.flatMap(_.profitOpt).sum
       val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
 
       s"""
          |Total OP_RETURNs: ${intFormatter.format(completed.size)}
          |Total chain size: ${printSize(vbytes)}
          |Total chain fees: ${printAmount(chainFees)}
-         |Chain fees w/o bug: ${printAmount(chainFees - buggedChainFees)}
          |Total profit: ${printAmount(profit)}
-         |Total bugged: ${printAmount(bugged)}
-         |Profit w/o bug: ${printAmount(profit - bugged)}
          |""".stripMargin
     }
   }
