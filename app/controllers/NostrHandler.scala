@@ -6,32 +6,34 @@ import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
-import org.scalastr.core.{NostrEvent, NostrKind}
+import org.scalastr.core.{Metadata, NostrEvent, NostrKind}
 import play.api.libs.json._
 
+import java.net.URL
 import scala.concurrent.Future
 
 trait NostrHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
 
   def setNostrMetadata(): Future[Option[Sha256Digest]] = {
-    val content = Json.obj(
-      "display_name" -> "OP_RETURN Bot",
-      "name" -> "OP_RETURN Bot",
-      "about" -> "A bot that allows you to send OP_RETURN data on the bitcoin blockchain",
-      "nip05" -> "me@opreturnbot.com",
-      "lud16" -> "me@opreturnbot.com",
-      "website" -> "https://opreturnbot.com",
-      "picture" -> "https://opreturnbot.com/assets/images/op-return-bot.png"
+    val metadata = Metadata.create(
+      displayName = Some("OP_RETURN Bot"),
+      name = Some("OP_RETURN Bot"),
+      about = Some(
+        "A bot that allows you to send OP_RETURN data on the bitcoin blockchain"),
+      nip05 = Some("me@opreturnbot.com"),
+      lud16 = Some("me@opreturnbot.com"),
+      website = Some(new URL("https://opreturnbot.com")),
+      picture =
+        Some(new URL("https://opreturnbot.com/assets/images/op-return-bot.png"))
     )
 
-    val meta = NostrEvent.build(privateKey,
-                                TimeUtil.currentEpochSecond,
-                                NostrKind.Metadata,
-                                JsArray.empty,
-                                content.toString)
+    val event = NostrEvent.build(privateKey = privateKey,
+                                 created_at = TimeUtil.currentEpochSecond,
+                                 tags = JsArray.empty,
+                                 metadata = metadata)
 
-    sendNostrEvent(meta)
+    sendNostrEvent(event)
   }
 
   def clients: Vector[NostrClient] = config.nostrRelays.map { relay =>
