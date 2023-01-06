@@ -35,7 +35,8 @@ class TelegramHandler(controller: Controller)(implicit
     with Commands[Future]
     with StartStopAsync[Unit] {
 
-  private val intFormatter: NumberFormat = java.text.NumberFormat.getIntegerInstance
+  private val intFormatter: NumberFormat =
+    java.text.NumberFormat.getIntegerInstance
 
   private val currencyFormatter: NumberFormat =
     java.text.NumberFormat.getCurrencyInstance(Locale.US)
@@ -180,7 +181,7 @@ class TelegramHandler(controller: Controller)(implicit
     sendTelegramMessage(telegramMsg, telegramId.toString)
   }
 
-   private def createReport(): Future[String] = {
+  private def createReport(): Future[String] = {
     invoiceDAO.completed().map { completed =>
       val chainFees = completed.flatMap(_.chainFeeOpt).sum
       val profit = completed.flatMap(_.profitOpt).sum

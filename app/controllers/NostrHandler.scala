@@ -7,12 +7,32 @@ import org.bitcoins.crypto._
 import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
 import org.scalastr.core.{NostrEvent, NostrKind}
-import play.api.libs.json.JsArray
+import play.api.libs.json._
 
 import scala.concurrent.Future
 
 trait NostrHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
+
+  def setNostrMetadata(): Future[Option[Sha256Digest]] = {
+    val content = Json.obj(
+      "display_name" -> "OP_RETURN Bot",
+      "name" -> "OP_RETURN Bot",
+      "about" -> "A bot that allows you to send OP_RETURN data on the bitcoin blockchain",
+      "nip05" -> "me@opreturnbot.com",
+      "lud16" -> "me@opreturnbot.com",
+      "website" -> "https://opreturnbot.com",
+      "picture" -> "https://opreturnbot.com/assets/images/op-return-bot.png"
+    )
+
+    val meta = NostrEvent.build(privateKey,
+                                TimeUtil.currentEpochSecond,
+                                NostrKind.Metadata,
+                                JsArray.empty,
+                                content.toString)
+
+    sendNostrEvent(meta)
+  }
 
   def clients: Vector[NostrClient] = config.nostrRelays.map { relay =>
     new NostrClient(relay, None) {
@@ -57,6 +77,11 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       content = content
     )
 
+    sendNostrEvent(event)
+  }
+
+  private def sendNostrEvent(
+      event: NostrEvent): Future[Option[Sha256Digest]] = {
     val fs = clients.map { client =>
       client
         .start()
@@ -69,11 +94,9 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
             _ = opt match {
               case Some(id) =>
-                logger.info(
-                  s"Sent nostr message ${id.hex} for txid ${txId.hex}")
+                logger.info(s"Sent nostr event ${id.hex}")
               case None =>
-                logger.error(
-                  "Failed to send nostr message for txid " + txId.hex)
+                logger.error("Failed to send nostr event")
             }
             _ <- client.stop()
           } yield opt

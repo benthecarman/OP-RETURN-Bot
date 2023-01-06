@@ -92,6 +92,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     setURI()
     telegramHandler.start()
     invoiceMonitor.startSubscription()
+    invoiceMonitor.setNostrMetadata()
     startOnionMessageSubscription()
   }
 
