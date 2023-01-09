@@ -19,8 +19,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     val metadata = Metadata.create(
       displayName = Some("OP_RETURN Bot"),
       name = Some("OP_RETURN Bot"),
-      about = Some(
-        "A bot that allows you to send OP_RETURN data on the bitcoin blockchain"),
+      about = Some("Store a message forever in the bitcoin blockchain"),
       nip05 = Some("me@opreturnbot.com"),
       lud16 = Some("me@opreturnbot.com"),
       website = Some(new URL("https://opreturnbot.com")),
