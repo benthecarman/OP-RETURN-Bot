@@ -3,6 +3,11 @@
 @(message: String, invoice: LnInvoice)(implicit request: MessagesRequestHeader)
 
     @main("Invoice") {
+        <script src="@routes.Assets.versioned("javascripts/checkInvoice.js")" type="text/javascript"></script>
+        <script>
+                const rhash = "@invoice.lnTags.paymentHash.hash.hex";
+                setInterval(queryAPI, 1000, rhash);
+        </script>
 
         <h1>Invoice</h1>
 
