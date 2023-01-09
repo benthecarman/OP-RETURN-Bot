@@ -1,6 +1,7 @@
 package controllers
 
 import akka.actor.ActorSystem
+import com.google.zxing.BarcodeFormat
 import com.translnd.rotator.PubkeyRotator
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
@@ -11,10 +12,7 @@ import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc.LndRpcClient
-import org.bitcoins.lnurl.json.LnURLJsonModels.{
-  LnURLPayInvoice,
-  LnURLPayResponse
-}
+import org.bitcoins.lnurl.json.LnURLJsonModels._
 import play.api.data._
 import play.api.libs.json._
 import play.api.mvc._
@@ -27,6 +25,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
+import java.awt.Color
+import java.awt.Graphics2D
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
+import javax.imageio.ImageIO
+import com.google.zxing.common.BitMatrix
+import com.google.zxing.qrcode.QRCodeWriter
 
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
@@ -201,6 +206,39 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             Json.obj("status" -> "ERROR", "reason" -> "no amount given")
           Future.successful(BadRequest(error))
       }
+    }
+  }
+
+  def qrCode(
+      string: String,
+      widthStr: String,
+      heightStr: String): Action[AnyContent] = {
+    Action.async { _ =>
+      val width = widthStr.toInt
+      val height = heightStr.toInt
+
+      val qrCodeWriter = new QRCodeWriter()
+      val bitMatrix =
+        qrCodeWriter.encode(string, BarcodeFormat.QR_CODE, width, height)
+      val qrCodeImage =
+        new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+      val graphics = qrCodeImage.createGraphics()
+      graphics.setColor(Color.WHITE)
+      graphics.fillRect(0, 0, width, height)
+      graphics.setColor(Color.BLACK)
+      for (x <- 0 until width) {
+        for (y <- 0 until height) {
+          if (bitMatrix.get(x, y)) {
+            graphics.fillRect(x, y, 1, 1)
+          }
+        }
+      }
+
+      val byteArrayOutputStream = new ByteArrayOutputStream()
+      ImageIO.write(qrCodeImage, "png", byteArrayOutputStream)
+      val qrCodeByteArray = byteArrayOutputStream.toByteArray
+
+      Future.successful(Ok(qrCodeByteArray).as("image/png"))
     }
   }
 

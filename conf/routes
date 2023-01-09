@@ -12,6 +12,7 @@ GET         /connect                         controllers.Controller.connect
 GET         /lnurlp/:meta                    controllers.Controller.lnurlPay(meta)
 GET         /.well-known/lnurlp/*user        controllers.Controller.getLnurlPay(user)
 GET         /.well-known/nostr.json          controllers.Controller.nip5
+GET         /qr                              controllers.Controller.qrCode(string, width, height)
 
 # API
 POST        /api/create                      controllers.Controller.create
