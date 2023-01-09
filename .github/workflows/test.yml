@@ -1,4 +1,4 @@
-name: Compile Check
+name: Compile & Test
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ jobs:
             ~/.sbt
           key: ${{ runner.os }}-cache
       - name: Compile and Check Formatting
-        run: sbt test:compile scalafmtCheckAll test
+        run: sbt downloadBitcoind downloadLnd test:compile scalafmtCheckAll test
 
   mac:
     runs-on: macos-latest
