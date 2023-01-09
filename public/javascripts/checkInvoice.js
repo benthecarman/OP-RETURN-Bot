@@ -1,6 +1,6 @@
 function queryAPI(rHash) {
     if (rHash) {
-        fetch('https://opreturnbot.com/api/status/' + rHash)
+        fetch('api/status/' + rHash)
             .then(async response => {
                 const text = await response.text();
                 if (response.ok) {
@@ -8,7 +8,7 @@ function queryAPI(rHash) {
                     if (text) {
                         window.location.href = 'https://opreturnbot.com/success?txId=' + text;
                     }
-                } else if (response.status === 400) {
+                } else if (response.status === 400 && text) {
                     // Handle the 400 error
                     console.error('Bad Request: ' + text);
                 } else {
