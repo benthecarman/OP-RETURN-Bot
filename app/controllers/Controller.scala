@@ -2,6 +2,7 @@ package controllers
 
 import akka.actor.ActorSystem
 import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import com.translnd.rotator.PubkeyRotator
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
@@ -18,20 +19,17 @@ import play.api.libs.json._
 import play.api.mvc._
 import scodec.bits.ByteVector
 
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.net.URL
+import javax.imageio.ImageIO
 import javax.inject.Inject
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-import java.awt.Color
-import java.awt.Graphics2D
-import java.awt.image.BufferedImage
-import java.io.ByteArrayOutputStream
-import javax.imageio.ImageIO
-import com.google.zxing.common.BitMatrix
-import com.google.zxing.qrcode.QRCodeWriter
 
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
@@ -50,11 +48,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   implicit lazy val config: OpReturnBotAppConfig =
     OpReturnBotAppConfig.fromDefaultDatadir()
 
-  import config.transLndConfig
+  lazy val lnd: LndRpcClient = config.lndRpcClient
 
-  val lnd: LndRpcClient = config.lndRpcClient
-
-  lazy val pubkeyRotator: PubkeyRotator = PubkeyRotator(lnd)
+  lazy val pubkeyRotator: PubkeyRotator =
+    PubkeyRotator(lnd)(config.transLndConfig, system)
 
   val startF: Future[Unit] = config.start()
 
@@ -87,7 +84,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   private val telegramHandler = new TelegramHandler(this)
 
-  val invoiceMonitor =
+  lazy val invoiceMonitor =
     new InvoiceMonitor(lnd,
                        pubkeyRotator,
                        Some(telegramHandler),
