@@ -37,7 +37,7 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
-      "com.google.zxing" % "core" % "3.4.1" withSources () withJavadoc (),
+      "com.google.zxing" % "core" % "3.5.1" withSources () withJavadoc (),
       "com.danielasfregola" %% "twitter4s" % "8.0",
       "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.3",
       "com.bot4s" %% "telegram-akka" % "5.6.1",
@@ -239,13 +239,13 @@ TaskKeys.downloadBitcoind := {
           else if (Properties.isMac)
             Map(
               "24.0" -> (if (System.getProperty("os.arch") == "aarch64")
-                "03cbad3118ead19de6664ab80c43b6ee97302109e8789ca9a7e261bdc0aa6937"
-              else
-                "a2b7ba863e5536249a8e97b464bc9a91ad73a0b6340434bf1c09aa912ac52f29"),
+                           "03cbad3118ead19de6664ab80c43b6ee97302109e8789ca9a7e261bdc0aa6937"
+                         else
+                           "a2b7ba863e5536249a8e97b464bc9a91ad73a0b6340434bf1c09aa912ac52f29"),
               "23.0" -> (if (System.getProperty("os.arch") == "aarch64")
-                "7c8bc63731aa872b7b334a8a7d96e33536ad77d49029bad179b09dca32cd77ac"
-              else
-                "c816780583009a9dad426dc0c183c89be9da98906e1e2c7ebae91041c1aaaaf3"),
+                           "7c8bc63731aa872b7b334a8a7d96e33536ad77d49029bad179b09dca32cd77ac"
+                         else
+                           "c816780583009a9dad426dc0c183c89be9da98906e1e2c7ebae91041c1aaaaf3"),
               "22.0" -> "2744d199c3343b2d94faffdfb2c94d75a630ba27301a70e47b0ad30a7e0155e9",
               "0.21.1" -> "1ea5cedb64318e9868a66d3ab65de14516f9ada53143e460d50af428b5aec3c7",
               "0.20.1" -> "b9024dde373ea7dad707363e07ec7e265383204127539ae0c234bff3a61da0d1",
