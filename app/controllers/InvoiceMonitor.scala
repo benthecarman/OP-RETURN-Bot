@@ -20,7 +20,7 @@ import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction.{Transaction, TransactionOutput}
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
-import org.bitcoins.core.util.BitcoinScriptUtil
+import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
 import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
@@ -34,6 +34,7 @@ import walletrpc.SendOutputsRequest
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 import scala.concurrent.duration.DurationInt
+import scala.util.Try
 
 class InvoiceMonitor(
     val lnd: LndRpcClient,
@@ -304,50 +305,47 @@ class InvoiceMonitor(
             // recover so we can finish accounting
             .recover { case err: Throwable =>
               logger.error(s"Error sending nostr dm back to ${nostrKey.hex}",
-                err)
+                           err)
             }
         case None => Future.unit
       }
 
       tweetF =
         if (noTwitter) Future.successful((None, None))
-        else {
-          val tweetP = Promise[Option[Tweet]]()
-          val nostrP = Promise[Option[Sha256Digest]]()
+        else
+          FutureUtil.makeAsync { () =>
+            val tweetP = Promise[Option[Tweet]]()
+            val nostrP = Promise[Option[Sha256Digest]]()
 
-          // add a 15 second delay for tweet so mempool.space has time
-          // to index the transaction
-          // - requested by the mempool.space team
-          system.scheduler.scheduleOnce(15.seconds) {
-            handleTweet(message, txId)
-              .map(Some(_))
-              .recover { err =>
-                logger.error(
-                  s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
-                None
-              }
-              .onComplete(t => tweetP.tryComplete(t))
-
-            announceOnNostr(message, txId)
-              .recover { err =>
-                logger.error(
-                  s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
-                None
-              }
-              .onComplete(t => nostrP.tryComplete(t))
-            ()
-          }
-
-          tweetP.future
-            .recover(_ => None)
-            .flatMap { tweetOpt =>
-              nostrP.future
-                .recover(_ => None)
-                .map { nostrOpt =>
-                  (tweetOpt, nostrOpt)
+            // add a 15 second delay for tweet so mempool.space has time
+            // to index the transaction
+            // - requested by the mempool.space team
+            val duration = 15.seconds
+            system.scheduler.scheduleOnce(duration) {
+              handleTweet(message, txId)
+                .map(Some(_))
+                .recover { err =>
+                  logger.error(
+                    s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
+                  None
                 }
+                .onComplete(t => tweetP.complete(t))
+
+              announceOnNostr(message, txId)
+                .recover { err =>
+                  logger.error(
+                    s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
+                  None
+                }
+                .onComplete(t => nostrP.complete(t))
+              ()
             }
-        }
+
+            val tweet = Try(Await.result(tweetP.future, duration + 5.seconds))
+            val nostr = Try(Await.result(nostrP.future, duration + 5.seconds))
+
+            (tweet.toOption.flatten, nostr.toOption.flatten)
+          }
       _ <- {
         val telegramF = txDetailsOpt match {
           case Some(details) =>
