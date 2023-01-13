@@ -238,6 +238,38 @@ class InvoiceMonitor(
       errorOpt <- lnd.publishTransaction(transaction)
       txId = transaction.txIdBE
 
+      _ = errorOpt match {
+        case Some(error) =>
+          logger.error(
+            s"Error when broadcasting transaction ${txId.hex}, $error")
+        case None =>
+          logger.info(s"Successfully created tx: ${txId.hex}")
+      }
+
+      txDetailsOpt <- lnd.getTransaction(txId)
+
+      _ = {
+        recentTransactions += txId
+        if (recentTransactions.size >= 5) {
+          val old = recentTransactions.takeRight(5)
+          recentTransactions.clear()
+          recentTransactions ++= old
+        }
+      }
+
+      amount = invoice.amount.get.toSatoshis
+      // Need to make sure we upsert the tx and txid even if this fails, so we can't call .get
+      chainFeeOpt = txDetailsOpt.map(_.totalFees)
+      profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
+
+      dbWithTx: InvoiceDb = invoiceDb.copy(closed = true,
+                                           txOpt = Some(transaction),
+                                           txIdOpt = Some(txId),
+                                           profitOpt = profitOpt,
+                                           chainFeeOpt = chainFeeOpt)
+
+      res <- invoiceDAO.update(dbWithTx)
+
       // send if onion message
       _ <- invoiceDb.nodeIdOpt match {
         case Some(nodeId) =>
@@ -272,42 +304,10 @@ class InvoiceMonitor(
             // recover so we can finish accounting
             .recover { case err: Throwable =>
               logger.error(s"Error sending nostr dm back to ${nostrKey.hex}",
-                           err)
+                err)
             }
         case None => Future.unit
       }
-
-      _ = errorOpt match {
-        case Some(error) =>
-          logger.error(
-            s"Error when broadcasting transaction ${txId.hex}, $error")
-        case None =>
-          logger.info(s"Successfully created tx: ${txId.hex}")
-      }
-
-      txDetailsOpt <- lnd.getTransaction(txId)
-
-      _ = {
-        recentTransactions += txId
-        if (recentTransactions.size >= 5) {
-          val old = recentTransactions.takeRight(5)
-          recentTransactions.clear()
-          recentTransactions ++= old
-        }
-      }
-
-      amount = invoice.amount.get.toSatoshis
-      // Need to make sure we upsert the tx and txid even if this fails, so we can't call .get
-      chainFeeOpt = txDetailsOpt.map(_.totalFees)
-      profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
-
-      dbWithTx: InvoiceDb = invoiceDb.copy(closed = true,
-                                           txOpt = Some(transaction),
-                                           txIdOpt = Some(txId),
-                                           profitOpt = profitOpt,
-                                           chainFeeOpt = chainFeeOpt)
-
-      res <- invoiceDAO.update(dbWithTx)
 
       tweetF =
         if (noTwitter) Future.successful((None, None))
