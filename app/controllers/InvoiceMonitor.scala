@@ -57,7 +57,7 @@ class InvoiceMonitor(
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
 
-  def startSubscription(): Future[Done] = {
+  def startSubscription(): Unit = {
     val parallelism = Runtime.getRuntime.availableProcessors()
 
     pubkeyRotator
@@ -140,6 +140,12 @@ class InvoiceMonitor(
 
       }
       .runWith(Sink.ignore)
+
+    system.scheduler.scheduleAtFixedRate(1.minute, 1.minute) { () =>
+      processUnhandledInvoices()
+      ()
+    }
+    ()
   }
 
   def processUnhandledInvoices(): Future[Vector[InvoiceDb]] = {
