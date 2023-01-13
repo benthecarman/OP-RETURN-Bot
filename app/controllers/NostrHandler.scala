@@ -123,7 +123,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |
-         |${censorMessage(message)}
+         |${config.censorMessage(message)}
          |
          |https://mempool.space/tx/${txId.hex}
          |""".stripMargin

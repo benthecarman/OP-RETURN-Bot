@@ -47,7 +47,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
       shillTweet()
     }
 
-    val usedMessage = censorMessage(message)
+    val usedMessage = config.censorMessage(message)
 
     val tweet =
       s"""
@@ -74,13 +74,5 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
 
       sendTweet(tweet).map(_ => ())
     } else Future.unit
-  }
-
-  protected def censorMessage(message: String): String = {
-    val replacement = "$#@!&"
-
-    config.bannedWords.foldLeft(message) { case (msg, bannedWord) =>
-      msg.replaceAll(bannedWord, replacement)
-    }
   }
 }

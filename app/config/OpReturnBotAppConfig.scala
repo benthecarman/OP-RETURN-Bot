@@ -145,6 +145,12 @@ case class OpReturnBotAppConfig(
     list.asScala.toVector
   }.getOrElse(Vector.empty)
 
+  def censorMessage(
+      message: String,
+      bannedWords: Vector[String] = bannedWords): String = {
+    bannedWords.foldLeft(message)((acc, word) => acc.replaceAll(word, "*****"))
+  }
+
   lazy val consumerToken: ConsumerToken =
     ConsumerToken(twitterConsumerKey, twitterConsumerSecret)
 
