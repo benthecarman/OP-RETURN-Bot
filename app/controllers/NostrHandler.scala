@@ -80,17 +80,18 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private lazy val dmClients: Vector[NostrClient] = config.nostrRelays.map { relay =>
-    new NostrClient(relay, None) {
+  private lazy val dmClients: Vector[NostrClient] = config.nostrRelays.map {
+    relay =>
+      new NostrClient(relay, None) {
 
-      override def processEvent(
-          subscriptionId: String,
-          event: NostrEvent): Future[Unit] = {
-        processDMEvent(event)
+        override def processEvent(
+            subscriptionId: String,
+            event: NostrEvent): Future[Unit] = {
+          processDMEvent(event)
+        }
+
+        override def processNotice(notice: String): Future[Unit] = Future.unit
       }
-
-      override def processNotice(notice: String): Future[Unit] = Future.unit
-    }
   }
 
   def listenForDMs(): Future[Unit] = {

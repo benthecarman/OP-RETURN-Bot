@@ -1,9 +1,7 @@
 package controllers
 
-import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
-import com.danielasfregola.twitter4s.entities.Tweet
 import com.translnd.rotator.InvoiceState._
 import com.translnd.rotator.{InvoiceState, PubkeyRotator}
 import config.OpReturnBotAppConfig
@@ -20,7 +18,7 @@ import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction.{Transaction, TransactionOutput}
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
-import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil}
+import org.bitcoins.core.util.BitcoinScriptUtil
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
 import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
@@ -255,13 +253,14 @@ class InvoiceMonitor(
 
       txDetailsOpt <- lnd.getTransaction(txId)
 
-      _ = {
+      _ = Try {
         recentTransactions += txId
         if (recentTransactions.size >= 5) {
           val old = recentTransactions.takeRight(5)
           recentTransactions.clear()
           recentTransactions ++= old
         }
+        logger.info(s"Updated saved tx: ${txId.hex} to in recent txs list")
       }
 
       amount = invoice.amount.get.toSatoshis
@@ -276,6 +275,7 @@ class InvoiceMonitor(
                                            chainFeeOpt = chainFeeOpt)
 
       res <- invoiceDAO.update(dbWithTx)
+      _ = logger.info(s"Successfully saved tx: ${txId.hex} to database")
 
       // send if onion message
       _ <- invoiceDb.nodeIdOpt match {
@@ -317,44 +317,37 @@ class InvoiceMonitor(
       }
 
       tweetF =
-        if (noTwitter) Future.successful((None, None))
-        else
-          FutureUtil.makeAsync { () =>
-            val tweetP = Promise[Option[Tweet]]()
-            val nostrP = Promise[Option[Sha256Digest]]()
-
-            // add a 15 second delay for tweet so mempool.space has time
-            // to index the transaction
-            // - requested by the mempool.space team
-            val duration = 15.seconds
-            system.scheduler.scheduleOnce(duration) {
-              handleTweet(message, txId)
-                .map(Some(_))
-                .recover { err =>
-                  logger.error(
-                    s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
-                  None
-                }
-                .onComplete(t => tweetP.complete(t))
-
-              announceOnNostr(message, txId)
-                .recover { err =>
-                  logger.error(
-                    s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
-                  None
-                }
-                .onComplete(t => nostrP.complete(t))
-              ()
+        if (noTwitter) Future.successful(None)
+        else {
+          handleTweet(message, txId)
+            .map(Some(_))
+            .recover { err =>
+              logger.error(
+                s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
+              None
             }
+        }
 
-            val tweet = Try(Await.result(tweetP.future, duration + 5.seconds))
-            val nostr = Try(Await.result(nostrP.future, duration + 5.seconds))
+      nostrF =
+        if (noTwitter) Future.successful(None)
+        else {
+          announceOnNostr(message, txId)
+            .recover { err =>
+              logger.error(
+                s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
+              None
+            }
+        }
 
-            (tweet.toOption.flatten, nostr.toOption.flatten)
-          }
       _ <- {
         val telegramF = txDetailsOpt match {
           case Some(details) =>
+            val userTelegramF = invoiceDb.telegramIdOpt
+              .flatMap(telegramId =>
+                telegramHandlerOpt.map(
+                  _.handleTelegramUserPurchase(telegramId, details)))
+              .getOrElse(Future.unit)
+
             lazy val action = for {
               profit <- invoiceDAO.totalProfitAction()
               chainFees <- invoiceDAO.totalChainFeesAction()
@@ -364,7 +357,8 @@ class InvoiceMonitor(
               .map { handler =>
                 for {
                   (profit, chainFees) <- invoiceDAO.safeDatabase.run(action)
-                  (tweetOpt, nostrOpt) <- tweetF
+                  tweetOpt <- tweetF
+                  nostrOpt <- nostrF
                   _ <- handler.handleTelegram(
                     rHash = rHash.hash,
                     invoice = invoice,
@@ -381,12 +375,7 @@ class InvoiceMonitor(
               .getOrElse(Future.unit)
 
             for {
-              _ <- invoiceDb.telegramIdOpt
-                .flatMap(telegramId =>
-                  telegramHandlerOpt.map(
-                    _.handleTelegramUserPurchase(telegramId, details)))
-                .getOrElse(Future.unit)
-
+              _ <- userTelegramF
               _ <- accountingTelegramF
             } yield ()
           case None =>
@@ -416,9 +405,7 @@ class InvoiceMonitor(
           .map(_.sendTelegramMessage(
             s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ${err.getMessage}"))
           .getOrElse(Future.unit)
-        updated = invoiceDb.copy(closed = false)
-        newDb <- invoiceDAO.update(updated)
-      } yield newDb
+      } yield invoiceDb
     }
   }
 
