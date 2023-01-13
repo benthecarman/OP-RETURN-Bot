@@ -37,7 +37,7 @@
 
     <logger name="com.gargoylesoftware.htmlunit.javascript" level="OFF"/>
 
-    <root level="OFF">
+    <root level="INFO">
         <appender-ref ref="ASYNC"/>
         <appender-ref ref="FILE"/>
     </root>
