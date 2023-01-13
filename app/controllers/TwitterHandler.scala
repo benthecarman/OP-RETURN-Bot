@@ -80,8 +80,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     val replacement = "$#@!&"
 
     config.bannedWords.foldLeft(message) { case (msg, bannedWord) =>
-      val myPattern = Pattern.compile(bannedWord, Pattern.CASE_INSENSITIVE)
-      myPattern.matcher(msg).replaceAll(replacement)
+      msg.replaceAll(bannedWord, replacement)
     }
   }
 }
