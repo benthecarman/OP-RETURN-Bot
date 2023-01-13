@@ -97,7 +97,7 @@ class TelegramHandler(controller: Controller)(implicit
 
   onCommand("create") { implicit msg =>
     val vec = msg.text.get.trim.split(" ", 2).toVector
-    if (vec.size != 2) {
+    val f = if (vec.size != 2) {
       reply("Usage: /create <message>").map(_ => ())
     } else {
       val str = vec(1)
@@ -108,10 +108,26 @@ class TelegramHandler(controller: Controller)(implicit
                         nodeIdOpt = None,
                         telegramId = Some(id))
         .flatMap { db =>
-          reply(db.invoice.toString()).map(_ => ())
+          val replyF = reply(db.invoice.toString)
+
+          val url =
+            s"https://opreturnbot.com/qr?string=${URLEncoder.encode("lightning:" + db.invoice.toString, "UTF-8")}&width=300&height=300"
+          val qrF = sendTelegramPhoto(url, id.toString)
+
+          for {
+            _ <- replyF
+            _ <- qrF
+          } yield ()
         }
     }
+
+    f.failed.foreach(err =>
+      logger.error(s"Error processing create command", err))
+
+    f
   }
+
+  private val http = Http()
 
   def sendTelegramMessage(
       message: String,
@@ -120,7 +136,17 @@ class TelegramHandler(controller: Controller)(implicit
       s"?chat_id=${URLEncoder.encode(telegramId, "UTF-8")}" +
       s"&text=${URLEncoder.encode(message.trim, "UTF-8")}"
 
-    Http().singleRequest(Get(url)).map(_ => ())
+    http.singleRequest(Get(url)).map(_ => ())
+  }
+
+  def sendTelegramPhoto(
+      photoUrl: String,
+      telegramId: String = myTelegramId): Future[Unit] = {
+    val url = s"https://api.telegram.org/bot$telegramCreds/sendPhoto" +
+      s"?chat_id=${URLEncoder.encode(telegramId, "UTF-8")}" +
+      s"&photo=${URLEncoder.encode(photoUrl.trim, "UTF-8")}"
+
+    http.singleRequest(Get(url)).map(_ => ())
   }
 
   def handleTelegram(
