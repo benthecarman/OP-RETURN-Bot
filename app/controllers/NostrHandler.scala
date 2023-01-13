@@ -80,22 +80,22 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  def listenForDMs(): Future[Unit] = {
-    val clients: Vector[NostrClient] = config.nostrRelays.map { relay =>
-      new NostrClient(relay, None) {
+  private lazy val dmClients: Vector[NostrClient] = config.nostrRelays.map { relay =>
+    new NostrClient(relay, None) {
 
-        override def processEvent(
-            subscriptionId: String,
-            event: NostrEvent): Future[Unit] = {
-          processDMEvent(event)
-        }
-
-        override def processNotice(notice: String): Future[Unit] = Future.unit
+      override def processEvent(
+          subscriptionId: String,
+          event: NostrEvent): Future[Unit] = {
+        processDMEvent(event)
       }
-    }
 
+      override def processNotice(notice: String): Future[Unit] = Future.unit
+    }
+  }
+
+  def listenForDMs(): Future[Unit] = {
     val filter = getDmFilter
-    val startFs = clients.map { client =>
+    val startFs = dmClients.map { client =>
       client.start().flatMap(_ => client.subscribe(filter))
     }
 
@@ -145,7 +145,26 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                              JsArray.empty,
                              pubkey)
 
-    sendNostrEvent(event)
+    val fs = dmClients.map { client =>
+      val f = for {
+        opt <- client
+          .publishEvent(event)
+          .map(_ => Some(event.id))
+          .recover(_ => None)
+
+        _ = opt match {
+          case Some(id) =>
+            logger.info(s"Sent nostr event ${id.hex}")
+          case None =>
+            logger.error("Failed to send nostr event")
+        }
+        _ <- client.stop()
+      } yield opt
+
+      f.recover(_ => None)
+    }
+
+    Future.sequence(fs).map(_.flatten.headOption)
   }
 
   def sendingClients: Vector[NostrClient] = config.nostrRelays.map { relay =>
