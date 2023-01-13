@@ -12,6 +12,7 @@ import play.api.libs.json._
 import java.net.URL
 import scala.collection.mutable
 import scala.concurrent.Future
+import scala.util.{Failure, Success}
 
 trait NostrHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
@@ -156,17 +157,17 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         client <- clientF
         opt <- client
           .publishEvent(event)
-          .map(_ => Some(event.id))
-          .recover(_ => None)
+          .map(_ => Success(event.id))
+          .recover(err => Failure(err))
 
         _ = opt match {
-          case Some(id) =>
+          case Success(id) =>
             logger.info(s"Sent nostr event ${id.hex}")
-          case None =>
-            logger.error("Failed to send nostr DM")
+          case Failure(err) =>
+            logger.error("Failed to send nostr DM: ", err)
         }
         _ <- client.stop()
-      } yield opt
+      } yield opt.toOption
 
       f.recover(_ => None)
     }
@@ -196,17 +197,17 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
           for {
             opt <- client
               .publishEvent(event)
-              .map(_ => Some(event.id))
-              .recover(_ => None)
+              .map(_ => Success(event.id))
+              .recover(err => Failure(err))
 
             _ = opt match {
-              case Some(id) =>
+              case Success(id) =>
                 logger.info(s"Sent nostr event ${id.hex}")
-              case None =>
-                logger.error("Failed to send nostr event")
+              case Failure(err) =>
+                logger.error("Failed to send nostr event: ", err)
             }
             _ <- client.stop()
-          } yield opt
+          } yield opt.toOption
         }
         .recover(_ => None)
     }
