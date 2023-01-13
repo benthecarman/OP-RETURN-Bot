@@ -172,11 +172,19 @@ case class OpReturnBotAppConfig(
   lazy val aesPasswordOpt: Option[AesPassword] = kmConf.aesPasswordOpt
   lazy val bip39PasswordOpt: Option[String] = kmConf.bip39PasswordOpt
 
-  lazy val nostrRelays: Vector[String] = {
+  private lazy val nostrRelays: Vector[String] = {
     if (config.hasPath("nostr.relays")) {
       config.getStringList(s"nostr.relays").asScala.toVector
     } else Vector.empty
   }
+
+  lazy val badBoyNostrRelays: Vector[String] = {
+    if (config.hasPath("nostr.badBoyNostrRelays")) {
+      config.getStringList(s"nostr.badBoyNostrRelays").asScala.toVector
+    } else Vector.empty
+  }
+
+  lazy val allRelays: Vector[String] = nostrRelays ++ badBoyNostrRelays
 
   def seedExists(): Boolean = {
     WalletStorage.seedExists(seedPath)

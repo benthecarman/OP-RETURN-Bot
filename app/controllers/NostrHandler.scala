@@ -6,7 +6,7 @@ import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
-import org.scalastr.core.{Metadata, NostrEvent, NostrFilter, NostrKind}
+import org.scalastr.core._
 import play.api.libs.json._
 
 import java.net.URL
@@ -35,7 +35,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                                  tags = JsArray.empty,
                                  metadata = metadata)
 
-    sendNostrEvent(event)
+    sendNostrEvent(event, badBoy = false)
   }
 
   private def getDmFilter: NostrFilter = NostrFilter(
@@ -83,7 +83,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private lazy val dmClients: Vector[NostrClient] = config.nostrRelays.map {
+  private lazy val dmClients: Vector[NostrClient] = config.allRelays.map {
     relay =>
       new NostrClient(relay, None) {
 
@@ -123,7 +123,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |
-         |$message
+         |${censorMessage(message)}
          |
          |https://mempool.space/tx/${txId.hex}
          |""".stripMargin
@@ -136,7 +136,26 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       content = content
     )
 
-    sendNostrEvent(event)
+    sendNostrEvent(event, badBoy = false).flatMap { _ =>
+      val content =
+        s"""
+           |🔔 🔔 NEW OP_RETURN 🔔 🔔
+           |
+           |$message
+           |
+           |https://mempool.space/tx/${txId.hex}
+           |""".stripMargin
+
+      val event = NostrEvent.build(
+        privateKey = privateKey,
+        created_at = TimeUtil.currentEpochSecond,
+        kind = NostrKind.TextNote,
+        tags = JsArray.empty,
+        content = content
+      )
+
+      sendNostrEvent(event, badBoy = true)
+    }
   }
 
   protected def sendNostrDM(
@@ -149,25 +168,29 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                              JsArray.empty,
                              pubkey)
 
-    sendNostrEvent(event)
+    sendNostrEvent(event, badBoy = false)
   }
 
-  def sendingClients: Vector[NostrClient] = config.nostrRelays.map { relay =>
-    new NostrClient(relay, None) {
+  private def sendingClients(badBoy: Boolean): Vector[NostrClient] = {
+    val relays = if (badBoy) config.badBoyNostrRelays else config.allRelays
+    relays.map { relay =>
+      new NostrClient(relay, None) {
 
-      override def processEvent(
-          subscriptionId: String,
-          event: NostrEvent): Future[Unit] = {
-        Future.unit
+        override def processEvent(
+            subscriptionId: String,
+            event: NostrEvent): Future[Unit] = {
+          Future.unit
+        }
+
+        override def processNotice(notice: String): Future[Unit] = Future.unit
       }
-
-      override def processNotice(notice: String): Future[Unit] = Future.unit
     }
   }
 
   private def sendNostrEvent(
-      event: NostrEvent): Future[Option[Sha256Digest]] = {
-    val fs = sendingClients.map { client =>
+      event: NostrEvent,
+      badBoy: Boolean): Future[Option[Sha256Digest]] = {
+    val fs = sendingClients(badBoy).map { client =>
       Try(Await.result(client.start(), 5.seconds)) match {
         case Failure(_) =>
           logger.warn(s"Failed to connect to nostr relay: ${client.url}")
