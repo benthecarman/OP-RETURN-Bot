@@ -148,31 +148,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                              JsArray.empty,
                              pubkey)
 
-    val fs = dmClients.map { c =>
-      val clientF =
-        if (c.isStarted()) Future.successful(c)
-        else c.start().map(_ => c)
-
-      val f = for {
-        client <- clientF
-        opt <- client
-          .publishEvent(event)
-          .map(_ => Success(event.id))
-          .recover(err => Failure(err))
-
-        _ = opt match {
-          case Success(id) =>
-            logger.info(s"Sent nostr event ${id.hex}")
-          case Failure(err) =>
-            logger.error("Failed to send nostr DM: ", err)
-        }
-        _ <- client.stop()
-      } yield opt.toOption
-
-      f.recover(_ => None)
-    }
-
-    Future.sequence(fs).map(_.flatten.headOption)
+    sendNostrEvent(event)
   }
 
   def sendingClients: Vector[NostrClient] = config.nostrRelays.map { relay =>
@@ -195,19 +171,19 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         .start()
         .flatMap { _ =>
           for {
-            opt <- client
+            idT <- client
               .publishEvent(event)
               .map(_ => Success(event.id))
               .recover(err => Failure(err))
 
-            _ = opt match {
+            _ = idT match {
               case Success(id) =>
                 logger.info(s"Sent nostr event ${id.hex}")
               case Failure(err) =>
                 logger.error("Failed to send nostr event: ", err)
             }
             _ <- client.stop()
-          } yield opt.toOption
+          } yield idT.toOption
         }
         .recover(_ => None)
     }
