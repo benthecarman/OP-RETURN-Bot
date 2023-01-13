@@ -17,21 +17,14 @@ import org.bitcoins.keymanager.WalletStorage
 import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
 import org.bitcoins.lnd.rpc.LndRpcClient
-import org.bitcoins.lnd.rpc.config.{
-  LndConfig,
-  LndInstance,
-  LndInstanceLocal,
-  LndInstanceRemote
-}
-import org.scalastr.client.NostrClient
-import org.scalastr.core.NostrEvent
+import org.bitcoins.lnd.rpc.config._
 import scodec.bits.ByteVector
 
-import scala.jdk.CollectionConverters._
 import java.io.File
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import scala.concurrent._
+import scala.jdk.CollectionConverters._
 import scala.util.{Properties, Try}
 
 /** Configuration for the Bitcoin-S wallet
