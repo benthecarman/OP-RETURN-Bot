@@ -317,8 +317,11 @@ class InvoiceMonitor(
       }
 
       tweetF =
-        if (noTwitter) Future.successful(None)
-        else {
+        if (noTwitter) {
+          logger.info("Skipping tweet")
+          Future.successful(None)
+        } else {
+          logger.info("Tweeting...")
           handleTweet(message, txId)
             .map(Some(_))
             .recover { err =>
@@ -329,8 +332,11 @@ class InvoiceMonitor(
         }
 
       nostrF =
-        if (noTwitter) Future.successful(None)
-        else {
+        if (noTwitter) {
+          logger.info("Skipping nostr")
+          Future.successful(None)
+        } else {
+          logger.info("Sending to nostr...")
           announceOnNostr(message, txId)
             .recover { err =>
               logger.error(
