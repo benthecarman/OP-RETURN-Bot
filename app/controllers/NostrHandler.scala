@@ -147,8 +147,13 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                              JsArray.empty,
                              pubkey)
 
-    val fs = dmClients.map { client =>
+    val fs = dmClients.map { c =>
+      val clientF =
+        if (c.isStarted()) Future.successful(c)
+        else c.start().map(_ => c)
+
       val f = for {
+        client <- clientF
         opt <- client
           .publishEvent(event)
           .map(_ => Some(event.id))
