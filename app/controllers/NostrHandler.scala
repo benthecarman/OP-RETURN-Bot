@@ -63,7 +63,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
       if (skip) Future.unit
       else {
-        logger.info("Processing DM event: " + event.id)
+        logger.info("Processing DM event: " + event.id.hex)
         val message = NostrEvent.decryptDM(event, privateKey)
 
         for {
