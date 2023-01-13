@@ -38,10 +38,11 @@ class InvoiceMonitorTest extends DualLndFixture {
     monitor.startSubscription()
 
     for {
-      toPay <- monitor.processMessage("hello world",
+      toPay <- monitor.processMessage(message = "hello world",
                                       noTwitter = true,
-                                      None,
-                                      None)
+                                      nodeIdOpt = None,
+                                      telegramId = None,
+                                      nostrKey = None)
       invoiceDb <- monitor.onInvoicePaid(toPay)
     } yield {
       assert(invoiceDb.invoice == toPay.invoice)
@@ -65,7 +66,11 @@ class InvoiceMonitorTest extends DualLndFixture {
       mempool <- bitcoind.getRawMemPool
       _ = assert(mempool.isEmpty)
 
-      db <- monitor.processMessage("hello world", noTwitter = true, None, None)
+      db <- monitor.processMessage(message = "hello world",
+                                   noTwitter = true,
+                                   nodeIdOpt = None,
+                                   telegramId = None,
+                                   nostrKey = None)
       invoice = db.invoice
 
       _ <- lndB.sendPayment(invoice, 60.seconds)

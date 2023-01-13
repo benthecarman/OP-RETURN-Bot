@@ -10,6 +10,7 @@ CREATE TABLE invoices
     profit      INTEGER,
     chain_fee   INTEGER,
     node_id     TEXT,
+    telegram_id BIGINT,
     closed      BOOLEAN          NOT NULL DEFAULT false
 );
 

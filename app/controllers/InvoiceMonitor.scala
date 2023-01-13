@@ -236,6 +236,7 @@ class InvoiceMonitor(
     val createTxF = for {
       transaction <- lnd.sendOutputs(request)
       errorOpt <- lnd.publishTransaction(transaction)
+      txId = transaction.txIdBE
 
       // send if onion message
       _ <- invoiceDb.nodeIdOpt match {
@@ -250,7 +251,31 @@ class InvoiceMonitor(
         case None => Future.unit
       }
 
-      txId = transaction.txIdBE
+      // send if nostr
+      _ <- invoiceDb.nostrKey match {
+        case Some(nostrKey) =>
+          val message =
+            s"""
+               |OP_RETURN Created!
+               |
+               |https://mempool.space/tx/${txId.hex}
+               |""".stripMargin
+
+          sendNostrDM(message, nostrKey)
+            .map {
+              case Some(id) =>
+                logger.info(
+                  s"Sent nostr DM with id ${id.hex} to ${nostrKey.hex}")
+              case None =>
+                logger.error(s"Failed to send nostr DM to ${nostrKey.hex}")
+            }
+            // recover so we can finish accounting
+            .recover { case err: Throwable =>
+              logger.error(s"Error sending nostr dm back to ${nostrKey.hex}",
+                           err)
+            }
+        case None => Future.unit
+      }
 
       _ = errorOpt match {
         case Some(error) =>
@@ -303,7 +328,7 @@ class InvoiceMonitor(
               }
               .onComplete(t => tweetP.tryComplete(t))
 
-            handleNostrMessage(message, txId)
+            announceOnNostr(message, txId)
               .recover { err =>
                 logger.error(
                   s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
@@ -397,7 +422,8 @@ class InvoiceMonitor(
       message: String,
       noTwitter: Boolean,
       nodeIdOpt: Option[NodeId],
-      telegramId: Option[Long]): Future[InvoiceDb] = {
+      telegramId: Option[Long],
+      nostrKey: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
     require(
       message.getBytes.length <= 80,
       "OP_Return message received was too long, must be less than 80 chars")
@@ -438,6 +464,7 @@ class InvoiceMonitor(
                 closed = false,
                 nodeIdOpt = nodeIdOpt,
                 telegramIdOpt = telegramId,
+                nostrKey = nostrKey,
                 txOpt = None,
                 txIdOpt = None,
                 profitOpt = None,

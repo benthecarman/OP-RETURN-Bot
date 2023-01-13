@@ -22,12 +22,11 @@ case class InvoiceDb(
     closed: Boolean,
     nodeIdOpt: Option[NodeId],
     telegramIdOpt: Option[Long],
+    nostrKey: Option[SchnorrPublicKey],
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE],
     profitOpt: Option[CurrencyUnit],
-    chainFeeOpt: Option[CurrencyUnit]) {
-  lazy val paymentHashTag: PaymentHashTag = PaymentHashTag(rHash)
-}
+    chainFeeOpt: Option[CurrencyUnit])
 
 case class InvoiceDAO()(implicit
     override val ec: ExecutionContext,
@@ -127,6 +126,8 @@ case class InvoiceDAO()(implicit
 
     def telegramId: Rep[Option[Long]] = column("telegram_id")
 
+    def nostrKey: Rep[Option[SchnorrPublicKey]] = column("nostr_key")
+
     def transactionOpt: Rep[Option[Transaction]] = column("transaction")
 
     def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
@@ -144,6 +145,7 @@ case class InvoiceDAO()(implicit
        closed,
        nodeId,
        telegramId,
+       nostrKey,
        transactionOpt,
        txIdOpt,
        profitOpt,

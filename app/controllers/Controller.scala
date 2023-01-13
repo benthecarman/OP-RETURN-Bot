@@ -95,6 +95,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     telegramHandler.start()
     invoiceMonitor.startSubscription()
     invoiceMonitor.setNostrMetadata()
+    invoiceMonitor.listenForDMs()
     startOnionMessageSubscription()
   }
 
@@ -340,10 +341,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       def success(input: OpReturnRequest): Future[Result] = {
         for {
-          invoiceDb <- invoiceMonitor.processMessage(input.message,
-                                                     input.noTwitter,
-                                                     None,
-                                                     None)
+          invoiceDb <- invoiceMonitor.processMessage(message = input.message,
+                                                     noTwitter =
+                                                       input.noTwitter,
+                                                     nodeIdOpt = None,
+                                                     telegramId = None,
+                                                     nostrKey = None)
         } yield {
           Ok(invoiceDb.invoice.toString())
         }
@@ -374,7 +377,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
           invoiceMonitor
-            .processMessage(data.message, data.noTwitter, None, None)
+            .processMessage(data.message, data.noTwitter, None, None, None)
             .map { invoiceDb =>
               Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
             }
