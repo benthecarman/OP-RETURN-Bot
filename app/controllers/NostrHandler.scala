@@ -11,8 +11,9 @@ import play.api.libs.json._
 
 import java.net.URL
 import scala.collection.mutable
-import scala.concurrent.Future
-import scala.util.{Failure, Success}
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.{Await, Future}
+import scala.util.{Failure, Success, Try}
 
 trait NostrHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
@@ -167,10 +168,12 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
   private def sendNostrEvent(
       event: NostrEvent): Future[Option[Sha256Digest]] = {
     val fs = sendingClients.map { client =>
-      client
-        .start()
-        .flatMap { _ =>
-          for {
+      Try(Await.result(client.start(), 5.seconds)) match {
+        case Failure(_) =>
+          logger.warn(s"Failed to connect to nostr relay: ${client.url}")
+          Future.successful(None)
+        case Success(_) =>
+          val f = for {
             idT <- client
               .publishEvent(event)
               .map(_ => Success(event.id))
@@ -184,8 +187,9 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
             }
             _ <- client.stop()
           } yield idT.toOption
-        }
-        .recover(_ => None)
+
+          f.recover(_ => None)
+      }
     }
 
     Future.sequence(fs).map(_.flatten.headOption)
