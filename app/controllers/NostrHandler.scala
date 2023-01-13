@@ -163,7 +163,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
           case Some(id) =>
             logger.info(s"Sent nostr event ${id.hex}")
           case None =>
-            logger.error("Failed to send nostr event")
+            logger.error("Failed to send nostr DM")
         }
         _ <- client.stop()
       } yield opt
