@@ -98,7 +98,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
   }
 
   private def startDmListener(client: NostrClient): Future[Unit] = {
-    for {
+    val f = for {
       _ <- client.start()
       _ <- client.subscribe(getDmFilter)
     } yield {
@@ -116,6 +116,10 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         case None => logger.error("No shutdown promise for nostr client!")
       }
     }
+
+    f.failed.foreach(err => logger.error(s"Error starting DM listener: $err"))
+
+    f
   }
 
   def listenForDMs(): Future[Unit] = {
