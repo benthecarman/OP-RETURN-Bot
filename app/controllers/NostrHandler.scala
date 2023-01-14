@@ -44,7 +44,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     kinds = Some(Vector(NostrKind.EncryptedDM)),
     `#e` = None,
     `#p` = Some(Vector(pubKey)),
-    since = Some(TimeUtil.currentEpochSecond),
+    since = Some(TimeUtil.currentEpochSecond - 3),
     until = None,
     limit = None
   )
@@ -97,11 +97,26 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       }
   }
 
-  def listenForDMs(): Future[Unit] = {
-    val filter = getDmFilter
-    val startFs = dmClients.map { client =>
-      client.start().flatMap(_ => client.subscribe(filter))
+  private def startDmListener(client: NostrClient): Future[Unit] = {
+    for {
+      _ <- client.start()
+      _ <- client.subscribe(getDmFilter)
+    } yield {
+      client.shutdownPOpt match {
+        case Some(shutdownP) =>
+          for {
+            _ <- shutdownP.future
+            _ <- client.stop()
+            _ <- startDmListener(client)
+          } yield ()
+          ()
+        case None => logger.error("No shutdown promise for nostr client!")
+      }
     }
+  }
+
+  def listenForDMs(): Future[Unit] = {
+    val startFs = dmClients.map(startDmListener)
 
     Future.sequence(startFs).map(_ => ())
   }
