@@ -119,11 +119,14 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
   protected def announceOnNostr(
       message: String,
       txId: DoubleSha256DigestBE): Future[Option[Sha256Digest]] = {
+
+    val censored = config.censorMessage(message)
+
     val content =
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |
-         |${config.censorMessage(message)}
+         |$censored
          |
          |https://mempool.space/tx/${txId.hex}
          |""".stripMargin
@@ -136,25 +139,27 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       content = content
     )
 
-    sendNostrEvent(event, badBoy = false).flatMap { _ =>
-      val content =
-        s"""
-           |🔔 🔔 NEW OP_RETURN 🔔 🔔
-           |
-           |$message
-           |
-           |https://mempool.space/tx/${txId.hex}
-           |""".stripMargin
+    sendNostrEvent(event, badBoy = false).flatMap { res =>
+      if (censored != message) {
+        val content =
+          s"""
+             |🔔 🔔 NEW OP_RETURN 🔔 🔔
+             |
+             |$message
+             |
+             |https://mempool.space/tx/${txId.hex}
+             |""".stripMargin
 
-      val event = NostrEvent.build(
-        privateKey = privateKey,
-        created_at = TimeUtil.currentEpochSecond,
-        kind = NostrKind.TextNote,
-        tags = JsArray.empty,
-        content = content
-      )
+        val event = NostrEvent.build(
+          privateKey = privateKey,
+          created_at = TimeUtil.currentEpochSecond,
+          kind = NostrKind.TextNote,
+          tags = JsArray.empty,
+          content = content
+        )
 
-      sendNostrEvent(event, badBoy = true)
+        sendNostrEvent(event, badBoy = true).map(_.orElse(res))
+      } else Future.successful(res)
     }
   }
 
