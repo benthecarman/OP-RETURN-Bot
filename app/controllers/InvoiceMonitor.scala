@@ -368,6 +368,7 @@ class InvoiceMonitor(
                   _ <- handler.handleTelegram(
                     rHash = rHash.hash,
                     invoice = invoice,
+                    invoiceDb = res,
                     tweetOpt = tweetOpt,
                     nostrOpt = nostrOpt,
                     message = message,

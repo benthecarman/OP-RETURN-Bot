@@ -11,7 +11,7 @@ import com.bot4s.telegram.methods.SetMyCommands
 import com.bot4s.telegram.models.{BotCommand, Message}
 import com.danielasfregola.twitter4s.entities.Tweet
 import config.OpReturnBotAppConfig
-import models.InvoiceDAO
+import models.{InvoiceDAO, InvoiceDb}
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
@@ -153,6 +153,7 @@ class TelegramHandler(controller: Controller)(implicit
   def handleTelegram(
       rHash: Sha256Digest,
       invoice: LnInvoice,
+      invoiceDb: InvoiceDb,
       tweetOpt: Option[Tweet],
       nostrOpt: Option[Sha256Digest],
       message: String,
@@ -162,6 +163,14 @@ class TelegramHandler(controller: Controller)(implicit
       totalChainFees: CurrencyUnit): Future[Unit] = {
     val amount = invoice.amount.get.toSatoshis
     val profit = amount - txDetails.totalFees
+
+    val deliveryMethod = if (invoiceDb.nostrKey.isDefined) {
+      "Nostr"
+    } else if (invoiceDb.telegramIdOpt.isDefined) {
+      "Telegram"
+    } else if (invoiceDb.nodeIdOpt.isDefined) {
+      "Lightning Onion Message"
+    } else "Web"
 
     val tweetLine = tweetOpt match {
       case Some(tweet) =>
@@ -178,6 +187,7 @@ class TelegramHandler(controller: Controller)(implicit
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |Message: $message
+         |Delivery: $deliveryMethod
          |rhash: ${rHash.hex}
          |tx: https://mempool.space/tx/${txDetails.txId.hex}
          |tweet: $tweetLine
