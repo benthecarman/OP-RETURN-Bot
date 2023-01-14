@@ -109,7 +109,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
             _ <- shutdownP.future
             _ = logger.info(
               s"Disconnected from nostr relay: ${client.url}, reconnecting...")
-            _ <- client.stop()
+            _ = client.stop()
             _ <- startDmListener(client)
           } yield ()
           ()
