@@ -102,10 +102,13 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       _ <- client.start()
       _ <- client.subscribe(getDmFilter)
     } yield {
+      logger.info(s"Started DM listener for ${client.url}")
       client.shutdownPOpt match {
         case Some(shutdownP) =>
           for {
             _ <- shutdownP.future
+            _ = logger.info(
+              s"Disconnected from nostr relay: ${client.url}, reconnecting...")
             _ <- client.stop()
             _ <- startDmListener(client)
           } yield ()
