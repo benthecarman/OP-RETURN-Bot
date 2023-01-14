@@ -178,7 +178,7 @@ case class OpReturnBotAppConfig(
   lazy val aesPasswordOpt: Option[AesPassword] = kmConf.aesPasswordOpt
   lazy val bip39PasswordOpt: Option[String] = kmConf.bip39PasswordOpt
 
-  private lazy val nostrRelays: Vector[String] = {
+  lazy val nostrRelays: Vector[String] = {
     if (config.hasPath("nostr.relays")) {
       config.getStringList(s"nostr.relays").asScala.toVector
     } else Vector.empty

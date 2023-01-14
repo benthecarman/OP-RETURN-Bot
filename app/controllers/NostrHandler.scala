@@ -1,6 +1,7 @@
 package controllers
 
 import grizzled.slf4j.Logging
+import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.crypto.ExtKeyVersion.SegWitMainNetPriv
 import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
@@ -83,7 +84,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private lazy val dmClients: Vector[NostrClient] = config.allRelays.map {
+  private lazy val dmClients: Vector[NostrClient] = config.nostrRelays.map {
     relay =>
       new NostrClient(relay, None) {
 
@@ -117,9 +118,13 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       }
     }
 
-    f.failed.foreach(err => logger.error(s"Error starting DM listener: $err"))
-
-    f
+    f.recoverWith { case err =>
+      logger.error(s"Error starting DM listener for ${client.url}: $err")
+      for {
+        _ <- AsyncUtil.nonBlockingSleep(1.minute)
+        _ <- startDmListener(client)
+      } yield ()
+    }
   }
 
   def listenForDMs(): Future[Unit] = {
