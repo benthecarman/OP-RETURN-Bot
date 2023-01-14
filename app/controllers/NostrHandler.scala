@@ -32,7 +32,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     )
 
     val event = NostrEvent.build(privateKey = privateKey,
-                                 created_at = TimeUtil.currentEpochSecond,
+                                 created_at = 1673719403L, // change me when updates are made
                                  tags = JsArray.empty,
                                  metadata = metadata)
 
