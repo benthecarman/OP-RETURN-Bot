@@ -31,10 +31,11 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         Some(new URL("https://opreturnbot.com/assets/images/op-return-bot.png"))
     )
 
-    val event = NostrEvent.build(privateKey = privateKey,
-                                 created_at = 1673719403L, // change me when updates are made
-                                 tags = JsArray.empty,
-                                 metadata = metadata)
+    val event = NostrEvent.build(
+      privateKey = privateKey,
+      created_at = 1673719403L, // change me when updates are made
+      tags = JsArray.empty,
+      metadata = metadata)
 
     sendNostrEvent(event, badBoy = false)
   }
