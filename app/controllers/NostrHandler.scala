@@ -71,11 +71,11 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         val message = NostrEvent.decryptDM(event, privateKey)
 
         for {
-          db <- processMessage(message = message,
-                               noTwitter = false,
-                               nodeIdOpt = None,
-                               telegramId = None,
-                               nostrKey = Some(event.pubkey))
+          db <- createInvoice(message = message,
+                              noTwitter = false,
+                              nodeIdOpt = None,
+                              telegramId = None,
+                              nostrKey = Some(event.pubkey))
           _ <- sendNostrDM(db.invoice.toString, event.pubkey)
         } yield logger.info(s"Sent invoice to ${event.pubkey.hex} over nostr!")
       }

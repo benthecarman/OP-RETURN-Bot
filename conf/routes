@@ -4,14 +4,16 @@
 
 # Home page
 GET         /                                controllers.Controller.index
+GET         /nip5                            controllers.Controller.createNip5
 POST        /createRequest                   controllers.Controller.createRequest
+POST        /createNip5Request               controllers.Controller.createNip5Request
 
 GET         /invoice                         controllers.Controller.invoice(invoice)
 GET         /success                         controllers.Controller.success(txId)
 GET         /connect                         controllers.Controller.connect
 GET         /lnurlp/:meta                    controllers.Controller.lnurlPay(meta)
 GET         /.well-known/lnurlp/*user        controllers.Controller.getLnurlPay(user)
-GET         /.well-known/nostr.json          controllers.Controller.nip5
+GET         /.well-known/nostr.json          controllers.Controller.nip5(name: Option[String])
 GET         /qr                              controllers.Controller.qrCode(string, width, height)
 
 # API

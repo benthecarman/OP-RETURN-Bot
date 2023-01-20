@@ -1,0 +1,56 @@
+@import controllers.Forms.Nip5Request
+
+@(form: Form[Nip5Request])(implicit request: MessagesRequestHeader)
+
+@main("Nostr NIP-05") {
+    @* Global errors are not tied to any particular form field *@
+    @if(form.hasGlobalErrors) {
+        @form.globalErrors.map { error: FormError =>
+            <div>
+                @error.key: @error.message
+            </div>
+        }
+    }
+
+    <h2>Nostr NIP-05</h2>
+    <p>
+        NIP-05 is a human-readable identifier for your nostr public key.
+        It makes finding and identifying your account on nostr easier.
+        A NIP-05 ID also gives you a purple checkmark on most clients!
+    </p>
+    <p> OP_RETURN Bot will create this for you and etch it into the bitcoin blockchain forever. </p>
+    <p> You can then have a NIP-05 ID for your nostr account like bob@@opreturnbot.com. </p>
+    <hr/>
+
+    <h3>Create NIP-05</h3>
+    <div class="jumbotron">
+        <div class="row">
+            <div class="col-md-4"></div>
+            <div class="col-md-4">
+                <form method="post" action="createNip5Request">
+                    @helper.CSRF.formField
+                    <div class="form-group">
+                        <label for="message">Name:</label>
+                        <input maxlength="10" minlength="1" type="text" class="form-control" placeholder="Your username" name="name" id="name">
+                        <div class="text-danger" style="float: right">
+                        @form.error("name").map(err => err.message)
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="message">Public Key:</label>
+                        <input maxlength="64" minlength="1" type="text" class="form-control" placeholder="npub1..." name="pubkey" id="pubkey">
+                        <div class="text-danger" style="float: right">
+                        @form.error("pubkey").map(err => err.message)
+                        </div>
+                    </div>
+                    <br/>
+                    <br/>
+                    <button style="float: right" type="submit" class="btn btn-primary">Create Invoice</button>
+                </form>
+            </div>
+            <div class="col-md-4"></div>
+        </div>
+    </div>
+    <br>
+    <br>
+}

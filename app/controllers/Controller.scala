@@ -6,7 +6,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.translnd.rotator.PubkeyRotator
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
-import models.{InvoiceDAO, InvoiceDb}
+import models.{InvoiceDAO, InvoiceDb, Nip5DAO}
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
@@ -67,6 +67,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   }
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val nip5DAO: Nip5DAO = Nip5DAO()
 
   // The URL to the request.  You can call this directly from the template, but it
   // can be more convenient to leave the template completely stateless i.e. all
@@ -116,6 +117,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
+  def createNip5: Action[AnyContent] = {
+    Action { implicit request: MessagesRequest[AnyContent] =>
+      // Pass an unpopulated form to the template
+      Ok(views.html.createNip5(nip5RequestForm))
+        .withHeaders(("Onion-Location", onionAddr))
+    }
+  }
+
   def connect: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       if (uri == uriErrorString) {
@@ -131,28 +140,39 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  def nip5: Action[AnyContent] = {
+  private val defaultNip5: JsObject = Json.obj(
+    "names" -> Json.obj(
+      "_" -> invoiceMonitor.pubKey.hex,
+      "me" -> invoiceMonitor.pubKey.hex,
+      "opreturnbot" -> invoiceMonitor.pubKey.hex,
+      "op_return_bot" -> invoiceMonitor.pubKey.hex,
+      "OP_RETURN bot" -> invoiceMonitor.pubKey.hex,
+      "OP_RETURN Bot" -> invoiceMonitor.pubKey.hex
+    ))
+
+  def nip5(name: Option[String]): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
-      val json = Json.obj(
-        "names" -> Json.obj(
-          "_" -> invoiceMonitor.pubKey.hex,
-          "me" -> invoiceMonitor.pubKey.hex,
-          "opreturnbot" -> invoiceMonitor.pubKey.hex,
-          "op_return_bot" -> invoiceMonitor.pubKey.hex,
-          "OP_RETURN bot" -> invoiceMonitor.pubKey.hex,
-          "OP_RETURN Bot" -> invoiceMonitor.pubKey.hex
-        ))
+      val jsonF = name match {
+        case Some(value) =>
+          nip5DAO.getPublicKey(value).map {
+            case Some(pubkey) =>
+              Json.obj("names" -> Json.obj(value -> pubkey.hex))
+            case None => defaultNip5
+          }
+        case None => Future.successful(defaultNip5)
+      }
 
-      val result = Ok(json)
-        .withHeaders(("Onion-Location", onionAddr))
-        .withHeaders(
-          "Access-Control-Allow-Origin" -> "*",
-          "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
-          "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-          "Access-Control-Allow-Credentials" -> "true"
-        )
+      jsonF.map { json =>
+        Ok(json)
+          .withHeaders(("Onion-Location", onionAddr))
+          .withHeaders(
+            "Access-Control-Allow-Origin" -> "*",
+            "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+            "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+            "Access-Control-Allow-Credentials" -> "true"
+          )
 
-      Future.successful(result)
+      }
     }
   }
 
@@ -341,12 +361,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       def success(input: OpReturnRequest): Future[Result] = {
         for {
-          invoiceDb <- invoiceMonitor.processMessage(message = input.message,
-                                                     noTwitter =
-                                                       input.noTwitter,
-                                                     nodeIdOpt = None,
-                                                     telegramId = None,
-                                                     nostrKey = None)
+          invoiceDb <- invoiceMonitor.createInvoice(message = input.message,
+                                                    noTwitter = input.noTwitter,
+                                                    nodeIdOpt = None,
+                                                    telegramId = None,
+                                                    nostrKey = None)
         } yield {
           Ok(invoiceDb.invoice.toString())
         }
@@ -377,13 +396,43 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
           invoiceMonitor
-            .processMessage(data.message, data.noTwitter, None, None, None)
+            .createInvoice(data.message, data.noTwitter, None, None, None)
             .map { invoiceDb =>
               Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
             }
       }
 
       val formValidationResult = opReturnRequestForm.bindFromRequest()
+      formValidationResult.fold(errorFunction, successFunction)
+    }
+  }
+
+  // This will be the action that handles our form post
+  def createNip5Request: Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      val errorFunction: Form[Nip5Request] => Future[Result] = {
+        formWithErrors: Form[Nip5Request] =>
+          // This is the bad case, where the form had validation errors.
+          // Let's show the user the form again, with the errors highlighted.
+          // Note how we pass the form with errors to the template.
+          logger.warn(
+            "From with errors: " + formWithErrors.errors.mkString(
+              " ") + s"\n${formWithErrors.data}")
+
+          Future.successful(BadRequest(views.html.createNip5(formWithErrors)))
+      }
+
+      // This is the good case, where the form was successfully parsed as an OpReturnRequest
+      val successFunction: Nip5Request => Future[Result] = {
+        data: Nip5Request =>
+          invoiceMonitor
+            .createNip5Invoice(data.name, data.publicKey)
+            .map { invoiceDb =>
+              Redirect(routes.Controller.invoice(invoiceDb.invoice.toString))
+            }
+      }
+
+      val formValidationResult = nip5RequestForm.bindFromRequest()
       formValidationResult.fold(errorFunction, successFunction)
     }
   }
