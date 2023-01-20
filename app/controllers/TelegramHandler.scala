@@ -103,11 +103,11 @@ class TelegramHandler(controller: Controller)(implicit
       val str = vec(1)
       val id = msg.chat.id
       controller.invoiceMonitor
-        .processMessage(message = str,
-                        noTwitter = false,
-                        nodeIdOpt = None,
-                        telegramId = Some(id),
-                        nostrKey = None)
+        .createInvoice(message = str,
+                       noTwitter = false,
+                       nodeIdOpt = None,
+                       telegramId = Some(id),
+                       nostrKey = None)
         .flatMap { db =>
           val replyF = reply(db.invoice.toString)
 

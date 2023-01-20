@@ -8,9 +8,10 @@ import config.OpReturnBotAppConfig
 import controllers.OpReturnBotTLV.BroadcastTransactionTLV
 import grizzled.slf4j.Logging
 import lnrpc.Invoice
-import models.{InvoiceDAO, InvoiceDb}
+import models.{InvoiceDAO, InvoiceDb, Nip5DAO, Nip5Db}
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency.Satoshis
+import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.ln.node.NodeId
@@ -24,9 +25,10 @@ import org.bitcoins.crypto._
 import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
 import org.bitcoins.feeprovider._
 import org.bitcoins.lnd.rpc.{LndRpcClient, LndUtils}
+import org.scalastr.core.NostrPublicKey
 import scodec.bits.ByteVector
 import signrpc.TxOut
-import slick.dbio.DBIOAction
+import slick.dbio.{DBIO, DBIOAction}
 import walletrpc.SendOutputsRequest
 
 import scala.collection.mutable.ArrayBuffer
@@ -54,6 +56,7 @@ class InvoiceMonitor(
     BitcoinerLiveFeeRateProvider(30, None)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val nip5DAO: Nip5DAO = Nip5DAO()
 
   def startSubscription(): Unit = {
     val parallelism = Runtime.getRuntime.availableProcessors()
@@ -416,12 +419,9 @@ class InvoiceMonitor(
     }
   }
 
-  def processMessage(
+  private def createInvoice(
       message: String,
-      noTwitter: Boolean,
-      nodeIdOpt: Option[NodeId],
-      telegramId: Option[Long],
-      nostrKey: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
+      noTwitter: Boolean): Future[(LnInvoice, SatoshisPerVirtualByte)] = {
     require(
       message.getBytes.length <= 80,
       "OP_Return message received was too long, must be less than 80 chars")
@@ -445,32 +445,88 @@ class InvoiceMonitor(
 
         val hash = CryptoUtil.sha256(message)
 
-//        val createInvoiceF = pubkeyRotator
-//          .createInvoice(hash, sats, expiry)
-        val createInvoiceF =
-          lnd.addInvoice(hash, sats.satoshis, expiry).map(_.invoice)
-
-        createInvoiceF
-          .flatMap { invoice =>
-            val db: InvoiceDb =
-              InvoiceDb(
-                rHash = invoice.lnTags.paymentHash.hash,
-                invoice = invoice,
-                message = message,
-                noTwitter = noTwitter,
-                feeRate = feeRate,
-                closed = false,
-                nodeIdOpt = nodeIdOpt,
-                telegramIdOpt = telegramId,
-                nostrKey = nostrKey,
-                txOpt = None,
-                txIdOpt = None,
-                profitOpt = None,
-                chainFeeOpt = None
-              )
-            invoiceDAO.create(db)
-          }
+        lnd.addInvoice(hash, sats.satoshis, expiry).map(t => (t.invoice, rate))
       }
+  }
+
+  def createInvoice(
+      message: String,
+      noTwitter: Boolean,
+      nodeIdOpt: Option[NodeId],
+      telegramId: Option[Long],
+      nostrKey: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
+    createInvoice(message, noTwitter)
+      .flatMap { case (invoice, feeRate) =>
+        val db: InvoiceDb =
+          InvoiceDb(
+            rHash = invoice.lnTags.paymentHash.hash,
+            invoice = invoice,
+            message = message,
+            noTwitter = noTwitter,
+            feeRate = feeRate,
+            closed = false,
+            nodeIdOpt = nodeIdOpt,
+            telegramIdOpt = telegramId,
+            nostrKey = nostrKey,
+            txOpt = None,
+            txIdOpt = None,
+            profitOpt = None,
+            chainFeeOpt = None
+          )
+        invoiceDAO.create(db)
+      }
+  }
+
+  private val takenNames = Vector("_",
+                                  "me",
+                                  "opreturnbot",
+                                  "op_return_bot",
+                                  "OP_RETURN bot",
+                                  "OP_RETURN Bot") ++ config.bannedWords
+
+  def createNip5Invoice(
+      name: String,
+      publicKey: NostrPublicKey): Future[InvoiceDb] = {
+    if (takenNames.contains(name)) {
+      Future.failed(
+        new IllegalArgumentException(s"Cannot create invoice for NIP-05 $name"))
+    } else {
+      val message = s"nip5:$name:${publicKey.hex}"
+
+      createInvoice(message, noTwitter = false)
+        .flatMap { case (invoice, feeRate) =>
+          val db: InvoiceDb =
+            InvoiceDb(
+              rHash = invoice.lnTags.paymentHash.hash,
+              invoice = invoice,
+              message = message,
+              noTwitter = false,
+              feeRate = feeRate,
+              closed = false,
+              nodeIdOpt = None,
+              telegramIdOpt = None,
+              nostrKey = None,
+              txOpt = None,
+              txIdOpt = None,
+              profitOpt = None,
+              chainFeeOpt = None
+            )
+
+          val action = nip5DAO.getPublicKeyAction(name).flatMap {
+            case Some(key) =>
+              val nostrKey = NostrPublicKey(key)
+              DBIO.failed(new IllegalArgumentException(
+                s"Cannot create invoice for NIP-05 $name, already exists for key $nostrKey"))
+            case None =>
+              for {
+                db <- invoiceDAO.createAction(db)
+                _ <- nip5DAO.createAction(Nip5Db(db.rHash, name, publicKey.key))
+              } yield db
+          }
+
+          invoiceDAO.safeDatabase.run(action)
+        }
+    }
   }
 
   private def fetchFeeRate(): Future[SatoshisPerVirtualByte] = {
