@@ -9,6 +9,7 @@ import controllers.OpReturnBotTLV.BroadcastTransactionTLV
 import grizzled.slf4j.Logging
 import lnrpc.Invoice
 import models.{InvoiceDAO, InvoiceDb, Nip5DAO, Nip5Db}
+import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.protocol.ln.LnInvoice
@@ -22,6 +23,7 @@ import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.BitcoinScriptUtil
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
+import org.bitcoins.esplora.{EsploraClient, MempoolSpaceEsploraSite}
 import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
 import org.bitcoins.feeprovider._
 import org.bitcoins.lnd.rpc.{LndRpcClient, LndUtils}
@@ -57,6 +59,8 @@ class InvoiceMonitor(
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
+
+  val esplora = new EsploraClient(MempoolSpaceEsploraSite(MainNet), None)
 
   def startSubscription(): Unit = {
     val parallelism = Runtime.getRuntime.availableProcessors()
@@ -243,8 +247,11 @@ class InvoiceMonitor(
 
     val createTxF = for {
       transaction <- lnd.sendOutputs(request)
-      errorOpt <- lnd.publishTransaction(transaction)
       txId = transaction.txIdBE
+
+      esploraF = esplora.broadcastTransaction(transaction).recover(_ => txId)
+      errorOpt <- lnd.publishTransaction(transaction)
+      _ <- esploraF
 
       _ = errorOpt match {
         case Some(error) =>
