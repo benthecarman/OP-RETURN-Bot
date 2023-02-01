@@ -145,11 +145,6 @@ class InvoiceMonitor(
 
       }
       .runWith(Sink.ignore)
-
-    system.scheduler.scheduleAtFixedRate(1.minute, 1.minute) { () =>
-      processUnhandledInvoices()
-      ()
-    }
     ()
   }
 
