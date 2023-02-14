@@ -3,10 +3,9 @@ package controllers
 import akka.actor.ActorSystem
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
-import com.translnd.rotator.PubkeyRotator
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
-import models.{InvoiceDAO, InvoiceDb, Nip5DAO}
+import models._
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
@@ -14,6 +13,7 @@ import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnurl.json.LnURLJsonModels._
+import org.scalastr.core.NostrEvent
 import play.api.data._
 import play.api.libs.json._
 import play.api.mvc._
@@ -22,7 +22,7 @@ import scodec.bits.ByteVector
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
-import java.net.URL
+import java.net.{URL, URLDecoder}
 import javax.imageio.ImageIO
 import javax.inject.Inject
 import scala.collection._
@@ -50,9 +50,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   lazy val lnd: LndRpcClient = config.lndRpcClient
 
-  lazy val pubkeyRotator: PubkeyRotator =
-    PubkeyRotator(lnd)(config.transLndConfig, system)
-
   val startF: Future[Unit] = config.start()
 
   val uriErrorString = "Error: try again"
@@ -68,6 +65,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
+  val zapDAO: ZapDAO = ZapDAO()
 
   // The URL to the request.  You can call this directly from the template, but it
   // can be more convenient to leave the template completely stateless i.e. all
@@ -86,10 +84,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   private val telegramHandler = new TelegramHandler(this)
 
   lazy val invoiceMonitor =
-    new InvoiceMonitor(lnd,
-                       pubkeyRotator,
-                       Some(telegramHandler),
-                       recentTransactions)
+    new InvoiceMonitor(lnd, Some(telegramHandler), recentTransactions)
 
   startF.map { _ =>
     setURI()
@@ -129,12 +124,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       if (uri == uriErrorString) {
         setURI().map { _ =>
-          Ok(views.html.connect(uri, invoiceMonitor.pubKey))
+          Ok(views.html.connect(uri, invoiceMonitor.nostrPubKey))
             .withHeaders(("Onion-Location", onionAddr))
         }
       } else {
         Future.successful(
-          Ok(views.html.connect(uri, invoiceMonitor.pubKey))
+          Ok(views.html.connect(uri, invoiceMonitor.nostrPubKey))
             .withHeaders(("Onion-Location", onionAddr)))
       }
     }
@@ -142,12 +137,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   private val defaultNip5: JsObject = Json.obj(
     "names" -> Json.obj(
-      "_" -> invoiceMonitor.pubKey.hex,
-      "me" -> invoiceMonitor.pubKey.hex,
-      "opreturnbot" -> invoiceMonitor.pubKey.hex,
-      "op_return_bot" -> invoiceMonitor.pubKey.hex,
-      "OP_RETURN bot" -> invoiceMonitor.pubKey.hex,
-      "OP_RETURN Bot" -> invoiceMonitor.pubKey.hex
+      "_" -> invoiceMonitor.nostrPubKey.hex,
+      "me" -> invoiceMonitor.nostrPubKey.hex,
+      "opreturnbot" -> invoiceMonitor.nostrPubKey.hex,
+      "op_return_bot" -> invoiceMonitor.nostrPubKey.hex,
+      "OP_RETURN bot" -> invoiceMonitor.nostrPubKey.hex,
+      "OP_RETURN Bot" -> invoiceMonitor.nostrPubKey.hex
     ))
 
   def nip5(name: Option[String]): Action[AnyContent] = {
@@ -184,12 +179,17 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         s"[[\"text/plain\",\"A donation to ben!\"],[\"text/identifier\",\"$user@${request.host}\"]]"
       val hash = CryptoUtil.sha256(ByteVector(metadata.getBytes("UTF-8"))).hex
 
+      val url = new URL(
+        s"$proto://${request.host}/lnurlp/$hash?pubkey=${invoiceMonitor.nostrPubKey.hex}")
+
       val response =
         LnURLPayResponse(
-          callback = new URL(s"$proto://${request.host}/lnurlp/$hash"),
+          callback = url,
           maxSendable = MilliSatoshis(Bitcoins.one),
           minSendable = MilliSatoshis(Satoshis.one),
-          metadata = metadata
+          metadata = metadata,
+          nostrPubkey = Some(invoiceMonitor.nostrPubKey),
+          allowsNostr = Some(true)
         )
 
       val result = Ok(Json.toJson(response)).withHeaders(
@@ -203,21 +203,57 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  def lnurlPay(meta: String): Action[AnyContent] = {
+  def lnurlPay(meta: String, pubkey: Option[String]): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       request.getQueryString("amount") match {
         case Some(amountStr) =>
           val amount = MilliSatoshis(amountStr.toLong)
-          val hash = Sha256Digest(meta)
 
-          lnd.addInvoice(hash, amount, 360).map { invoice =>
-            val response = LnURLPayInvoice(invoice.invoice, None)
-            Ok(Json.toJson(response)).withHeaders(
-              "Access-Control-Allow-Origin" -> "*",
-              "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
-              "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-              "Access-Control-Allow-Credentials" -> "true"
-            )
+          request.getQueryString("nostr") match {
+            case Some(eventStr) =>
+              logger.info("Receiving zap request!")
+              // nostr zap
+              val decoded = URLDecoder.decode(eventStr, "UTF-8")
+              val event = Json.parse(decoded).as[NostrEvent]
+              require(NostrEvent.isValidZapRequest(event),
+                      "not valid zap request")
+
+              val hash = CryptoUtil.sha256(decoded)
+              val myKey = pubkey
+                .map(SchnorrPublicKey.fromHex)
+                .getOrElse(invoiceMonitor.nostrPubKey)
+
+              for {
+                invoice <- lnd.addInvoice(hash, amount, 360)
+                db = ZapDb(rHash = invoice.rHash.hash,
+                           invoice = invoice.invoice,
+                           myKey = myKey,
+                           amount = amount,
+                           request = decoded,
+                           noteId = None)
+                _ <- zapDAO.create(db)
+              } yield {
+                val response = LnURLPayInvoice(invoice.invoice, None)
+                Ok(Json.toJson(response)).withHeaders(
+                  "Access-Control-Allow-Origin" -> "*",
+                  "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+                  "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+                  "Access-Control-Allow-Credentials" -> "true"
+                )
+              }
+            case None =>
+              // normal lnurl-pay
+              val hash = Sha256Digest(meta)
+
+              lnd.addInvoice(hash, amount, 360).map { invoice =>
+                val response = LnURLPayInvoice(invoice.invoice, None)
+                Ok(Json.toJson(response)).withHeaders(
+                  "Access-Control-Allow-Origin" -> "*",
+                  "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+                  "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+                  "Access-Control-Allow-Credentials" -> "true"
+                )
+              }
           }
         case None =>
           val error =

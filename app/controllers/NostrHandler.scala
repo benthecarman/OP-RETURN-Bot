@@ -8,7 +8,7 @@ import org.bitcoins.crypto._
 import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
 import org.scalastr.core._
-import play.api.libs.json._
+import play.api.libs.json.Json
 
 import java.net.URL
 import scala.collection.mutable
@@ -32,12 +32,22 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     )
 
     val event = NostrEvent.build(
-      privateKey = privateKey,
+      privateKey = nostrPrivateKey,
       created_at = 1673719403L, // change me when updates are made
-      tags = JsArray.empty,
+      tags = Vector.empty,
       metadata = metadata)
 
-    sendNostrEvent(event, badBoy = false)
+    val extraTag = config.extraNostrPubKey.map(pk => Json.arr("p", pk.hex))
+    val contacts = NostrEvent.build(
+      privateKey = nostrPrivateKey,
+      created_at = 1676332751L, // change me when updates are made
+      kind = NostrKind.Contacts,
+      tags = Vector(Json.arr("p", nostrPubKey.hex)) ++ extraTag,
+      content = ""
+    )
+
+    sendNostrEvent(event, config.allRelays).flatMap(_ =>
+      sendNostrEvent(contacts, config.allRelays))
   }
 
   private def getDmFilter: NostrFilter = NostrFilter(
@@ -45,7 +55,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     authors = None,
     kinds = Some(Vector(NostrKind.EncryptedDM)),
     `#e` = None,
-    `#p` = Some(Vector(pubKey)),
+    `#p` = Some(Vector(nostrPubKey)),
     since = Some(TimeUtil.currentEpochSecond - 3),
     until = None,
     limit = None
@@ -67,8 +77,8 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
       if (skip) Future.unit
       else {
-        logger.info("Processing DM event: " + event.id.hex)
-        val message = NostrEvent.decryptDM(event, privateKey)
+        logger.info("Processing DM event: " + NostrNoteId(event.id))
+        val message = NostrEvent.decryptDM(event, nostrPrivateKey)
 
         for {
           db <- createInvoice(message = message,
@@ -77,7 +87,8 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                               telegramId = None,
                               nostrKey = Some(event.pubkey))
           _ <- sendNostrDM(db.invoice.toString, event.pubkey)
-        } yield logger.info(s"Sent invoice to ${event.pubkey.hex} over nostr!")
+        } yield logger.info(
+          s"Sent invoice to ${NostrPublicKey(event.pubkey)} over nostr!")
       }
     } else {
       logger.warn(s"Got unexpected event: $event")
@@ -134,7 +145,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     Future.sequence(startFs).map(_ => ())
   }
 
-  private[this] lazy val privateKey: ECPrivateKey =
+  lazy val nostrPrivateKey: ECPrivateKey =
     WalletStorage
       .getPrivateKeyFromDisk(config.seedPath,
                              SegWitMainNetPriv,
@@ -142,7 +153,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                              config.bip39PasswordOpt)
       .key
 
-  lazy val pubKey: SchnorrPublicKey = privateKey.schnorrPublicKey
+  lazy val nostrPubKey: SchnorrPublicKey = nostrPrivateKey.schnorrPublicKey
 
   protected def announceOnNostr(
       message: String,
@@ -160,14 +171,14 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
          |""".stripMargin
 
     val event = NostrEvent.build(
-      privateKey = privateKey,
+      privateKey = nostrPrivateKey,
       created_at = TimeUtil.currentEpochSecond,
       kind = NostrKind.TextNote,
-      tags = JsArray.empty,
+      tags = Vector.empty,
       content = content
     )
 
-    sendNostrEvent(event, badBoy = false).flatMap { res =>
+    sendNostrEvent(event, config.allRelays).flatMap { res =>
       if (censored != message) {
         val content =
           s"""
@@ -179,14 +190,14 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
              |""".stripMargin
 
         val event = NostrEvent.build(
-          privateKey = privateKey,
+          privateKey = nostrPrivateKey,
           created_at = TimeUtil.currentEpochSecond,
           kind = NostrKind.TextNote,
-          tags = JsArray.empty,
+          tags = Vector.empty,
           content = content
         )
 
-        sendNostrEvent(event, badBoy = true).map(_.orElse(res))
+        sendNostrEvent(event, config.badBoyNostrRelays).map(_.orElse(res))
       } else Future.successful(res)
     }
   }
@@ -196,16 +207,15 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       pubkey: SchnorrPublicKey): Future[Option[Sha256Digest]] = {
     val event =
       NostrEvent.encryptedDM(message,
-                             privateKey,
+                             nostrPrivateKey,
                              TimeUtil.currentEpochSecond,
-                             JsArray.empty,
+                             Vector.empty,
                              pubkey)
 
-    sendNostrEvent(event, badBoy = false)
+    sendNostrEvent(event, config.allRelays)
   }
 
-  private def sendingClients(badBoy: Boolean): Vector[NostrClient] = {
-    val relays = if (badBoy) config.badBoyNostrRelays else config.allRelays
+  private def sendingClients(relays: Vector[String]): Vector[NostrClient] = {
     relays.map { relay =>
       new NostrClient(relay, None) {
 
@@ -220,10 +230,10 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private def sendNostrEvent(
+  def sendNostrEvent(
       event: NostrEvent,
-      badBoy: Boolean): Future[Option[Sha256Digest]] = {
-    val fs = sendingClients(badBoy).map { client =>
+      relays: Vector[String]): Future[Option[Sha256Digest]] = {
+    val fs = sendingClients(relays).map { client =>
       Try(Await.result(client.start(), 5.seconds)) match {
         case Failure(_) =>
           logger.warn(s"Failed to connect to nostr relay: ${client.url}")
@@ -237,7 +247,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
             _ = idT match {
               case Success(id) =>
-                logger.info(s"Sent nostr event ${id.hex}")
+                logger.info(s"Sent nostr event ${NostrNoteId(id)}")
               case Failure(err) =>
                 logger.error("Failed to send nostr event: ", err)
             }

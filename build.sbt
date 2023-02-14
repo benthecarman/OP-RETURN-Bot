@@ -6,9 +6,8 @@ import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 
-val bitcoinsV = "1.9.7-49-8bd10d0f-SNAPSHOT"
-val translndV = "0.1.0-103-985efec8-SNAPSHOT"
-val scalastrV = "0.0.0-50-9c102437-SNAPSHOT"
+val bitcoinsV = "1.9.7-80-57b4421f-SNAPSHOT"
+val scalastrV = "0.0.0-57-60bfa1f5-SNAPSHOT"
 val akkaV = "2.6.20"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
@@ -27,8 +26,9 @@ lazy val root = project
     libraryDependencies ++= Seq(
       guice,
       "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
-      "com.translnd" %% "pubkey-rotator" % translndV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-lnurl" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
       "org.scalastr" %% "client" % scalastrV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-key-manager" % bitcoinsV withSources () withJavadoc (),

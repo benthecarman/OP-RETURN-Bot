@@ -1,6 +1,5 @@
 package controllers
 
-import com.translnd.rotator.PubkeyRotator
 import config.OpReturnBotAppConfig
 import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.script.ScriptType
@@ -16,7 +15,6 @@ class InvoiceMonitorTest extends DualLndFixture {
 
   implicit val config: OpReturnBotAppConfig =
     OpReturnBotAppConfig(tmpDir(), Vector.empty)
-  import config.transLndConfig
 
   before {
     val startF = config.start()
@@ -31,9 +29,8 @@ class InvoiceMonitorTest extends DualLndFixture {
 
   it must "process an invoice" in { param =>
     val (_, lndA, _) = param
-    val pubkeyRotator = PubkeyRotator(lndA)
     val monitor =
-      new InvoiceMonitor(lndA, pubkeyRotator, None, ArrayBuffer.empty)
+      new InvoiceMonitor(lndA, None, ArrayBuffer.empty)
 
     monitor.startSubscription()
 
@@ -56,9 +53,8 @@ class InvoiceMonitorTest extends DualLndFixture {
 
   it must "process a paid invoice" in { param =>
     val (bitcoind, lndA, lndB) = param
-    val pubkeyRotator = PubkeyRotator(lndA)
     val monitor =
-      new InvoiceMonitor(lndA, pubkeyRotator, None, ArrayBuffer.empty)
+      new InvoiceMonitor(lndA, None, ArrayBuffer.empty)
 
     monitor.startSubscription()
 

@@ -3,7 +3,6 @@ package config
 import akka.actor.ActorSystem
 import com.danielasfregola.twitter4s.TwitterRestClient
 import com.danielasfregola.twitter4s.entities.{AccessToken, ConsumerToken}
-import com.translnd.rotator.config.TransLndAppConfig
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
@@ -11,13 +10,14 @@ import org.bitcoins.commons.config._
 import org.bitcoins.commons.util.NativeProcessFactory
 import org.bitcoins.core.hd.HDPurposes
 import org.bitcoins.core.wallet.keymanagement.KeyManagerParams
-import org.bitcoins.crypto.AesPassword
+import org.bitcoins.crypto.{AesPassword, SchnorrPublicKey}
 import org.bitcoins.db._
 import org.bitcoins.keymanager.WalletStorage
 import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config._
+import org.scalastr.core.{NostrPrivateKey, NostrPublicKey}
 import scodec.bits.ByteVector
 
 import java.io.File
@@ -53,9 +53,6 @@ case class OpReturnBotAppConfig(
     OpReturnBotAppConfig(directory, configs)
 
   val baseDatadir: Path = directory
-
-  implicit lazy val transLndConfig: TransLndAppConfig =
-    TransLndAppConfig(directory, configOverrides)
 
   private lazy val lndDataDir: Path = {
     config.getStringOrNone(s"bitcoin-s.lnd.datadir") match {
@@ -178,6 +175,16 @@ case class OpReturnBotAppConfig(
   lazy val aesPasswordOpt: Option[AesPassword] = kmConf.aesPasswordOpt
   lazy val bip39PasswordOpt: Option[String] = kmConf.bip39PasswordOpt
 
+  lazy val extraNostrPrivKey: Option[NostrPrivateKey] = {
+    if (config.hasPath("nostr.extraNostrPrivKey")) {
+      val privKey = config.getString("nostr.extraNostrPrivKey")
+      Some(NostrPrivateKey.fromString(privKey))
+    } else None
+  }
+
+  lazy val extraNostrPubKey: Option[SchnorrPublicKey] =
+    extraNostrPrivKey.map(_.key.schnorrPublicKey)
+
   lazy val nostrRelays: Vector[String] = {
     if (config.hasPath("nostr.relays")) {
       config.getStringList(s"nostr.relays").asScala.toVector
@@ -212,18 +219,17 @@ case class OpReturnBotAppConfig(
   }
 
   override def start(): Future[Unit] = {
-    transLndConfig.start().map { _ =>
-      logger.info(s"Initializing setup")
+    logger.info(s"Initializing setup")
 
-      if (Files.notExists(baseDatadir)) {
-        Files.createDirectories(baseDatadir)
-      }
-
-      val numMigrations = migrate().migrationsExecuted
-      logger.info(s"Applied $numMigrations")
-
-      initialize()
+    if (Files.notExists(baseDatadir)) {
+      Files.createDirectories(baseDatadir)
     }
+
+    val numMigrations = migrate().migrationsExecuted
+    logger.info(s"Applied $numMigrations")
+
+    initialize()
+    Future.unit
   }
 
   override def stop(): Future[Unit] = Future.unit
