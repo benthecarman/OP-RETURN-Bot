@@ -179,8 +179,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         s"[[\"text/plain\",\"A donation to ben!\"],[\"text/identifier\",\"$user@${request.host}\"]]"
       val hash = CryptoUtil.sha256(ByteVector(metadata.getBytes("UTF-8"))).hex
 
+      val pubkey = if (user == "ben") {
+        config.extraNostrPubKey.getOrElse(invoiceMonitor.nostrPubKey)
+      } else invoiceMonitor.nostrPubKey
+
       val url = new URL(
-        s"$proto://${request.host}/lnurlp/$hash?pubkey=${invoiceMonitor.nostrPubKey.hex}")
+        s"$proto://${request.host}/lnurlp/$hash?pubkey=${pubkey.hex}")
 
       val response =
         LnURLPayResponse(
