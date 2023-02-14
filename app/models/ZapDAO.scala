@@ -10,7 +10,7 @@ import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
 import org.bitcoins.db.{CRUD, DbCommonsColumnMappers, SlickUtil}
-import org.scalastr.core.NostrEvent
+import org.scalastr.core.{NostrEvent, NostrNoteId}
 import play.api.libs.json.Json
 import slick.lifted.ProvenShape
 
@@ -24,6 +24,7 @@ case class ZapDb(
     request: String,
     noteId: Option[Sha256Digest]) {
   def requestEvent: NostrEvent = Json.parse(request).as[NostrEvent]
+  def noteIdOpt: Option[NostrNoteId] = noteId.map(NostrNoteId(_))
 }
 
 case class ZapDAO()(implicit

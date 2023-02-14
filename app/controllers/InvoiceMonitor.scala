@@ -205,6 +205,7 @@ class InvoiceMonitor(
       _ <- sendNostrEvent(requestEvent, relays)
       id <- sendNostrEvent(zapEvent, relays)
       res <- zapDAO.update(zapDb.copy(noteId = id))
+      _ <- telegramHandlerOpt.map(_.handleZap(res)).getOrElse(Future.unit)
     } yield res
   }
 

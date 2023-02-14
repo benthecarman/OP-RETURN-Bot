@@ -11,13 +11,14 @@ import com.bot4s.telegram.methods.SetMyCommands
 import com.bot4s.telegram.models.{BotCommand, Message}
 import com.danielasfregola.twitter4s.entities.Tweet
 import config.OpReturnBotAppConfig
-import models.{InvoiceDAO, InvoiceDb}
+import models.{InvoiceDAO, InvoiceDb, ZapDb}
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.util.StartStopAsync
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
+import org.scalastr.core.{NostrNoteId, NostrPublicKey}
 import sttp.capabilities.akka.AkkaStreams
 import sttp.client3.SttpBackend
 import sttp.client3.akkahttp.AkkaHttpBackend
@@ -216,6 +217,19 @@ class TelegramHandler(controller: Controller)(implicit
          |""".stripMargin
 
     sendTelegramMessage(telegramMsg, telegramId.toString)
+  }
+
+  def handleZap(zapDb: ZapDb): Future[Unit] = {
+    val telegramMsg =
+      s"""
+         |⚡ ⚡ Zapped! ⚡ ⚡
+         |
+         |Amount: ${printAmount(zapDb.amount.toSatoshis)}
+         |From: ${NostrPublicKey(zapDb.requestEvent.pubkey)}
+         |Note: ${zapDb.noteIdOpt.map(_.toString).getOrElse("Failed")}
+         |""".stripMargin
+
+    sendTelegramMessage(telegramMsg, myTelegramId)
   }
 
   private def createReport(): Future[String] = {
