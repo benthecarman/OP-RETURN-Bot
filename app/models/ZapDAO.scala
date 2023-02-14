@@ -52,6 +52,14 @@ case class ZapDAO()(implicit
       ts: Vector[ZapDb]): Query[ZabTable, ZapDb, Seq] =
     findByPrimaryKeys(ts.map(_.rHash))
 
+  def totalZappedAction(): DBIOAction[Satoshis, NoStream, Effect.Read] = {
+    table
+      .map(_.amount)
+      .sum
+      .result
+      .map(_.map(_.toSatoshis).getOrElse(Satoshis.zero))
+  }
+
   class ZabTable(tag: Tag) extends Table[ZapDb](tag, schemaName, "zaps") {
 
     def rHash: Rep[Sha256Digest] = column("r_hash", O.PrimaryKey)

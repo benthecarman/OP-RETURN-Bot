@@ -59,10 +59,14 @@ case class InvoiceDAO()(implicit
     safeDatabase.run(query.result).map(_.headOption)
   }
 
-  def completed(): Future[Vector[InvoiceDb]] = {
-    val query = table.filter(_.txIdOpt.isDefined)
+  def completedAction(): DBIOAction[Vector[InvoiceDb],
+    NoStream,
+    Effect.Read] = {
+    table.filter(_.txIdOpt.isDefined).result.map(_.toVector)
+  }
 
-    safeDatabase.runVec(query.result)
+  def completed(): Future[Vector[InvoiceDb]] = {
+    safeDatabase.run(completedAction())
   }
 
   def numCompleted(): Future[Int] = {

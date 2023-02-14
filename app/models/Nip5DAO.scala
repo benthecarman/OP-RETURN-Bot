@@ -62,6 +62,15 @@ case class Nip5DAO()(implicit
     safeDatabase.run(getPublicKeyAction(name))
   }
 
+  def getNumCompletedAction(): DBIOAction[Int, NoStream, Effect.Read] = {
+    table
+      .join(invoiceTable)
+      .on(_.rHash === _.rHash)
+      .filter(_._2.txIdOpt.isDefined)
+      .result
+      .map(_.size)
+  }
+
   class Nip5Table(tag: Tag) extends Table[Nip5Db](tag, schemaName, "nip5") {
 
     def rHash: Rep[Sha256Digest] = column("r_hash", O.PrimaryKey)

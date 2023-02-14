@@ -11,7 +11,7 @@ import com.bot4s.telegram.methods.SetMyCommands
 import com.bot4s.telegram.models.{BotCommand, Message}
 import com.danielasfregola.twitter4s.entities.Tweet
 import config.OpReturnBotAppConfig
-import models.{InvoiceDAO, InvoiceDb, ZapDb}
+import models._
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
@@ -43,6 +43,8 @@ class TelegramHandler(controller: Controller)(implicit
     java.text.NumberFormat.getCurrencyInstance(Locale.US)
 
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val nip5DAO: Nip5DAO = Nip5DAO()
+  val zapDAO: ZapDAO = ZapDAO()
 
   private val myTelegramId = config.telegramId
   private val telegramCreds = config.telegramCreds
@@ -233,7 +235,13 @@ class TelegramHandler(controller: Controller)(implicit
   }
 
   private def createReport(): Future[String] = {
-    invoiceDAO.completed().map { completed =>
+    val action = for {
+      completed <- invoiceDAO.completedAction()
+      nip5s <- nip5DAO.getNumCompletedAction()
+      zapped <- zapDAO.totalZappedAction()
+    } yield (completed, nip5s, zapped)
+
+    invoiceDAO.safeDatabase.run(action).map { case (completed, nip5s, zapped) =>
       val chainFees = completed.flatMap(_.chainFeeOpt).sum
       val profit = completed.flatMap(_.profitOpt).sum
       val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
@@ -243,6 +251,9 @@ class TelegramHandler(controller: Controller)(implicit
          |Total chain size: ${printSize(vbytes)}
          |Total chain fees: ${printAmount(chainFees)}
          |Total profit: ${printAmount(profit)}
+         |
+         |Total NIP-05s: ${intFormatter.format(nip5s)}
+         |Total Zapped: ${printAmount(zapped)}
          |""".stripMargin
     }
   }
