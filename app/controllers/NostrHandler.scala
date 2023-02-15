@@ -19,7 +19,7 @@ import scala.util.{Failure, Success, Try}
 trait NostrHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
 
-  def setNostrMetadata(): Future[Option[Sha256Digest]] = {
+  def setNostrMetadata(): Future[Vector[Sha256Digest]] = {
     val metadata = Metadata.create(
       displayName = Some("OP_RETURN Bot"),
       name = Some("opreturnbot"),
@@ -46,8 +46,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       content = ""
     )
 
-    sendNostrEvent(event, config.allRelays).flatMap(_ =>
-      sendNostrEvent(contacts, config.allRelays))
+    sendNostrEvents(Vector(event, contacts), config.allRelays)
   }
 
   private def getDmFilter: NostrFilter = NostrFilter(
@@ -178,27 +177,29 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       content = content
     )
 
-    sendNostrEvent(event, config.allRelays).flatMap { res =>
-      if (censored != message) {
-        val content =
-          s"""
-             |🔔 🔔 NEW OP_RETURN 🔔 🔔
-             |
-             |$message
-             |
-             |https://mempool.space/tx/${txId.hex}
-             |""".stripMargin
+    sendNostrEvents(Vector(event), config.allRelays).map(_.headOption).flatMap {
+      res =>
+        if (censored != message) {
+          val content =
+            s"""
+               |🔔 🔔 NEW OP_RETURN 🔔 🔔
+               |
+               |$message
+               |
+               |https://mempool.space/tx/${txId.hex}
+               |""".stripMargin
 
-        val event = NostrEvent.build(
-          privateKey = nostrPrivateKey,
-          created_at = TimeUtil.currentEpochSecond,
-          kind = NostrKind.TextNote,
-          tags = Vector.empty,
-          content = content
-        )
+          val event = NostrEvent.build(
+            privateKey = nostrPrivateKey,
+            created_at = TimeUtil.currentEpochSecond,
+            kind = NostrKind.TextNote,
+            tags = Vector.empty,
+            content = content
+          )
 
-        sendNostrEvent(event, config.badBoyNostrRelays).map(_.orElse(res))
-      } else Future.successful(res)
+          sendNostrEvents(Vector(event), config.badBoyNostrRelays).map(
+            _.headOption.orElse(res))
+        } else Future.successful(res)
     }
   }
 
@@ -212,7 +213,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                              Vector.empty,
                              pubkey)
 
-    sendNostrEvent(event, config.allRelays)
+    sendNostrEvents(Vector(event), config.allRelays).map(_.headOption)
   }
 
   private def sendingClients(relays: Vector[String]): Vector[NostrClient] = {
@@ -230,34 +231,31 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  def sendNostrEvent(
-      event: NostrEvent,
-      relays: Vector[String]): Future[Option[Sha256Digest]] = {
+  def sendNostrEvents(
+      event: Vector[NostrEvent],
+      relays: Vector[String]): Future[Vector[Sha256Digest]] = {
     val fs = sendingClients(relays).map { client =>
       Try(Await.result(client.start(), 5.seconds)) match {
         case Failure(_) =>
           logger.warn(s"Failed to connect to nostr relay: ${client.url}")
           Future.successful(None)
         case Success(_) =>
-          val f = for {
-            idT <- client
+          val sendFs = event.map { event =>
+            client
               .publishEvent(event)
-              .map(_ => Success(event.id))
-              .recover(err => Failure(err))
+              .map(_ => Some(event.id))
+              .recover(_ => None)
+          }
 
-            _ = idT match {
-              case Success(id) =>
-                logger.info(s"Sent nostr event ${NostrNoteId(id)}")
-              case Failure(err) =>
-                logger.error("Failed to send nostr event: ", err)
-            }
+          val f = for {
+            ids <- Future.sequence(sendFs)
             _ <- client.stop()
-          } yield idT.toOption
+          } yield ids.flatten
 
           f.recover(_ => None)
       }
     }
 
-    Future.sequence(fs).map(_.flatten.headOption)
+    Future.sequence(fs).map(_.flatten)
   }
 }

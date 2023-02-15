@@ -183,8 +183,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         config.extraNostrPubKey.getOrElse(invoiceMonitor.nostrPubKey)
       } else invoiceMonitor.nostrPubKey
 
-      val url = new URL(
-        s"$proto://${request.host}/lnurlp/$hash?pubkey=${pubkey.hex}")
+      val url =
+        new URL(s"$proto://${request.host}/lnurlp/$hash?pubkey=${pubkey.hex}")
 
       val response =
         LnURLPayResponse(

@@ -60,8 +60,8 @@ case class InvoiceDAO()(implicit
   }
 
   def completedAction(): DBIOAction[Vector[InvoiceDb],
-    NoStream,
-    Effect.Read] = {
+                                    NoStream,
+                                    Effect.Read] = {
     table.filter(_.txIdOpt.isDefined).result.map(_.toVector)
   }
 
