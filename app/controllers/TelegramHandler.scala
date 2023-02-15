@@ -182,7 +182,7 @@ class TelegramHandler(controller: Controller)(implicit
     }
 
     val nostrLine = nostrOpt match {
-      case Some(nostr) => nostr.hex
+      case Some(nostr) => NostrNoteId(nostr)
       case None        => "Hidden"
     }
 
