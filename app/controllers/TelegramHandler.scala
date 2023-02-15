@@ -222,14 +222,21 @@ class TelegramHandler(controller: Controller)(implicit
   }
 
   def handleZap(zapDb: ZapDb): Future[Unit] = {
+    val requestEvent = zapDb.requestEvent
+
+    val comment =
+      if (requestEvent.content.nonEmpty)
+        s"Comment: ${requestEvent.content}"
+      else ""
     val telegramMsg =
       s"""
          |⚡ ⚡ Zapped! ⚡ ⚡
          |
          |Amount: ${printAmount(zapDb.amount.toSatoshis)}
-         |From: ${NostrPublicKey(zapDb.requestEvent.pubkey)}
+         |From: ${NostrPublicKey(requestEvent.pubkey)}
          |Note: ${zapDb.noteIdOpt.map(_.toString).getOrElse("Failed")}
-         |""".stripMargin
+         |$comment
+         |""".stripMargin.trim
 
     sendTelegramMessage(telegramMsg, myTelegramId)
   }
