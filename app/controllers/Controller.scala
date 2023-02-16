@@ -192,7 +192,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           maxSendable = MilliSatoshis(Bitcoins.one),
           minSendable = MilliSatoshis(Satoshis.one),
           metadata = metadata,
-          nostrPubkey = Some(invoiceMonitor.nostrPubKey),
+          nostrPubkey = Some(pubkey),
           allowsNostr = Some(true)
         )
 
