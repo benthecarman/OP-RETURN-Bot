@@ -156,6 +156,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
   protected def announceOnNostr(
       message: String,
+      npubOpt: Option[SchnorrPublicKey],
       txId: DoubleSha256DigestBE): Future[Option[Sha256Digest]] = {
 
     val censored = config.censorMessage(message)
@@ -169,11 +170,16 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
          |https://mempool.space/tx/${txId.hex}
          |""".stripMargin
 
+    val tags = npubOpt.orElse(NostrPublicKey.fromStringOpt(message)) match {
+      case Some(npub) => Vector(Json.arr("p", npub.hex))
+      case None       => Vector.empty
+    }
+
     val event = NostrEvent.build(
       privateKey = nostrPrivateKey,
       created_at = TimeUtil.currentEpochSecond,
       kind = NostrKind.TextNote,
-      tags = Vector.empty,
+      tags = tags,
       content = content
     )
 

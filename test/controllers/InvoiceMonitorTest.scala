@@ -40,7 +40,7 @@ class InvoiceMonitorTest extends DualLndFixture {
                                      nodeIdOpt = None,
                                      telegramId = None,
                                      nostrKey = None)
-      invoiceDb <- monitor.onInvoicePaid(toPay)
+      invoiceDb <- monitor.onInvoicePaid(toPay, None)
     } yield {
       assert(invoiceDb.invoice == toPay.invoice)
       assert(invoiceDb.noTwitter)

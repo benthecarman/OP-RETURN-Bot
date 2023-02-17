@@ -83,42 +83,47 @@ class InvoiceMonitor(
             val rHash = Sha256Digest(invoice.rHash)
             val readAction = for {
               invOpt <- invoiceDAO.findByPrimaryKeyAction(rHash)
+              npubOpt <- nip5DAO
+                .findByPrimaryKeyAction(rHash)
+                .map(_.map(_.publicKey))
               zapOpt <- zapDAO.findByPrimaryKeyAction(rHash)
-            } yield (invOpt, zapOpt)
+            } yield (invOpt, npubOpt, zapOpt)
 
             invoiceDAO.safeDatabase.run(readAction).flatMap {
-              case (None, None) =>
-                logger.warn(
-                  s"Processed invoice not from OP_RETURN Bot, ${invoice.rHash.toBase16}")
-                Future.unit
-              case (Some(_), Some(_)) =>
-                throw new RuntimeException(
-                  "Invoice found in op_return and zap tables??")
-              case (Some(invoiceDb), None) =>
-                invoiceDb.txIdOpt match {
-                  case Some(_) =>
+              case (invOpt, npubOpt, zapOpt) =>
+                (invOpt, zapOpt) match {
+                  case (None, None) =>
                     logger.warn(
-                      s"Processed invoice that already has a tx associated with it, rHash: ${invoice.rHash.toBase16}")
+                      s"Processed invoice not from OP_RETURN Bot, ${invoice.rHash.toBase16}")
                     Future.unit
-                  case None =>
-                    require(invoice.amtPaidMsat >= invoice.valueMsat,
-                            "User did not pay invoice in full")
-                    onInvoicePaid(invoiceDb).map(_ => ())
-                }
-              case (None, Some(zapDb)) =>
-                zapDb.noteId match {
-                  case Some(_) =>
-                    logger.warn(
-                      s"Processed zap that already has a note associated with it, rHash: ${invoice.rHash.toBase16}")
-                    Future.unit
-                  case None =>
-                    require(invoice.amtPaidMsat >= invoice.valueMsat,
-                            "User did not pay invoice in full")
-                    onZapPaid(zapDb, invoice.rPreimage).map(_ => ())
+                  case (Some(_), Some(_)) =>
+                    throw new RuntimeException(
+                      "Invoice found in op_return and zap tables??")
+                  case (Some(invoiceDb), None) =>
+                    invoiceDb.txIdOpt match {
+                      case Some(_) =>
+                        logger.warn(
+                          s"Processed invoice that already has a tx associated with it, rHash: ${invoice.rHash.toBase16}")
+                        Future.unit
+                      case None =>
+                        require(invoice.amtPaidMsat >= invoice.valueMsat,
+                                "User did not pay invoice in full")
+                        onInvoicePaid(invoiceDb, npubOpt).map(_ => ())
+                    }
+                  case (None, Some(zapDb)) =>
+                    zapDb.noteId match {
+                      case Some(_) =>
+                        logger.warn(
+                          s"Processed zap that already has a note associated with it, rHash: ${invoice.rHash.toBase16}")
+                        Future.unit
+                      case None =>
+                        require(invoice.amtPaidMsat >= invoice.valueMsat,
+                                "User did not pay invoice in full")
+                        onZapPaid(zapDb, invoice.rPreimage).map(_ => ())
+                    }
                 }
             }
         }
-
       }
       .runWith(Sink.ignore)
     ()
@@ -142,7 +147,9 @@ class InvoiceMonitor(
                     Future.successful(db)
                   case Invoice.InvoiceState.SETTLED =>
                     if (inv.amtPaidMsat >= inv.valueMsat) {
-                      onInvoicePaid(db)
+                      nip5DAO.read(db.rHash).flatMap { nip5Opt =>
+                        onInvoicePaid(db, nip5Opt.map(_.publicKey))
+                      }
                     } else Future.successful(db.copy(closed = true))
                   case Invoice.InvoiceState.CANCELED =>
                     Future.successful(db.copy(closed = false))
@@ -208,7 +215,9 @@ class InvoiceMonitor(
     } yield res
   }
 
-  def onInvoicePaid(invoiceDb: InvoiceDb): Future[InvoiceDb] = {
+  def onInvoicePaid(
+      invoiceDb: InvoiceDb,
+      npubOpt: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
     val message = invoiceDb.message
     val invoice = invoiceDb.invoice
     val feeRate = invoiceDb.feeRate
@@ -341,7 +350,7 @@ class InvoiceMonitor(
           Future.successful(None)
         } else {
           logger.info("Sending to nostr...")
-          announceOnNostr(message, txId)
+          announceOnNostr(message, npubOpt, txId)
             .recover { err =>
               logger.error(
                 s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
