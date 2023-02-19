@@ -217,7 +217,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               // nostr zap
               val decoded = URLDecoder.decode(eventStr, "UTF-8")
               val event = Json.parse(decoded).as[NostrEvent]
-              require(NostrEvent.isValidZapRequest(event),
+              require(NostrEvent.isValidZapRequest(event, amount),
                       "not valid zap request")
 
               val hash = CryptoUtil.sha256(decoded)

@@ -7,7 +7,7 @@ import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 
 val bitcoinsV = "1.9.7-80-57b4421f-SNAPSHOT"
-val scalastrV = "0.0.0-58-2d2bb716-SNAPSHOT"
+val scalastrV = "0.0.0-63-ec776b79-SNAPSHOT"
 val akkaV = "2.6.20"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
