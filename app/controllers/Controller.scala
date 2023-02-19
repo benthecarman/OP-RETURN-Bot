@@ -171,18 +171,20 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
+  private def getPubkeyFromUser(user: String): SchnorrPublicKey = {
+    if (user == "ben") {
+      config.extraNostrPubKey.getOrElse(invoiceMonitor.nostrPubKey)
+    } else invoiceMonitor.nostrPubKey
+  }
+
   def getLnurlPay(user: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       val metadata =
         s"[[\"text/plain\",\"A donation to ben!\"],[\"text/identifier\",\"$user@${request.host}\"]]"
       val hash = CryptoUtil.sha256(ByteVector(metadata.getBytes("UTF-8"))).hex
 
-      val pubkey = if (user == "ben") {
-        config.extraNostrPubKey.getOrElse(invoiceMonitor.nostrPubKey)
-      } else invoiceMonitor.nostrPubKey
-
       val url =
-        new URL(s"https://${request.host}/lnurlp/$hash?pubkey=${pubkey.hex}")
+        new URL(s"https://${request.host}/lnurlp/$hash?user=$user")
 
       val response =
         LnURLPayResponse(
@@ -190,7 +192,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           maxSendable = MilliSatoshis(Bitcoins.one),
           minSendable = MilliSatoshis(Satoshis.one),
           metadata = metadata,
-          nostrPubkey = Some(pubkey),
+          nostrPubkey = Some(getPubkeyFromUser(user)),
           allowsNostr = Some(true)
         )
 
@@ -205,7 +207,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  def lnurlPay(meta: String, pubkey: Option[String]): Action[AnyContent] = {
+  def lnurlPay(meta: String, user: Option[String]): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       request.getQueryString("amount") match {
         case Some(amountStr) =>
@@ -217,12 +219,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               // nostr zap
               val decoded = URLDecoder.decode(eventStr, "UTF-8")
               val event = Json.parse(decoded).as[NostrEvent]
-              require(NostrEvent.isValidZapRequest(event, amount),
+              require(NostrEvent.isValidZapRequest(event, amount, user),
                       "not valid zap request")
 
               val hash = CryptoUtil.sha256(decoded)
-              val myKey = pubkey
-                .map(SchnorrPublicKey.fromHex)
+              val myKey = user
+                .map(getPubkeyFromUser)
                 .getOrElse(invoiceMonitor.nostrPubKey)
 
               for {

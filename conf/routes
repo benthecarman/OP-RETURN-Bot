@@ -11,7 +11,7 @@ POST        /createNip5Request               controllers.Controller.createNip5Re
 GET         /invoice                         controllers.Controller.invoice(invoice)
 GET         /success                         controllers.Controller.success(txId)
 GET         /connect                         controllers.Controller.connect
-GET         /lnurlp/:meta                    controllers.Controller.lnurlPay(meta, pubkey: Option[String])
+GET         /lnurlp/:meta                    controllers.Controller.lnurlPay(meta, user: Option[String])
 GET         /.well-known/lnurlp/*user        controllers.Controller.getLnurlPay(user)
 GET         /.well-known/nostr.json          controllers.Controller.nip5(name: Option[String])
 GET         /qr                              controllers.Controller.qrCode(string, width, height)
