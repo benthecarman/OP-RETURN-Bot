@@ -173,8 +173,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def getLnurlPay(user: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
-      val proto = if (request.secure) "https" else "http"
-
       val metadata =
         s"[[\"text/plain\",\"A donation to ben!\"],[\"text/identifier\",\"$user@${request.host}\"]]"
       val hash = CryptoUtil.sha256(ByteVector(metadata.getBytes("UTF-8"))).hex
@@ -184,7 +182,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       } else invoiceMonitor.nostrPubKey
 
       val url =
-        new URL(s"$proto://${request.host}/lnurlp/$hash?pubkey=${pubkey.hex}")
+        new URL(s"https://${request.host}/lnurlp/$hash?pubkey=${pubkey.hex}")
 
       val response =
         LnURLPayResponse(
