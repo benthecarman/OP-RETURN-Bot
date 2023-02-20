@@ -191,13 +191,20 @@ case class OpReturnBotAppConfig(
     } else Vector.empty
   }
 
+  lazy val writeOnlyRelays: Vector[String] = {
+    if (config.hasPath("nostr.writeOnlyRelays")) {
+      config.getStringList(s"nostr.writeOnlyRelays").asScala.toVector
+    } else Vector.empty
+  }
+
   lazy val badBoyNostrRelays: Vector[String] = {
     if (config.hasPath("nostr.badBoyNostrRelays")) {
       config.getStringList(s"nostr.badBoyNostrRelays").asScala.toVector
     } else Vector.empty
   }
 
-  lazy val allRelays: Vector[String] = nostrRelays ++ badBoyNostrRelays
+  lazy val allRelays: Vector[String] =
+    nostrRelays ++ badBoyNostrRelays ++ writeOnlyRelays
 
   def seedExists(): Boolean = {
     WalletStorage.seedExists(seedPath)
