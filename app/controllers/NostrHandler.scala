@@ -2,13 +2,20 @@ package controllers
 
 import grizzled.slf4j.Logging
 import org.bitcoins.asyncutil.AsyncUtil
+import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.crypto.ExtKeyVersion.SegWitMainNetPriv
+import org.bitcoins.core.currency.Bitcoins
+import org.bitcoins.core.number.UInt32
+import org.bitcoins.core.protocol.ln.LnTag._
+import org.bitcoins.core.protocol.ln._
+import org.bitcoins.core.protocol.ln.currency.{LnCurrencyUnits, MilliSatoshis}
 import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
 import org.scalastr.core._
-import play.api.libs.json.Json
+import play.api.libs.json.{JsArray, JsString, Json}
+import scodec.bits.HexStringSyntax
 
 import java.net.URL
 import scala.collection.mutable
@@ -263,5 +270,126 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     }
 
     Future.sequence(fs).map(_.flatten)
+  }
+
+  def getNote(noteId: NostrNoteId): Future[Option[NostrEvent]] = {
+    val events: mutable.Buffer[NostrEvent] = mutable.Buffer.empty[NostrEvent]
+
+    val clients: Vector[NostrClient] = {
+      config.nostrRelays.map { relay =>
+        new NostrClient(relay, None) {
+
+          override def unsubOnEOSE: Boolean = true
+
+          override def processEvent(
+              subscriptionId: String,
+              event: NostrEvent): Future[Unit] = {
+            if (event.id == noteId.id) {
+              events += event
+            }
+            Future.unit
+          }
+
+          override def processNotice(notice: String): Future[Unit] =
+            Future.unit
+        }
+      }
+    }
+
+    val filter: NostrFilter = NostrFilter(
+      ids = Some(Vector(noteId.id)),
+      authors = None,
+      kinds = None,
+      `#e` = None,
+      `#p` = None,
+      since = None,
+      until = None,
+      limit = Some(1)
+    )
+
+    clients.map { client =>
+      Try(Await.result(client.start(), 5.seconds)) match {
+        case Failure(_) =>
+          logger.warn(s"Failed to connect to nostr relay: ${client.url}")
+          Future.unit
+        case Success(_) => client.subscribe(filter)
+      }
+    }
+
+    AsyncUtil
+      .awaitCondition(() => events.nonEmpty, maxTries = 100)
+      .map(_ => events.headOption)
+  }
+
+  def createFakeZapEvents(noteId: NostrNoteId): Future[Vector[NostrEvent]] = {
+    getNote(noteId).map {
+      case None => throw new RuntimeException(s"Failed to get note $noteId")
+      case Some(note) =>
+        require(note.id == noteId.id)
+
+        val requestTags = Vector(
+          Json.arr("p", note.pubkey.hex),
+          Json.arr("e", noteId.hex)
+        )
+
+        val relays = JsArray(("relays" +: config.allRelays).map(JsString))
+        val msats = MilliSatoshis(Bitcoins(1_000))
+
+        val request = NostrEvent.build(
+          privateKey = ECPrivateKey.freshPrivateKey,
+          created_at = TimeUtil.currentEpochSecond,
+          kind = NostrKind.ZapRequest,
+          tags = requestTags :+ relays,
+          content = ""
+        )
+
+        require(NostrEvent.isValidZapRequest(event = request, msats, None),
+                s"Zap Request invalid: ${Json.toJson(request)}")
+
+        val requestJson = Json.toJson(request).toString
+
+        val preImage = CryptoUtil.randomBytes(32)
+        val hash = CryptoUtil.sha256(preImage)
+        val paymentSecret = CryptoUtil.randomBytes(32)
+
+        val hashTag = PaymentHashTag(hash)
+        val memoTag = DescriptionHashTag(CryptoUtil.sha256(requestJson))
+        val expiryTimeTag = ExpiryTimeTag(UInt32(360))
+        val paymentSecretTag = SecretTag(PaymentSecret(paymentSecret))
+        val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
+
+        val lnTags = LnTaggedFields(
+          Vector(hashTag,
+                 memoTag,
+                 expiryTimeTag,
+                 paymentSecretTag,
+                 featuresTag))
+
+        val invoice = LnInvoice.build(
+          LnHumanReadablePart(MainNet, LnCurrencyUnits.fromMSat(msats)),
+          lnTags,
+          ECPrivateKey.freshPrivateKey)
+
+        val tags = Vector(
+          Json.arr("bolt11", invoice.toString),
+          Json.arr("preimage", preImage.toBase16),
+          Json.arr("description", requestJson)
+        ) ++ requestTags
+
+        val zapEvent =
+          NostrEvent.build(
+            config.extraNostrPrivKey.map(_.key).getOrElse(nostrPrivateKey),
+            TimeUtil.currentEpochSecond,
+            NostrKind.Zap,
+            tags,
+            "")
+
+        Vector(note, zapEvent)
+    }
+  }
+
+  def createFakeZap(noteId: NostrNoteId): Future[Sha256Digest] = {
+    createFakeZapEvents(noteId).flatMap(events =>
+      sendNostrEvents(events, config.allRelays).map(_.last))
   }
 }

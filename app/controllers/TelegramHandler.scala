@@ -18,7 +18,7 @@ import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.util.StartStopAsync
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
-import org.scalastr.core.{NostrNoteId, NostrPublicKey}
+import org.scalastr.core.{NostrEvent, NostrNoteId, NostrPublicKey}
 import sttp.capabilities.akka.AkkaStreams
 import sttp.client3.SttpBackend
 import sttp.client3.akkahttp.AkkaHttpBackend
@@ -27,6 +27,7 @@ import java.net.URLEncoder
 import java.text.NumberFormat
 import java.util.Locale
 import scala.concurrent.Future
+import scala.util.Try
 
 class TelegramHandler(controller: Controller)(implicit
     config: OpReturnBotAppConfig,
@@ -93,6 +94,27 @@ class TelegramHandler(controller: Controller)(implicit
       controller.invoiceMonitor.processUnhandledInvoices().flatMap { dbs =>
         reply(s"Updated ${dbs.size} invoices").map(_ => ())
       }
+    } else {
+      reply("You are not allowed to use this command!").map(_ => ())
+    }
+  }
+
+  onCommand("fakezap") { implicit msg =>
+    if (checkAdminMessage(msg)) {
+      val vec = msg.text.get.trim.split(" ", 2).toVector
+      val noteIdT = Try(NostrNoteId.fromStringT(vec(1))).flatten
+
+      val f = if (vec.size != 2 || noteIdT.isFailure) {
+        reply("Usage: /fakezap <noteid>").map(_ => ())
+      } else {
+        logger.info("received fake zap request")
+        for {
+          id <- controller.invoiceMonitor.createFakeZap(noteIdT.get)
+          _ <- reply(NostrNoteId(id).toString)
+        } yield ()
+      }
+
+      f.recoverWith(ex => reply(ex.getMessage).map(_ => ()))
     } else {
       reply("You are not allowed to use this command!").map(_ => ())
     }
