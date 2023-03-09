@@ -171,12 +171,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  private def getPubkeyFromUser(user: String): SchnorrPublicKey = {
-    if (user == "ben") {
-      config.extraNostrPubKey.getOrElse(invoiceMonitor.nostrPubKey)
-    } else invoiceMonitor.nostrPubKey
-  }
-
   def getLnurlPay(user: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       val metadata =
@@ -192,7 +186,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           maxSendable = MilliSatoshis(Bitcoins.one),
           minSendable = MilliSatoshis(Satoshis.one),
           metadata = metadata,
-          nostrPubkey = Some(getPubkeyFromUser(user)),
+          nostrPubkey = Some(invoiceMonitor.nostrPubKey),
           allowsNostr = Some(true)
         )
 
@@ -223,9 +217,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                       "not valid zap request")
 
               val hash = CryptoUtil.sha256(decoded)
-              val myKey = user
-                .map(getPubkeyFromUser)
-                .getOrElse(invoiceMonitor.nostrPubKey)
+              val myKey = invoiceMonitor.nostrPubKey
 
               for {
                 invoice <- lnd.addInvoice(hash, amount, 360)
