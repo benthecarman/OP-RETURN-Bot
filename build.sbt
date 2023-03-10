@@ -40,7 +40,7 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
       "com.google.zxing" % "core" % "3.5.1" withSources () withJavadoc (),
       "com.danielasfregola" %% "twitter4s" % "8.0",
-      "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.3",
+      "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.13",
       "com.bot4s" %% "telegram-akka" % "5.6.1",
       "ch.qos.logback" % "logback-classic" % "1.2.11"
     ),
