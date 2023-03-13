@@ -378,7 +378,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
         val zapEvent =
           NostrEvent.build(
-            config.extraNostrPrivKey.map(_.key).getOrElse(nostrPrivateKey),
+            nostrPrivateKey,
             TimeUtil.currentEpochSecond,
             NostrKind.Zap,
             tags,
