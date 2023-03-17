@@ -2,20 +2,15 @@ package controllers
 
 import grizzled.slf4j.Logging
 import org.bitcoins.asyncutil.AsyncUtil
-import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.crypto.ExtKeyVersion.SegWitMainNetPriv
 import org.bitcoins.core.currency.Bitcoins
-import org.bitcoins.core.number.UInt32
-import org.bitcoins.core.protocol.ln.LnTag._
-import org.bitcoins.core.protocol.ln._
-import org.bitcoins.core.protocol.ln.currency.{LnCurrencyUnits, MilliSatoshis}
+import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
 import org.scalastr.core._
-import play.api.libs.json.{JsArray, JsString, Json}
-import scodec.bits.HexStringSyntax
+import play.api.libs.json._
 
 import java.net.URL
 import scala.collection.mutable
@@ -349,40 +344,21 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         val requestJson = Json.toJson(request).toString
 
         val preImage = CryptoUtil.randomBytes(32)
-        val hash = CryptoUtil.sha256(preImage)
-        val paymentSecret = CryptoUtil.randomBytes(32)
-
-        val hashTag = PaymentHashTag(hash)
-        val memoTag = DescriptionHashTag(CryptoUtil.sha256(requestJson))
-        val expiryTimeTag = ExpiryTimeTag(UInt32(360))
-        val paymentSecretTag = SecretTag(PaymentSecret(paymentSecret))
-        val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
-
-        val lnTags = LnTaggedFields(
-          Vector(hashTag,
-                 memoTag,
-                 expiryTimeTag,
-                 paymentSecretTag,
-                 featuresTag))
-
-        val invoice = LnInvoice.build(
-          LnHumanReadablePart(MainNet, LnCurrencyUnits.fromMSat(msats)),
-          lnTags,
-          ECPrivateKey.freshPrivateKey)
+        val descHash = CryptoUtil.sha256(requestJson)
+        val invoice = createFakeInvoice(msats, preImage, descHash)
 
         val tags = Vector(
           Json.arr("bolt11", invoice.toString),
-          Json.arr("preimage", preImage.toBase16),
+          Json.arr("preimage", preImage.toHex),
           Json.arr("description", requestJson)
         ) ++ requestTags
 
         val zapEvent =
-          NostrEvent.build(
-            nostrPrivateKey,
-            TimeUtil.currentEpochSecond,
-            NostrKind.Zap,
-            tags,
-            "")
+          NostrEvent.build(nostrPrivateKey,
+                           TimeUtil.currentEpochSecond,
+                           NostrKind.Zap,
+                           tags,
+                           "")
 
         Vector(note, zapEvent)
     }

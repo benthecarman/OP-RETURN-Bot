@@ -9,8 +9,10 @@ import lnrpc.Invoice
 import models._
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency.Satoshis
-import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
+import org.bitcoins.core.number._
+import org.bitcoins.core.protocol.ln.LnTag._
+import org.bitcoins.core.protocol.ln._
+import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction.{Transaction, TransactionOutput}
@@ -23,9 +25,9 @@ import org.bitcoins.esplora.{EsploraClient, MempoolSpaceEsploraSite}
 import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
 import org.bitcoins.feeprovider._
 import org.bitcoins.lnd.rpc.{LndRpcClient, LndUtils}
-import org.scalastr.core.{NostrEvent, NostrKind, NostrNoteId, NostrPublicKey}
-import play.api.libs.json.Json
-import scodec.bits.ByteVector
+import org.scalastr.core._
+import play.api.libs.json._
+import scodec.bits._
 import signrpc.TxOut
 import slick.dbio.{DBIO, DBIOAction}
 import walletrpc.SendOutputsRequest
@@ -176,6 +178,28 @@ class InvoiceMonitor(
     }
   }
 
+  protected def createFakeInvoice(
+      msats: MilliSatoshis,
+      preimage: ByteVector,
+      descHash: Sha256Digest): LnInvoice = {
+    val hash = CryptoUtil.sha256(preimage)
+    val paymentSecret = CryptoUtil.randomBytes(32)
+
+    val hashTag = PaymentHashTag(hash)
+    val memoTag = DescriptionHashTag(descHash)
+    val expiryTimeTag = ExpiryTimeTag(UInt32(360))
+    val paymentSecretTag = SecretTag(PaymentSecret(paymentSecret))
+    val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
+
+    val lnTags = LnTaggedFields(
+      Vector(hashTag, memoTag, expiryTimeTag, paymentSecretTag, featuresTag))
+
+    LnInvoice.build(
+      LnHumanReadablePart(MainNet, LnCurrencyUnits.fromMSat(msats)),
+      lnTags,
+      ECPrivateKey.freshPrivateKey)
+  }
+
   def onZapPaid(zapDb: ZapDb, preimage: ByteVector): Future[ZapDb] = {
     val privateKey = if (zapDb.myKey == nostrPubKey) {
       nostrPrivateKey
@@ -191,9 +215,14 @@ class InvoiceMonitor(
     val pTag =
       requestEvent.tags.filter(_.value.head.asOpt[String].contains("p"))
 
+    val invoice = createFakeInvoice(
+      zapDb.amount,
+      preimage,
+      zapDb.invoice.lnTags.descriptionHash.get.hash)
+
     val tags = Vector(
-      Json.arr("bolt11", zapDb.invoice.toString),
-      Json.arr("preimage", preimage.toBase16),
+      Json.arr("bolt11", invoice.toString),
+      Json.arr("preimage", preimage.toHex),
       Json.arr("description", zapDb.request)
     ) ++ eTag ++ pTag
 
