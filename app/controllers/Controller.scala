@@ -174,11 +174,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   def getLnurlPay(user: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       val metadata =
-        s"[[\"text/plain\",\"A donation to ben!\"],[\"text/identifier\",\"$user@${request.host}\"]]"
+        s"[[\"text/plain\",\"A donation to ben!\"],[\"text/identifier\",\"$user@opreturnbot.com\"]]"
       val hash = CryptoUtil.sha256(ByteVector(metadata.getBytes("UTF-8"))).hex
 
       val url =
-        new URL(s"https://${request.host}/lnurlp/$hash?user=$user")
+        new URL(s"https://opreturnbot.com/lnurlp/$hash?user=$user")
 
       val response =
         LnURLPayResponse(
