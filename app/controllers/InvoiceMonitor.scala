@@ -237,10 +237,16 @@ class InvoiceMonitor(
 
     val relays = (requestEvent.taggedRelays ++ config.allRelays).distinct
 
+    val sendF = sendNostrEvents(Vector(requestEvent, zapEvent), relays)
+    val updatedDb = zapDb.copy(noteId = Some(zapEvent.id))
+    val dbF = zapDAO.update(updatedDb)
+    val telegramF =
+      telegramHandlerOpt.map(_.handleZap(updatedDb)).getOrElse(Future.unit)
+
     for {
-      _ <- sendNostrEvents(Vector(requestEvent, zapEvent), relays)
-      res <- zapDAO.update(zapDb.copy(noteId = Some(zapEvent.id)))
-      _ <- telegramHandlerOpt.map(_.handleZap(res)).getOrElse(Future.unit)
+      _ <- sendF
+      _ <- telegramF
+      res <- dbF
     } yield res
   }
 
