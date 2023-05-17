@@ -54,6 +54,7 @@ case class ZapDAO()(implicit
 
   def totalZappedAction(): DBIOAction[Satoshis, NoStream, Effect.Read] = {
     table
+      .filter(_.noteIdOpt.isDefined)
       .map(_.amount)
       .sum
       .result
