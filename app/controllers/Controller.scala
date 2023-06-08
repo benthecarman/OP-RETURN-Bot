@@ -260,7 +260,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         case None =>
           val error =
             Json.obj("status" -> "ERROR", "reason" -> "no amount given")
-          Future.successful(BadRequest(error))
+          Future.successful(
+            BadRequest(error).withHeaders(
+              "Access-Control-Allow-Origin" -> "*",
+              "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+              "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+              "Access-Control-Allow-Credentials" -> "true"
+            ))
       }
     }
   }
