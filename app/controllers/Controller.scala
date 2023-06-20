@@ -226,7 +226,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               val myKey = invoiceMonitor.nostrPubKey
 
               for {
-                invoice <- lnd.addInvoice(hash, amount, 360)
+                invoice <- lnd.addInvoice(hash, amount, 86400)
                 db = ZapDb(rHash = invoice.rHash.hash,
                            invoice = invoice.invoice,
                            myKey = myKey,
@@ -247,7 +247,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               // normal lnurl-pay
               val hash = Sha256Digest(meta)
 
-              lnd.addInvoice(hash, amount, 360).map { invoice =>
+              lnd.addInvoice(hash, amount, 86400).map { invoice =>
                 val response = LnURLPayInvoice(invoice.invoice, None)
                 Ok(Json.toJson(response)).withHeaders(
                   "Access-Control-Allow-Origin" -> "*",
