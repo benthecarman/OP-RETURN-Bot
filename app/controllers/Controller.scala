@@ -211,7 +211,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case Some(eventStr) =>
               logger.info("Receiving zap request!")
               // nostr zap
-              val (event, decoded) = Try {
+              val (_, decoded) = Try {
                 val decoded = URLDecoder.decode(eventStr, "UTF-8")
                 val event = Json.parse(decoded).as[NostrEvent]
                 (event, decoded)
@@ -219,8 +219,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                 val event = Json.parse(eventStr).as[NostrEvent]
                 (event, eventStr)
               }
-              require(NostrEvent.isValidZapRequest(event, amount, user),
-                      "not valid zap request")
 
               val hash = CryptoUtil.sha256(decoded)
               val myKey = invoiceMonitor.nostrPubKey
