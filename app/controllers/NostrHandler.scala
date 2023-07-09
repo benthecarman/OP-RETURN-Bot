@@ -323,7 +323,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         require(note.id == noteId.id)
 
         val requestTags = Vector(
-          Json.arr("p", note.pubkey.hex),
+          Json.arr("p", nostrPubKey.hex),
           Json.arr("e", noteId.hex)
         )
 
