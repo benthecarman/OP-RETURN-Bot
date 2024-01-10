@@ -223,7 +223,8 @@ class InvoiceMonitor(
     val tags = Vector(
       Json.arr("bolt11", invoice.toString),
       Json.arr("preimage", preimage.toHex),
-      Json.arr("description", zapDb.request)
+      Json.arr("description", zapDb.request),
+      Json.arr("P", zapDb.requestEvent.pubkey.hex)
     ) ++ eTag ++ pTag
 
     val zapEvent =

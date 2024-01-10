@@ -350,7 +350,8 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         val tags = Vector(
           Json.arr("bolt11", invoice.toString),
           Json.arr("preimage", preImage.toHex),
-          Json.arr("description", requestJson)
+          Json.arr("description", requestJson),
+          Json.arr("P", request.pubkey.hex)
         ) ++ requestTags
 
         val zapEvent =
