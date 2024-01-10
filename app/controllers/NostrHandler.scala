@@ -48,7 +48,18 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       content = ""
     )
 
-    sendNostrEvents(Vector(event, contacts), config.allRelays)
+    val dvm = NostrEvent.build(
+      privateKey = nostrPrivateKey,
+      created_at = 1704887273L, // change me when updates are made
+      kind = NostrKind.Unknown(31990),
+      tags = Vector(
+        Json.arr("k", "5901"),
+        Json.arr("d", "ee45d18813cd44c0b1e085638d0c7892") // don't change d tag
+      ),
+      content = Json.toJson(metadata).toString()
+    )
+
+    sendNostrEvents(Vector(event, contacts, dvm), config.allRelays)
   }
 
   private def getDmFilter: NostrFilter = NostrFilter(
