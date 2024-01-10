@@ -34,6 +34,7 @@ trait OnionMessageHandler extends Logging { self: Controller =>
                                      noTwitter = false,
                                      Some(nodeId),
                                      None,
+                                     None,
                                      None)
                       .flatMap { db =>
                         val invoiceTLV = InvoiceTLV(db.invoice)

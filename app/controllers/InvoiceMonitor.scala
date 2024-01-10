@@ -365,6 +365,27 @@ class InvoiceMonitor(
         case None => Future.unit
       }
 
+      // send if DVM
+      _ <- invoiceDb.dvmEvent match {
+        case Some(event) =>
+          sendDvmJobResult(txId, event)
+            .map {
+              case Some(id) =>
+                logger.info(s"Sent nostr DVM result with id ${NostrNoteId(
+                    id)} to ${NostrPublicKey(event.pubkey)}")
+              case None =>
+                logger.error(
+                  s"Failed to send nostr DVM result to ${NostrPublicKey(event.pubkey)}")
+            }
+            // recover so we can finish accounting
+            .recover { case err: Throwable =>
+              logger.error(
+                s"Error sending nostr DVM result back to ${NostrPublicKey(event.pubkey)}",
+                err)
+            }
+        case None => Future.unit
+      }
+
       tweetF =
         if (noTwitter) {
           logger.info("Skipping tweet")
@@ -500,7 +521,8 @@ class InvoiceMonitor(
       noTwitter: Boolean,
       nodeIdOpt: Option[NodeId],
       telegramId: Option[Long],
-      nostrKey: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
+      nostrKey: Option[SchnorrPublicKey],
+      dvmEvent: Option[NostrEvent]): Future[InvoiceDb] = {
     createInvoice(message, noTwitter)
       .flatMap { case (invoice, feeRate) =>
         val db: InvoiceDb =
@@ -514,6 +536,7 @@ class InvoiceMonitor(
             nodeIdOpt = nodeIdOpt,
             telegramIdOpt = telegramId,
             nostrKey = nostrKey,
+            dvmEvent = dvmEvent,
             txOpt = None,
             txIdOpt = None,
             profitOpt = None,
@@ -552,6 +575,7 @@ class InvoiceMonitor(
               nodeIdOpt = None,
               telegramIdOpt = None,
               nostrKey = None,
+              dvmEvent = None,
               txOpt = None,
               txIdOpt = None,
               profitOpt = None,

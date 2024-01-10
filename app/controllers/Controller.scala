@@ -407,7 +407,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                                                     noTwitter = input.noTwitter,
                                                     nodeIdOpt = None,
                                                     telegramId = None,
-                                                    nostrKey = None)
+                                                    nostrKey = None,
+                                                    dvmEvent = None)
         } yield {
           Ok(invoiceDb.invoice.toString())
         }
@@ -438,7 +439,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
           invoiceMonitor
-            .createInvoice(data.message, data.noTwitter, None, None, None)
+            .createInvoice(data.message, data.noTwitter, None, None, None, None)
             .map { invoiceDb =>
               Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
             }

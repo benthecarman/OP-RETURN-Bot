@@ -13,7 +13,8 @@ CREATE TABLE invoices
     node_id     TEXT,
     closed      BOOLEAN NOT NULL DEFAULT false,
     telegram_id INTEGER,
-    nostr_key   TEXT
+    nostr_key   TEXT,
+    dvm_event   TEXT,
 );
 
 -- Indices for invoices table

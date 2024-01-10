@@ -132,7 +132,8 @@ class TelegramHandler(controller: Controller)(implicit
                        noTwitter = false,
                        nodeIdOpt = None,
                        telegramId = Some(id),
-                       nostrKey = None)
+                       nostrKey = None,
+                       dvmEvent = None)
         .flatMap { db =>
           val replyF = reply(db.invoice.toString)
 

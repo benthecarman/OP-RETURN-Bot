@@ -62,8 +62,79 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     limit = None
   )
 
+  private def getDvmFilter: NostrFilter = NostrFilter(
+    ids = None,
+    authors = None,
+    kinds = Some(Vector(NostrKind.Unknown(5901))),
+    `#e` = None,
+    `#p` = None,
+    since = Some(TimeUtil.currentEpochSecond - 3),
+    until = None,
+    limit = None
+  )
+
   private lazy val processedEvents: mutable.Set[Sha256Digest] =
     mutable.Set.empty
+
+  private def processDvmEvent(event: NostrEvent): Future[Unit] = {
+    if (event.kind == NostrKind.Unknown(5901)) {
+      val skip = synchronized {
+        if (processedEvents.contains(event.id)) {
+          true
+        } else {
+          processedEvents.add(event.id)
+          false
+        }
+      }
+
+      if (skip) Future.unit
+      else {
+        logger.info("Processing DVM event: " + NostrNoteId(event.id))
+        val iTag =
+          event.tags.find(_.value.head.asOpt[String].contains("i"))
+
+        if (iTag.exists(_.value.length < 2)) {
+          logger.warn(s"Got unexpected event: $event")
+          return Future.unit
+        }
+
+        val inputData = iTag.get.value(1).asOpt[String].getOrElse {
+          logger.warn(s"Got unexpected event: $event")
+          return Future.unit
+        }
+
+        for {
+          db <- createInvoice(message = inputData,
+                              noTwitter = false,
+                              nodeIdOpt = None,
+                              telegramId = None,
+                              nostrKey = None,
+                              dvmEvent = Some(event))
+
+          reply = NostrEvent.build(
+            privateKey = nostrPrivateKey,
+            created_at = TimeUtil.currentEpochSecond,
+            kind = NostrKind.Unknown(7000),
+            tags = Vector(
+              Json.arr("p", event.pubkey.hex),
+              Json.arr("e", event.id.hex),
+              Json.arr("status", "payment-required"),
+              Json.arr("amount",
+                       db.invoice.amount.get.toMSat.toLong.toString,
+                       db.invoice.toString())
+            ),
+            content = ""
+          )
+          _ <- sendNostrEvents(Vector(reply), config.allRelays).map(
+            _.headOption)
+        } yield logger.info(
+          s"Sent DVM invoice to ${NostrPublicKey(event.pubkey)} over nostr!")
+      }
+    } else {
+      logger.warn(s"Got unexpected event: $event")
+      Future.unit
+    }
+  }
 
   private def processDMEvent(event: NostrEvent): Future[Unit] = {
     if (event.kind == NostrKind.EncryptedDM) {
@@ -86,7 +157,8 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                               noTwitter = false,
                               nodeIdOpt = None,
                               telegramId = None,
-                              nostrKey = Some(event.pubkey))
+                              nostrKey = Some(event.pubkey),
+                              None)
           _ <- sendNostrDM(db.invoice.toString, event.pubkey)
         } yield logger.info(
           s"Sent invoice to ${NostrPublicKey(event.pubkey)} over nostr!")
@@ -104,7 +176,11 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         override def processEvent(
             subscriptionId: String,
             event: NostrEvent): Future[Unit] = {
-          processDMEvent(event)
+          event.kind match {
+            case NostrKind.EncryptedDM   => processDMEvent(event)
+            case NostrKind.Unknown(5901) => processDvmEvent(event)
+            case _                       => Future.unit
+          }
         }
 
         override def processNotice(notice: String): Future[Unit] = Future.unit
@@ -115,6 +191,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     val f = for {
       _ <- client.start()
       _ <- client.subscribe(getDmFilter)
+      _ <- client.subscribe(getDvmFilter)
     } yield {
       logger.debug(s"Started DM listener for ${client.url}")
       client.shutdownPOpt match {
@@ -222,6 +299,28 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                              pubkey)
 
     sendNostrEvents(Vector(event), config.allRelays).map(_.headOption)
+  }
+
+  protected def sendDvmJobResult(
+      txId: DoubleSha256DigestBE,
+      event: NostrEvent): Future[Option[Sha256Digest]] = {
+    val iTag =
+      event.tags.find(_.value.head.asOpt[String].contains("i")).get
+
+    val result = NostrEvent.build(
+      privateKey = nostrPrivateKey,
+      created_at = TimeUtil.currentEpochSecond,
+      kind = NostrKind.Unknown(6901),
+      tags = Vector(
+        Json.arr("request", Json.toJson(event).toString()),
+        Json.arr("p", event.pubkey.hex),
+        Json.arr("e", event.id.hex),
+        iTag
+      ),
+      content = txId.hex
+    )
+
+    sendNostrEvents(Vector(result), config.allRelays).map(_.headOption)
   }
 
   private def sendingClients(relays: Vector[String]): Vector[NostrClient] = {

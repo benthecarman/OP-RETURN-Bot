@@ -9,6 +9,10 @@ import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
 import org.bitcoins.db.{CRUD, DbCommonsColumnMappers, SlickUtil}
+import org.scalastr.core
+import org.scalastr.core.NostrEvent
+import org.scalastr.core.NostrEvent._
+import play.api.libs.json.Json
 import slick.lifted.ProvenShape
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -23,6 +27,7 @@ case class InvoiceDb(
     nodeIdOpt: Option[NodeId],
     telegramIdOpt: Option[Long],
     nostrKey: Option[SchnorrPublicKey],
+    dvmEvent: Option[NostrEvent],
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE],
     profitOpt: Option[CurrencyUnit],
@@ -39,6 +44,19 @@ case class InvoiceDAO()(implicit
   private val mappers = new DbCommonsColumnMappers(profile)
 
   import mappers._
+
+  implicit val nostrEventMapper: BaseColumnType[NostrEvent] =
+    MappedColumnType.base[NostrEvent, String](
+      { event =>
+        Json.toJson(event).toString
+      },
+      { str =>
+        val x: NostrEvent = Json
+          .fromJson(Json.parse(str))
+          .getOrElse(throw new RuntimeException(s"Could not parse $str"))
+        x
+      }
+    )
 
   override val table: TableQuery[InvoiceTable] = TableQuery[InvoiceTable]
 
@@ -132,6 +150,8 @@ case class InvoiceDAO()(implicit
 
     def nostrKey: Rep[Option[SchnorrPublicKey]] = column("nostr_key")
 
+    def dvmEvent: Rep[Option[NostrEvent]] = column("dvm_event")
+
     def transactionOpt: Rep[Option[Transaction]] = column("transaction")
 
     def txIdOpt: Rep[Option[DoubleSha256DigestBE]] = column("txid")
@@ -150,6 +170,7 @@ case class InvoiceDAO()(implicit
        nodeId,
        telegramId,
        nostrKey,
+       dvmEvent,
        transactionOpt,
        txIdOpt,
        profitOpt,
