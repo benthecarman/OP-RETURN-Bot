@@ -1,8 +1,8 @@
 package config
 
 import akka.actor.ActorSystem
-import com.danielasfregola.twitter4s.TwitterRestClient
-import com.danielasfregola.twitter4s.entities.{AccessToken, ConsumerToken}
+import com.twitter.clientlib.TwitterCredentialsOAuth2
+import com.twitter.clientlib.api.TwitterApi
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
@@ -131,12 +131,6 @@ case class OpReturnBotAppConfig(
   lazy val telegramId: String =
     config.getStringOrElse(s"bitcoin-s.$moduleName.telegramId", "")
 
-  lazy val twitterConsumerKey: String =
-    config.getString(s"twitter.consumer.key")
-
-  lazy val twitterConsumerSecret: String =
-    config.getString(s"twitter.consumer.secret")
-
   lazy val bannedWords: Vector[String] = Try {
     val list = config.getStringList(s"twitter.banned-words")
     list.asScala.toVector
@@ -148,19 +142,25 @@ case class OpReturnBotAppConfig(
     bannedWords.foldLeft(message)((acc, word) => acc.replaceAll(word, "*****"))
   }
 
-  lazy val consumerToken: ConsumerToken =
-    ConsumerToken(twitterConsumerKey, twitterConsumerSecret)
+  lazy val twitterClientId: String =
+    config.getString(s"twitter.client.id")
 
-  lazy val twitterAccessKey: String = config.getString(s"twitter.access.key")
+  lazy val twitterClientSecret: String =
+    config.getString(s"twitter.client.secret")
 
-  lazy val twitterAccessSecret: String =
-    config.getString(s"twitter.access.secret")
+  lazy val twitterAccessToken: String =
+    config.getString(s"twitter.access.token")
 
-  lazy val accessToken: AccessToken =
-    AccessToken(twitterAccessKey, twitterAccessSecret)
+  lazy val twitterRefreshToken: String =
+    config.getString(s"twitter.refresh.token")
 
-  lazy val twitterClient: TwitterRestClient =
-    TwitterRestClient.withActorSystem(consumerToken, accessToken)(system)
+  lazy val twitterCreds: TwitterCredentialsOAuth2 =
+    new TwitterCredentialsOAuth2(twitterClientId,
+                                 twitterClientSecret,
+                                 twitterAccessToken,
+                                 twitterRefreshToken)
+
+  lazy val twitterClient: TwitterApi = new TwitterApi(twitterCreds)
 
   lazy val kmConf: KeyManagerAppConfig =
     KeyManagerAppConfig(baseDatadir, configOverrides)

@@ -9,7 +9,7 @@ import com.bot4s.telegram.clients.FutureSttpClient
 import com.bot4s.telegram.future.{Polling, TelegramBot}
 import com.bot4s.telegram.methods.SetMyCommands
 import com.bot4s.telegram.models.{BotCommand, Message}
-import com.danielasfregola.twitter4s.entities.Tweet
+import com.twitter.clientlib.model.TweetCreateResponseData
 import config.OpReturnBotAppConfig
 import models._
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
@@ -18,7 +18,7 @@ import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.util.StartStopAsync
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
-import org.scalastr.core.{NostrEvent, NostrNoteId, NostrPublicKey}
+import org.scalastr.core.{NostrNoteId, NostrPublicKey}
 import sttp.capabilities.akka.AkkaStreams
 import sttp.client3.SttpBackend
 import sttp.client3.akkahttp.AkkaHttpBackend
@@ -180,7 +180,7 @@ class TelegramHandler(controller: Controller)(implicit
       rHash: Sha256Digest,
       invoice: LnInvoice,
       invoiceDb: InvoiceDb,
-      tweetOpt: Option[Tweet],
+      tweetOpt: Option[TweetCreateResponseData],
       nostrOpt: Option[Sha256Digest],
       message: String,
       feeRate: SatoshisPerVirtualByte,
@@ -202,7 +202,7 @@ class TelegramHandler(controller: Controller)(implicit
 
     val tweetLine = tweetOpt match {
       case Some(tweet) =>
-        s"https://twitter.com/OP_RETURN_Bot/status/${tweet.id}"
+        s"https://twitter.com/OP_RETURN_Bot/status/${tweet.getId}"
       case None => "Hidden"
     }
 
