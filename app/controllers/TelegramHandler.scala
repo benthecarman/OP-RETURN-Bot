@@ -196,6 +196,8 @@ class TelegramHandler(controller: Controller)(implicit
       "Telegram"
     } else if (invoiceDb.nodeIdOpt.isDefined) {
       "Lightning Onion Message"
+    } else if (invoiceDb.dvmEvent.isDefined) {
+      "DVM"
     } else "Web"
 
     val tweetLine = tweetOpt match {
