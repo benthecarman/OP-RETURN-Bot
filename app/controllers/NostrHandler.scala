@@ -11,6 +11,7 @@ import org.bitcoins.keymanager.WalletStorage
 import org.scalastr.client.NostrClient
 import org.scalastr.core._
 import play.api.libs.json._
+import scodec.bits.ByteVector
 
 import java.net.URL
 import scala.collection.mutable
@@ -114,8 +115,28 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
           return Future.unit
         }
 
+        val inputType = if (iTag.get.value.length >= 3) {
+          iTag.get
+            .value(2)
+            .asOpt[String]
+            .getOrElse {
+              logger.warn(s"Got unexpected event: $event")
+              return Future.unit
+            }
+        } else JsString("text")
+
+        val message = inputType match {
+          case "text" => inputData
+          case "raw" =>
+            val bytes = ByteVector.fromHex(inputData).getOrElse {
+              logger.warn(s"Got unexpected inputData: $inputData")
+              return Future.unit
+            }
+            new String(bytes.toArray, "UTF-8")
+        }
+
         for {
-          db <- createInvoice(message = inputData,
+          db <- createInvoice(message = message,
                               noTwitter = false,
                               nodeIdOpt = None,
                               telegramId = None,

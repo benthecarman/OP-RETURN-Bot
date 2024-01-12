@@ -39,7 +39,8 @@ class InvoiceMonitorTest extends DualLndFixture {
                                      noTwitter = true,
                                      nodeIdOpt = None,
                                      telegramId = None,
-                                     nostrKey = None)
+                                     nostrKey = None,
+                                     dvmEvent = None)
       invoiceDb <- monitor.onInvoicePaid(toPay, None)
     } yield {
       assert(invoiceDb.invoice == toPay.invoice)
@@ -66,7 +67,8 @@ class InvoiceMonitorTest extends DualLndFixture {
                                   noTwitter = true,
                                   nodeIdOpt = None,
                                   telegramId = None,
-                                  nostrKey = None)
+                                  nostrKey = None,
+                                  dvmEvent = None)
       invoice = db.invoice
 
       _ <- lndB.sendPayment(invoice, 60.seconds)
