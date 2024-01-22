@@ -42,10 +42,10 @@ lazy val root = project
       "com.twitter" % "twitter-api-java-sdk" % "2.0.3",
       "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.3",
       "com.bot4s" %% "telegram-akka" % "5.6.1",
-      "ch.qos.logback" % "logback-classic" % "1.2.11"
+      "ch.qos.logback" % "logback-classic" % "1.4.6"
     ),
     dependencyOverrides ++= Seq(
-      "ch.qos.logback" % "logback-classic" % "1.2.11"
+      "ch.qos.logback" % "logback-classic" % "1.4.6"
     ),
     scalacOptions ++= Seq(
       "-feature",
