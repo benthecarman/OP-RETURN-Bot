@@ -490,16 +490,15 @@ class InvoiceMonitor(
       message: String,
       noTwitter: Boolean): Future[(LnInvoice, SatoshisPerVirtualByte)] = {
     require(
-      message.getBytes.length <= 80,
-      "OP_Return message received was too long, must be less than 80 chars")
+      message.getBytes.length <= 9000,
+      "OP_Return message received was too long, must be less than 9000 bytes")
 
     fetchFeeRate()
       .flatMap { rate: SatoshisPerVirtualByte =>
         // add 4 so we get better odds of getting in next block
         val feeRate = rate.copy(rate.currencyUnit + Satoshis(4))
 
-        // 125 base tx fee * 2 just in case
-        val baseSize = 250
+        val baseSize = 125 // 125 base tx size
         val messageSize = message.getBytes.length
 
         // Add fee if no tweet
@@ -507,7 +506,9 @@ class InvoiceMonitor(
 
         // tx fee + app fee (1337) + twitter fee
         val sats =
-          (feeRate * (baseSize + messageSize)) + Satoshis(1337) + noTwitterFee
+          // multiply by 2 just in case
+          (feeRate * 2 * (baseSize + messageSize)) +
+            Satoshis(1337) + noTwitterFee
         val expiry = 60 * 5 // 5 minutes
 
         val hash = CryptoUtil.sha256(message)

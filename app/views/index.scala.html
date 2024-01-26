@@ -32,7 +32,7 @@
                         @helper.CSRF.formField
                         <div class="form-group">
                             <label for="message">Message:</label>
-                            <input maxlength="80" minlength="1" type="text" class="form-control" placeholder="Max 80 characters" name="message" id="message">
+                            <input minlength="1" type="text" class="form-control" name="message" id="message">
                             <div class="text-danger" style="float: right">
                             @form.error("message").map(err => err.message)
                             </div>

@@ -20,7 +20,7 @@ object Forms {
   val opReturnRequestForm: Form[OpReturnRequest] = Form(
     mapping(
       "message" -> nonEmptyText.verifying("Message was too long",
-                                          _.getBytes.length <= 80),
+                                          _.getBytes.length <= 9000),
       "noTwitter" -> boolean
     )(OpReturnRequest.apply)(OpReturnRequest.unapply)
   )
