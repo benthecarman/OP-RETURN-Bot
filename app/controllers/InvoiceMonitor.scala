@@ -271,6 +271,8 @@ class InvoiceMonitor(
       ScriptPubKey(asm.toVector)
     }
 
+    logger.info(s"SPK: $spk")
+
     val txOut = TxOut(0, spk.asmBytes)
 
     val request: SendOutputsRequest = SendOutputsRequest(
