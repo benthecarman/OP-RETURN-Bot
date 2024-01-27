@@ -366,7 +366,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
             case Some(invoiceDb) =>
               invoiceDb.txOpt match {
-                case Some(tx) => Ok(views.html.success(tx))
+                case Some(tx) =>
+                  Ok(
+                    views.html.success(tx,
+                                       invoiceDb.message.getBytes.length > 80))
                 case None =>
                   throw new RuntimeException(
                     s"This is impossible, ${invoiceDb.invoice}")

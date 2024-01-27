@@ -1,9 +1,14 @@
 @import org.bitcoins.core.protocol.transaction.Transaction
-@(tx: Transaction)(implicit request: MessagesRequestHeader)
+@(tx: Transaction, warning: Boolean)(implicit request: MessagesRequestHeader)
 
     @main("Success") {
 
         <h1>Success!</h1>
+
+        @if(warning) {
+            <pre>Your OP_RETURN is very large and is considered non-standard. It may not show up on block explorers until it is mined</pre>
+        }
+
 
         <label><a href="https://mempool.space/tx/@tx.txIdBE.hex">@tx.txIdBE.hex</a></label>
 
