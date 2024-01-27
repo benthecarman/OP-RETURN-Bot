@@ -262,19 +262,16 @@ class InvoiceMonitor(
 
     logger.info(s"Received ${invoice.amount.get.toSatoshis}!")
 
-    val output = {
+    val spk = {
       val messageBytes = ByteVector(message.getBytes)
 
       val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
-        messageBytes) :+ ScriptConstant(messageBytes)
+        messageBytes) :+ ScriptConstant.fromBytes(messageBytes)
 
-      val scriptPubKey = ScriptPubKey(asm.toVector)
-
-      TransactionOutput(Satoshis.zero, scriptPubKey)
+      ScriptPubKey(asm.toVector)
     }
 
-    val txOut =
-      TxOut(output.value.satoshis.toLong, output.scriptPubKey.asmBytes)
+    val txOut = TxOut(0, spk.asmBytes)
 
     val request: SendOutputsRequest = SendOutputsRequest(
       satPerKw = feeRate.toSatoshisPerKW.toLong,
@@ -296,7 +293,7 @@ class InvoiceMonitor(
         case None =>
           logger.info(s"Successfully created tx: ${txId.hex}")
       }
-      _ <- esplora.broadcastTransaction(transaction).recover(_ => txId)
+      _ <- esplora.broadcastTransaction(transaction)
 
       txDetailsOpt <- lnd.getTransaction(txId)
 
