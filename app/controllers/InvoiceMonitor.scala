@@ -293,7 +293,7 @@ class InvoiceMonitor(
         case None =>
           logger.info(s"Successfully created tx: ${txId.hex}")
       }
-      _ <- esplora.broadcastTransaction(transaction)
+      _ <- esplora.broadcastTransaction(transaction).recover(_ => txId)
 
       txDetailsOpt <- lnd.getTransaction(txId)
 
