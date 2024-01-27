@@ -284,11 +284,10 @@ class InvoiceMonitor(
 
     val createTxF = for {
       transaction <- lnd.sendOutputs(request)
+      _ = logger.info(s"Created tx: ${transaction.hex}")
       txId = transaction.txIdBE
 
-      esploraF = esplora.broadcastTransaction(transaction).recover(_ => txId)
       errorOpt <- lnd.publishTransaction(transaction)
-      _ <- esploraF
 
       _ = errorOpt match {
         case Some(error) =>
@@ -297,6 +296,7 @@ class InvoiceMonitor(
         case None =>
           logger.info(s"Successfully created tx: ${txId.hex}")
       }
+      _ <- esplora.broadcastTransaction(transaction).recover(_ => txId)
 
       txDetailsOpt <- lnd.getTransaction(txId)
 
