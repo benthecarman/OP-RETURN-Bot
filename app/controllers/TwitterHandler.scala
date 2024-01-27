@@ -1,6 +1,6 @@
 package controllers
 
-import com.twitter.clientlib.model.{TweetCreateRequest, TweetCreateResponseData}
+import com.danielasfregola.twitter4s.entities.Tweet
 import grizzled.slf4j.Logging
 import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto.DoubleSha256DigestBE
@@ -32,39 +32,34 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private def sendTweet(message: String): Future[TweetCreateResponseData] = {
-    FutureUtil.makeAsync(() => {
-      val client = config.twitterClient
+  private def sendTweet(message: String): Future[Tweet] = {
+    val client = config.twitterClient
 
-      val request = new TweetCreateRequest()
-      request.setText(message)
-      client.tweets().createTweet(request).execute().getData
-    })
+    client.createTweet(status = message)
   }
 
   protected def handleTweet(
       message: String,
-      txId: DoubleSha256DigestBE): Future[TweetCreateResponseData] =
-    FutureUtil.makeAsync { () =>
-      // Every 15th OP_RETURN we shill
-      val count = shillCounter.getAndIncrement()
-      if (count % 15 == 0 && count != 0) {
-        shillTweet()
-      }
+      txId: DoubleSha256DigestBE): Future[Tweet] = FutureUtil.makeAsync { () =>
+    // Every 15th OP_RETURN we shill
+    val count = shillCounter.getAndIncrement()
+    if (count % 15 == 0 && count != 0) {
+      shillTweet()
+    }
 
-      val usedMessage = config.censorMessage(message)
+    val usedMessage = config.censorMessage(message)
 
-      val tweet =
-        s"""
-           |🔔 🔔 NEW OP_RETURN 🔔 🔔
-           |
-           |$usedMessage
-           |
-           |https://mempool.space/tx/${txId.hex}
-           |""".stripMargin
+    val tweet =
+      s"""
+         |🔔 🔔 NEW OP_RETURN 🔔 🔔
+         |
+         |$usedMessage
+         |
+         |https://mempool.space/tx/${txId.hex}
+         |""".stripMargin
 
-      sendTweet(tweet)
-    }.flatten
+    sendTweet(tweet)
+  }.flatten
 
   private def shillTweet(): Future[Unit] = {
     if (uri != uriErrorString) {
