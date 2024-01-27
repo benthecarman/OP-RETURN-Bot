@@ -279,7 +279,7 @@ class InvoiceMonitor(
     val request: SendOutputsRequest = SendOutputsRequest(
       satPerKw = feeRate.toSatoshisPerKW.toLong,
       outputs = Vector(txOut),
-      label = s"OP_RETURN Bot: $message",
+      label = s"OP_RETURN Bot",
       spendUnconfirmed = true)
 
     val createTxF = for {
