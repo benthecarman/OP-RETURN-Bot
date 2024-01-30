@@ -200,6 +200,10 @@ class TelegramHandler(controller: Controller)(implicit
       "DVM"
     } else "Web"
 
+    val superSized =
+      if (message.getBytes.length > 80) "Super Sized!"
+      else ""
+
     val tweetLine = tweetOpt match {
       case Some(tweet) =>
         s"https://twitter.com/OP_RETURN_Bot/status/${tweet.id}"
@@ -220,6 +224,7 @@ class TelegramHandler(controller: Controller)(implicit
          |tx: https://mempool.space/tx/${txDetails.txId.hex}
          |tweet: $tweetLine
          |nostr: $nostrLine
+         |$superSized
          |
          |fee rate: $feeRate
          |invoice amount: ${printAmount(amount)}
