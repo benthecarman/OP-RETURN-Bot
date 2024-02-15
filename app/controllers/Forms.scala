@@ -11,7 +11,7 @@ object Forms {
 
   case class WrappedInvoice(invoice: LnInvoice)
 
-  case class OpReturnRequest(message: String, noTwitter: Boolean)
+  case class OpReturnRequest(message: String, noTwitter: Boolean = false)
 
   case class Nip5Request(name: String, private val pubkey: String) {
     def publicKey: NostrPublicKey = NostrPublicKey.fromString(pubkey)

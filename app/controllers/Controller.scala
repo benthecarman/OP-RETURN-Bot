@@ -316,7 +316,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def invoiceStatus(rHash: String): Action[AnyContent] = {
     Action.async { _ =>
-      val hash = Sha256Digest.fromHex(rHash)
+      val hash = Sha256Digest
+        .fromHexT(rHash)
+        .getOrElse(LnInvoice.fromString(rHash).lnTags.paymentHash.hash)
       invoiceDAO.read(hash).map {
         case None =>
           BadRequest("Invoice not from OP_RETURN Bot")
