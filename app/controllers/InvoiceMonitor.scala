@@ -494,11 +494,18 @@ class InvoiceMonitor(
 
     fetchFeeRate()
       .flatMap { rate: SatoshisPerVirtualByte =>
-        // add 4 so we get better odds of getting in next block
-        val feeRate = rate.copy(rate.currencyUnit + Satoshis(4))
-
         val baseSize = 125 // 125 base tx size
         val messageSize = message.getBytes.length
+
+        // if this is non-standard, double the fee rate and make sure it's at least 5 sats/vbyte
+        // we double the fee rate to make sure it gets in since there is only a few pools that will accept it
+        // otherwise, add 4 sats/vbyte, just to make sure it gets in
+        val feeRate = if (messageSize > 80) {
+          val value = rate.toLong * 2 max 5
+          SatoshisPerVirtualByte.fromLong(value)
+        } else {
+          rate.copy(rate.currencyUnit + Satoshis(4))
+        }
 
         // Add fee if no tweet
         val noTwitterFee = if (noTwitter) Satoshis(1000) else Satoshis.zero
