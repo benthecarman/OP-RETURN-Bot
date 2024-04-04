@@ -296,6 +296,16 @@ class InvoiceMonitor(
           logger.info(s"Successfully created tx: ${txId.hex}")
       }
       _ <- esplora.broadcastTransaction(transaction).recover(_ => txId)
+      // try to broadcast to slipstream
+      _ <- {
+        val broadcast = transaction.hex
+        val slipStreamClient = new SlipStreamClient()
+        for {
+          _ <- slipStreamClient.start()
+          _ <- slipStreamClient.publishTx(broadcast)
+          _ <- slipStreamClient.stop()
+        } yield ()
+      }.recover(_ => ())
 
       txDetailsOpt <- lnd.getTransaction(txId)
 
