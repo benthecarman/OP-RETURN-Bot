@@ -3,7 +3,6 @@ package controllers
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
 import config.OpReturnBotAppConfig
-import controllers.OpReturnBotTLV.BroadcastTransactionTLV
 import grizzled.slf4j.Logging
 import lnrpc.Invoice
 import models._
@@ -15,7 +14,6 @@ import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.script.ScriptPubKey
-import org.bitcoins.core.protocol.transaction.{Transaction, TransactionOutput}
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, TimeUtil}
@@ -333,19 +331,6 @@ class InvoiceMonitor(
       res <- invoiceDAO.update(dbWithTx)
       _ = logger.info(s"Successfully saved tx: ${txId.hex} to database")
 
-      // send if onion message
-      _ <- invoiceDb.nodeIdOpt match {
-        case Some(nodeId) =>
-          // recover so we can finish accounting
-          sendBroadcastTransactionTLV(nodeId, transaction).recover {
-            case err: Throwable =>
-              logger.error(
-                s"Error sending onion message back to nodeId $nodeId",
-                err)
-          }
-        case None => Future.unit
-      }
-
       // send if nostr
       _ <- invoiceDb.nostrKey match {
         case Some(nostrKey) =>
@@ -620,12 +605,5 @@ class InvoiceMonitor(
     feeProvider.getFeeRate().recoverWith { case _: Throwable =>
       feeProviderBackup.getFeeRate()
     }
-  }
-
-  def sendBroadcastTransactionTLV(
-      nodeId: NodeId,
-      tx: Transaction): Future[Unit] = {
-    val tlv = BroadcastTransactionTLV(tx)
-    lnd.sendCustomMessage(nodeId, tlv.toUnknownTLV)
   }
 }

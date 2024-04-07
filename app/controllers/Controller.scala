@@ -33,7 +33,6 @@ import scala.util.{Failure, Success, Try}
 
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
-    with OnionMessageHandler
     with Logging {
 
   import controllers.Forms._
@@ -92,7 +91,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     invoiceMonitor.startSubscription()
     invoiceMonitor.setNostrMetadata()
     invoiceMonitor.listenForDMs()
-    startOnionMessageSubscription()
   }
 
   def notFound(route: String): Action[AnyContent] = {
