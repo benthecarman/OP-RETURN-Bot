@@ -487,19 +487,36 @@ class InvoiceMonitor(
       message.getBytes.length <= 9000,
       "OP_Return message received was too long, must be less than 9000 bytes")
 
-    fetchFeeRate()
-      .flatMap { rate: SatoshisPerVirtualByte =>
+    val rateF = fetchFeeRate()
+    val heightF = lnd.getInfo.map(_.blockHeight.toLong)
+
+    val data = for {
+      feeRate <- rateF
+      height <- heightF
+    } yield (feeRate, height)
+
+    data
+      .flatMap { params =>
+        val (rate, height) = params
         val baseSize = 125 // 125 base tx size
         val messageSize = message.getBytes.length
 
         // if this is non-standard, double the fee rate and make sure it's at least 5 sats/vbyte
         // we double the fee rate to make sure it gets in since there is only a few pools that will accept it
         // otherwise, add 4 sats/vbyte, just to make sure it gets in
-        val feeRate = if (messageSize > 80) {
+        val startRate = if (messageSize > 80) {
           val value = rate.toLong * 2 max 5
           SatoshisPerVirtualByte.fromLong(value)
         } else {
           rate.copy(rate.currencyUnit + Satoshis(4))
+        }
+
+        // multiply by 10 if pre-halving, just to make sure it gets in
+        val feeRate = if (height == 840_000 - 1) {
+          val value = startRate.toLong * 10
+          SatoshisPerVirtualByte.fromLong(value)
+        } else {
+          startRate
         }
 
         // Add fee if no tweet
