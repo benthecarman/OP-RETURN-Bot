@@ -512,7 +512,7 @@ class InvoiceMonitor(
         }
 
         // multiply by 10 if pre-halving, just to make sure it gets in
-        val feeRate = if (height == 840_000 - 1) {
+        val feeRate = if (height == 1_050_000 - 1) {
           val value = startRate.toLong * 10
           SatoshisPerVirtualByte.fromLong(value)
         } else {
@@ -531,7 +531,7 @@ class InvoiceMonitor(
 
         val hash = CryptoUtil.sha256(message)
 
-        lnd.addInvoice(hash, sats.satoshis, expiry).map(t => (t.invoice, rate))
+        lnd.addInvoice(hash, sats.satoshis, expiry).map(t => (t.invoice, feeRate))
       }
   }
 
