@@ -21,7 +21,7 @@ lazy val root = project
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
-    scalaVersion := "2.13.10",
+    scalaVersion := "2.13.14",
     maintainer := "benthecarman",
     libraryDependencies ++= Seq(
       guice,
