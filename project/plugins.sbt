@@ -4,6 +4,6 @@ addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.7.3")
 
 addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "3.9.17")
 
-addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.0")
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.4")
 
 addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.9.16")
