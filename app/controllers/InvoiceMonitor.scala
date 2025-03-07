@@ -531,7 +531,9 @@ class InvoiceMonitor(
 
         val hash = CryptoUtil.sha256(message)
 
-        lnd.addInvoice(hash, sats.satoshis, expiry).map(t => (t.invoice, feeRate))
+        lnd
+          .addInvoice(hash, sats.satoshis, expiry)
+          .map(t => (t.invoice, feeRate))
       }
   }
 
