@@ -191,9 +191,17 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
                               telegramId = None,
                               nostrKey = Some(event.pubkey),
                               None)
-          _ <- sendNostrDM(db.invoice.toString, event.pubkey)
-        } yield logger.info(
-          s"Sent invoice to ${NostrPublicKey(event.pubkey)} over nostr!")
+          dmOpt <- sendNostrDM(db.invoice.toString, event.pubkey)
+        } yield {
+          dmOpt match {
+            case Some(dm) =>
+              logger.info(s"Sent DM invoice to ${NostrPublicKey(
+                  event.pubkey)} over nostr, event id: ${NostrNoteId(dm)}!")
+            case None =>
+              logger.error(
+                s"Failed to send DM invoice to ${NostrPublicKey(event.pubkey)} over nostr!")
+          }
+        }
       }
     } else {
       logger.warn(s"Got unexpected event: $event")
