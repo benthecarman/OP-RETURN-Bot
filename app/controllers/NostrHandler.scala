@@ -1,5 +1,8 @@
 package controllers
 
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.client.RequestBuilding.Post
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import grizzled.slf4j.Logging
 import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.crypto.ExtKeyVersion.SegWitMainNetPriv
@@ -378,32 +381,32 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
+  private val http = Http()
+
   def sendNostrEvents(
       event: Vector[NostrEvent],
       relays: Vector[String]): Future[Vector[Sha256Digest]] = {
-    val fs = sendingClients(relays).map { client =>
-      Try(Await.result(client.start(), 5.seconds)) match {
-        case Failure(_) =>
-          logger.warn(s"Failed to connect to nostr relay: ${client.url}")
-          Future.successful(None)
-        case Success(_) =>
-          val sendFs = event.map { event =>
-            client
-              .publishEvent(event)
-              .map(_ => Some(event.id))
-              .recover(_ => None)
+    val url = "https://nostr-publisher.benthecarman.workers.dev/publish"
+
+    val fut = event.map(ev => {
+      val json = Json.obj(
+        "event" -> Json.toJson(ev),
+        "relays" -> JsArray(relays.map(JsString))
+      )
+      val entity = HttpEntity(ContentTypes.`application/json`, json.toString)
+      http.singleRequest(Post(url, entity)).flatMap { response =>
+        response.entity.dataBytes.runFold("")(_ + _.utf8String).map { body =>
+          if (body == "OK") {
+            ev.id
+          } else {
+            throw new RuntimeException(
+              s"Failed to send event: $ev, response: $body")
           }
-
-          val f = for {
-            ids <- Future.sequence(sendFs)
-            _ <- client.stop()
-          } yield ids.flatten
-
-          f.recover(_ => None)
+        }
       }
-    }
+    })
 
-    Future.sequence(fs).map(_.flatten)
+    Future.sequence(fut)
   }
 
   def getNote(noteId: NostrNoteId): Future[Option[NostrEvent]] = {
