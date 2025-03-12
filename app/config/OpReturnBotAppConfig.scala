@@ -1,9 +1,10 @@
 package config
 
 import akka.actor.ActorSystem
-import com.danielasfregola.twitter4s.TwitterRestClient
-import com.danielasfregola.twitter4s.entities.{AccessToken, ConsumerToken}
 import com.typesafe.config.Config
+import twitter4j.Twitter
+import twitter4j.TwitterFactory
+import twitter4j.conf.ConfigurationBuilder
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
 import org.bitcoins.commons.config._
@@ -148,19 +149,21 @@ case class OpReturnBotAppConfig(
     bannedWords.foldLeft(message)((acc, word) => acc.replaceAll(word, "*****"))
   }
 
-  lazy val consumerToken: ConsumerToken =
-    ConsumerToken(twitterConsumerKey, twitterConsumerSecret)
-
   lazy val twitterAccessKey: String = config.getString(s"twitter.access.key")
 
   lazy val twitterAccessSecret: String =
     config.getString(s"twitter.access.secret")
 
-  lazy val accessToken: AccessToken =
-    AccessToken(twitterAccessKey, twitterAccessSecret)
+  lazy val twitterClient: Twitter = {
+    val cb = new ConfigurationBuilder()
+      .setDebugEnabled(true)
+      .setOAuthConsumerKey(twitterConsumerKey)
+      .setOAuthConsumerSecret(twitterConsumerSecret)
+      .setOAuthAccessToken(twitterAccessKey)
+      .setOAuthAccessTokenSecret(twitterAccessSecret)
 
-  lazy val twitterClient: TwitterRestClient =
-    TwitterRestClient.withActorSystem(consumerToken, accessToken)(system)
+    new TwitterFactory(cb.build()).getInstance()
+  }
 
   lazy val kmConf: KeyManagerAppConfig =
     KeyManagerAppConfig(baseDatadir, configOverrides)

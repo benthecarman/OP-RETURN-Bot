@@ -1,14 +1,13 @@
 package controllers
 
-import com.danielasfregola.twitter4s.entities.Tweet
 import grizzled.slf4j.Logging
 import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto.DoubleSha256DigestBE
+import twitter4j.Status
 
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.regex.Pattern
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, Future, Promise}
 import scala.util.Try
 
 trait TwitterHandler extends Logging { self: InvoiceMonitor =>
@@ -32,15 +31,27 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private def sendTweet(message: String): Future[Tweet] = {
-    val client = config.twitterClient
+  private def sendTweet(message: String): Future[Status] = {
+    val twitter = config.twitterClient
+    val promise = Promise[Status]()
 
-    client.createTweet(status = message)
+    Future {
+      try {
+        val status = twitter.updateStatus(message)
+        promise.success(status)
+      } catch {
+        case ex: Exception =>
+          logger.error(s"Failed to post tweet: ${ex.getMessage}")
+          promise.failure(ex)
+      }
+    }
+
+    promise.future
   }
 
   protected def handleTweet(
       message: String,
-      txId: DoubleSha256DigestBE): Future[Tweet] = FutureUtil.makeAsync { () =>
+      txId: DoubleSha256DigestBE): Future[Status] = FutureUtil.makeAsync { () =>
     // Every 15th OP_RETURN we shill
     val count = shillCounter.getAndIncrement()
     if (count % 15 == 0 && count != 0) {
@@ -72,7 +83,10 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
            |$uri
            |""".stripMargin
 
-      sendTweet(tweet).map(_ => ())
+      sendTweet(tweet).map(_ => ()).recover { case ex =>
+        logger.error(s"Failed to send shill tweet: ${ex.getMessage}")
+        ()
+      }
     } else Future.unit
   }
 }
