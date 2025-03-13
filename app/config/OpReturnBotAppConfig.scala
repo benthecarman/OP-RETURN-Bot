@@ -1,6 +1,8 @@
 package config
 
 import akka.actor.ActorSystem
+import com.twitter.clientlib.TwitterCredentialsOAuth2
+import com.twitter.clientlib.api.TwitterApi
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
@@ -140,7 +142,23 @@ case class OpReturnBotAppConfig(
     bannedWords.foldLeft(message)((acc, word) => acc.replaceAll(word, "*****"))
   }
 
-  lazy val twitterBearer: String = config.getString(s"twitter.bearer")
+  lazy val twitterClientId: String = config.getString(s"twitter.clientid")
+
+  lazy val twitterClientSecret: String =
+    config.getString(s"twitter.clientsecret")
+  lazy val twitterAccessToken: String = config.getString(s"twitter.access")
+  lazy val twitterRefreshToken: String = config.getString(s"twitter.refresh")
+
+  lazy val twitterClient = {
+    val credentials = new TwitterCredentialsOAuth2(
+      twitterClientId,
+      twitterClientSecret,
+      twitterAccessToken,
+      twitterRefreshToken
+    )
+
+    new TwitterApi(credentials)
+  }
 
   lazy val kmConf: KeyManagerAppConfig =
     KeyManagerAppConfig(baseDatadir, configOverrides)
