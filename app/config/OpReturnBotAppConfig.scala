@@ -2,9 +2,6 @@ package config
 
 import akka.actor.ActorSystem
 import com.typesafe.config.Config
-import twitter4j.Twitter
-import twitter4j.TwitterFactory
-import twitter4j.conf.ConfigurationBuilder
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
 import org.bitcoins.commons.config._
@@ -18,7 +15,7 @@ import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config._
-import org.scalastr.core.{NostrPrivateKey, NostrPublicKey}
+import org.scalastr.core.NostrPrivateKey
 import scodec.bits.ByteVector
 
 import java.io.File
@@ -132,12 +129,6 @@ case class OpReturnBotAppConfig(
   lazy val telegramId: String =
     config.getStringOrElse(s"bitcoin-s.$moduleName.telegramId", "")
 
-  lazy val twitterConsumerKey: String =
-    config.getString(s"twitter.consumer.key")
-
-  lazy val twitterConsumerSecret: String =
-    config.getString(s"twitter.consumer.secret")
-
   lazy val bannedWords: Vector[String] = Try {
     val list = config.getStringList(s"twitter.banned-words")
     list.asScala.toVector
@@ -149,21 +140,7 @@ case class OpReturnBotAppConfig(
     bannedWords.foldLeft(message)((acc, word) => acc.replaceAll(word, "*****"))
   }
 
-  lazy val twitterAccessKey: String = config.getString(s"twitter.access.key")
-
-  lazy val twitterAccessSecret: String =
-    config.getString(s"twitter.access.secret")
-
-  lazy val twitterClient: Twitter = {
-    val cb = new ConfigurationBuilder()
-      .setDebugEnabled(true)
-      .setOAuthConsumerKey(twitterConsumerKey)
-      .setOAuthConsumerSecret(twitterConsumerSecret)
-      .setOAuthAccessToken(twitterAccessKey)
-      .setOAuthAccessTokenSecret(twitterAccessSecret)
-
-    new TwitterFactory(cb.build()).getInstance()
-  }
+  lazy val twitterBearer: String = config.getString(s"twitter.bearer")
 
   lazy val kmConf: KeyManagerAppConfig =
     KeyManagerAppConfig(baseDatadir, configOverrides)

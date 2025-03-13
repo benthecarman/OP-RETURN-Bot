@@ -1,14 +1,20 @@
 package controllers
 
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.client.RequestBuilding.Post
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader}
 import grizzled.slf4j.Logging
 import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto.DoubleSha256DigestBE
-import twitter4j.Status
+import play.api.libs.json.{Json, Reads}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Await, Future}
 import scala.util.Try
+
+case class TweetData(id: String, text: String)
+case class TweetResult(data: Option[TweetData])
 
 trait TwitterHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
@@ -31,45 +37,62 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private def sendTweet(message: String): Future[Status] = {
-    val twitter = config.twitterClient
-    val promise = Promise[Status]()
+  private val http = Http()
+  implicit val tweetDataReads: Reads[TweetData] = Json.reads[TweetData]
+  implicit val tweetResultReads: Reads[TweetResult] = Json.reads[TweetResult]
 
-    Future {
-      try {
-        val status = twitter.updateStatus(message)
-        promise.success(status)
-      } catch {
-        case ex: Exception =>
-          logger.error(s"Failed to post tweet: ${ex.getMessage}")
-          promise.failure(ex)
+  def sendTweet(message: String): Future[TweetData] = {
+    val url = "https://api.twitter.com/2/tweets"
+
+    val json = Json.obj(
+      "text" -> message
+    )
+    val entity = HttpEntity(ContentTypes.`application/json`, json.toString)
+    val header = HttpHeader.parse("Authorization",
+                                  s"Bearer ${config.twitterBearer}") match {
+      case HttpHeader.ParsingResult.Ok(h, _) => h
+      case _ =>
+        return Future.failed(new RuntimeException("Failed to parse header"))
+    }
+    val req = Post(url, entity).withHeaders(Vector(header))
+    http.singleRequest(req).flatMap { response =>
+      response.entity.dataBytes.runFold("")(_ + _.utf8String).map { body =>
+        val json = Json.parse(body)
+        val res = json.validate[TweetResult].get
+        res.data match {
+          case Some(data) =>
+            logger.info(s"Tweet sent: ${data.text}")
+            data
+          case None =>
+            logger.error(s"Failed to send tweet: $body")
+            throw new RuntimeException("Failed to send tweet")
+        }
       }
     }
-
-    promise.future
   }
 
   protected def handleTweet(
       message: String,
-      txId: DoubleSha256DigestBE): Future[Status] = FutureUtil.makeAsync { () =>
-    // Every 15th OP_RETURN we shill
-    val count = shillCounter.getAndIncrement()
-    if (count % 15 == 0 && count != 0) {
-      shillTweet()
-    }
+      txId: DoubleSha256DigestBE): Future[TweetData] = FutureUtil.makeAsync {
+    () =>
+      // Every 15th OP_RETURN we shill
+      val count = shillCounter.getAndIncrement()
+      if (count % 15 == 0 && count != 0) {
+        shillTweet()
+      }
 
-    val usedMessage = config.censorMessage(message)
+      val usedMessage = config.censorMessage(message)
 
-    val tweet =
-      s"""
-         |🔔 🔔 NEW OP_RETURN 🔔 🔔
-         |
-         |$usedMessage
-         |
-         |https://mempool.space/tx/${txId.hex}
-         |""".stripMargin
+      val tweet =
+        s"""
+           |🔔 🔔 NEW OP_RETURN 🔔 🔔
+           |
+           |$usedMessage
+           |
+           |https://mempool.space/tx/${txId.hex}
+           |""".stripMargin
 
-    sendTweet(tweet)
+      sendTweet(tweet)
   }.flatten
 
   private def shillTweet(): Future[Unit] = {
