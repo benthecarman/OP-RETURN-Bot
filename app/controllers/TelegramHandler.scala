@@ -9,8 +9,8 @@ import com.bot4s.telegram.clients.FutureSttpClient
 import com.bot4s.telegram.future.{Polling, TelegramBot}
 import com.bot4s.telegram.methods.SetMyCommands
 import com.bot4s.telegram.models.{BotCommand, Message}
-import com.twitter.clientlib.model.TweetCreateResponse
 import config.OpReturnBotAppConfig
+import io.github.redouane59.twitter.dto.tweet.Tweet
 import models._
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency._
@@ -180,7 +180,7 @@ class TelegramHandler(controller: Controller)(implicit
       rHash: Sha256Digest,
       invoice: LnInvoice,
       invoiceDb: InvoiceDb,
-      tweetOpt: Option[TweetCreateResponse],
+      tweetOpt: Option[Tweet],
       nostrOpt: Option[Sha256Digest],
       message: String,
       feeRate: SatoshisPerVirtualByte,
@@ -206,7 +206,7 @@ class TelegramHandler(controller: Controller)(implicit
 
     val tweetLine = tweetOpt match {
       case Some(tweet) =>
-        s"https://x.com/OP_RETURN_Bot/status/${tweet.getData.getId}"
+        s"https://x.com/OP_RETURN_Bot/status/${tweet.getId}"
       case None => "Hidden"
     }
 

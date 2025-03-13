@@ -1,21 +1,14 @@
 package controllers
 
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.client.RequestBuilding.Post
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader}
-import com.twitter.clientlib.model.{TweetCreateRequest, TweetCreateResponse}
 import grizzled.slf4j.Logging
+import io.github.redouane59.twitter.dto.tweet.Tweet
 import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto.DoubleSha256DigestBE
-import play.api.libs.json.{Json, Reads}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, Future, Promise}
 import scala.util.Try
-
-case class TweetData(id: String, text: String)
-case class TweetResult(data: Option[TweetData])
 
 trait TwitterHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
@@ -38,20 +31,15 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private val http = Http()
-  implicit val tweetDataReads: Reads[TweetData] = Json.reads[TweetData]
-  implicit val tweetResultReads: Reads[TweetResult] = Json.reads[TweetResult]
-
-  def sendTweet(message: String): Future[TweetCreateResponse] = {
-    val req = new TweetCreateRequest().text(message)
+  def sendTweet(message: String): Future[Tweet] = {
     Promise
-      .fromTry(Try(config.twitterClient.tweets().createTweet(req).execute()))
+      .fromTry(Try(config.twitterClient.postTweet(message)))
       .future
   }
 
   protected def handleTweet(
       message: String,
-      txId: DoubleSha256DigestBE): Future[TweetCreateResponse] =
+      txId: DoubleSha256DigestBE): Future[Tweet] =
     FutureUtil.makeAsync { () =>
       // Every 15th OP_RETURN we shill
       val count = shillCounter.getAndIncrement()
