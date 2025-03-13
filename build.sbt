@@ -39,7 +39,7 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
       "com.google.zxing" % "core" % "3.5.1" withSources () withJavadoc (),
-      "org.twitter4j" % "twitter4j-core" % "4.0.7",
+      "org.twitter4j" % "twitter4j-core" % "4.1.2",
       "org.twitter4j" % "twitter4j-stream" % "4.0.7",
       "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.3",
       "com.bot4s" %% "telegram-akka" % "5.6.1",
