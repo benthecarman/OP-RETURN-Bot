@@ -12,14 +12,15 @@ import scala.concurrent.Future
 class TwitterTest extends LndFixture {
 
   val twitterConfig: Config = {
-    ConfigFactory.parseString("""
-                                |twitter {
-                                |  clientid = ""
-                                |  clientsecret = ""
-                                |  access.token = ""
-                                |  access.secret = ""
-                                |}
-                                |""".stripMargin)
+    ConfigFactory.parseString(
+      """
+        |twitter {
+        |  clientid = "4o7jynudksbCA51FtrOedXGwX"
+        |  clientsecret = "uW44r8udEycx1k4cZC4kgrSwJ367NPBLzkWwdRGX3ro9zEGBaG"
+        |  access.token = "1234956880742682625-79ilHjBjn89LXRMhNVRehn0yk9RI1p"
+        |  access.secret = "rZjnJWjco2CZgCoCstz9IMzuncg9ggECychOTD32YjjbI"
+        |}
+        |""".stripMargin)
   }
 
   implicit val config: OpReturnBotAppConfig =
@@ -33,7 +34,7 @@ class TwitterTest extends LndFixture {
         new InvoiceMonitor(lnd, None, ArrayBuffer.empty)
 
       for {
-        tweet <- monitor.sendTweet("test")
+        tweet <- monitor.sendTweet("we're so back")
       } yield {
         assert(tweet.id != null)
         assert(tweet.id.length > 1)

@@ -4,7 +4,7 @@ import com.github.scribejava.core.model.{OAuthRequest, Verb}
 import grizzled.slf4j.Logging
 import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto.DoubleSha256DigestBE
-import play.api.libs.json.{JsValue, Json, Reads}
+import play.api.libs.json.{JsObject, JsValue, Json, Reads}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
@@ -45,7 +45,12 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
       .fromTry(Try {
         val request = new OAuthRequest(Verb.POST, url)
         request.addHeader("Content-Type", "application/json")
-        request.setPayload("{\"text\":\"" + message + "\"}")
+        request.setPayload(
+          Json
+            .obj(
+              "text" -> Json.toJson(message)
+            )
+            .toString())
 
         config.twitterClient.signRequest(config.twitterAccessToken, request)
 
