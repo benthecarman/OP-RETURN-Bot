@@ -40,7 +40,8 @@
                         <div class="form-group form-check" style="float: right">
                             <label class="form-check-label" for="noTwitter">
                                 <input class="form-check-input" type="checkbox" name="noTwitter" id="noTwitter" value="true">
-                                Don't post on nostr
+                                Private
+                                <i class="bi bi-info-circle" data-toggle="tooltip" data-placement="top" title="The message won't be posted to Twitter or Nostr"></i>
                             </label>
                             <div class="text-danger" style="float: right">
                             @form.error("noTwitter").map(err => err.message)
