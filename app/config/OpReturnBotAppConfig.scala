@@ -1,8 +1,10 @@
 package config
 
 import akka.actor.ActorSystem
-import com.twitter.clientlib.TwitterCredentialsOAuth2
-import com.twitter.clientlib.api.TwitterApi
+import com.github.scribejava.apis.TwitterApi
+import com.github.scribejava.core.builder.ServiceBuilder
+import com.github.scribejava.core.model.OAuth1AccessToken
+import com.github.scribejava.core.oauth.OAuth10aService
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import models.InvoiceDAO
@@ -146,18 +148,16 @@ case class OpReturnBotAppConfig(
 
   lazy val twitterClientSecret: String =
     config.getString(s"twitter.clientsecret")
-  lazy val twitterAccessToken: String = config.getString(s"twitter.access")
-  lazy val twitterRefreshToken: String = config.getString(s"twitter.refresh")
 
-  lazy val twitterClient = {
-    val credentials = new TwitterCredentialsOAuth2(
-      twitterClientId,
-      twitterClientSecret,
-      twitterAccessToken,
-      twitterRefreshToken
-    )
+  lazy val twitterAccessToken = new OAuth1AccessToken(
+    config.getString(s"twitter.access.token"),
+    config.getString(s"twitter.access.secret")
+  )
 
-    new TwitterApi(credentials)
+  lazy val twitterClient: OAuth10aService = {
+    new ServiceBuilder(twitterClientId)
+      .apiSecret(twitterClientSecret)
+      .build(TwitterApi.instance())
   }
 
   lazy val kmConf: KeyManagerAppConfig =

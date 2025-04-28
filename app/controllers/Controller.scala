@@ -482,10 +482,4 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       formValidationResult.fold(errorFunction, successFunction)
     }
   }
-
-  def tweet(): Action[AnyContent] = {
-    Action.async { _ =>
-      this.invoiceMonitor.sendTweet("test").map(data => Ok(data.getData.getId))
-    }
-  }
 }

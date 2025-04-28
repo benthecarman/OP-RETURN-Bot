@@ -387,7 +387,7 @@ class InvoiceMonitor(
         } else {
           logger.info("Tweeting...")
           handleTweet(message, txId)
-            .map(Some(_))
+            .map(Option(_))
             .recover { err =>
               logger.error(
                 s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")

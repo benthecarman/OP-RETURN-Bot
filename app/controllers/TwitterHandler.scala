@@ -1,13 +1,10 @@
 package controllers
 
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.client.RequestBuilding.Post
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader}
-import com.twitter.clientlib.model.{TweetCreateRequest, TweetCreateResponse}
+import com.github.scribejava.core.model.{OAuthRequest, Verb}
 import grizzled.slf4j.Logging
 import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto.DoubleSha256DigestBE
-import play.api.libs.json.{Json, Reads}
+import play.api.libs.json.{JsValue, Json, Reads}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
@@ -20,7 +17,7 @@ case class TweetResult(data: Option[TweetData])
 trait TwitterHandler extends Logging { self: InvoiceMonitor =>
   import system.dispatcher
 
-  lazy val shillCounter: AtomicInteger = {
+  private lazy val shillCounter: AtomicInteger = {
     // set shill counter based off db
     val f = invoiceDAO.numCompleted()
     val res = Try(Await.result(f, 60.seconds))
@@ -38,20 +35,47 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     }
   }
 
-  private val http = Http()
   implicit val tweetDataReads: Reads[TweetData] = Json.reads[TweetData]
   implicit val tweetResultReads: Reads[TweetResult] = Json.reads[TweetResult]
 
-  def sendTweet(message: String): Future[TweetCreateResponse] = {
-    val req = new TweetCreateRequest().text(message)
+  final val url = "https://api.twitter.com/2/tweets"
+
+  def sendTweet(message: String): Future[TweetData] = {
     Promise
-      .fromTry(Try(config.twitterClient.tweets().createTweet(req).execute()))
+      .fromTry(Try {
+        val request = new OAuthRequest(Verb.POST, url)
+        request.addHeader("Content-Type", "application/json")
+        request.setPayload("{\"text\":\"" + message + "\"}")
+
+        config.twitterClient.signRequest(config.twitterAccessToken, request)
+
+        val response = config.twitterClient.execute(request)
+
+        System.out.println("Status code: " + response.getCode)
+        System.out.println("Response body: " + response.getBody)
+
+        val json: JsValue = Try {
+          Json.parse(response.getBody)
+        }.getOrElse {
+          throw new RuntimeException(
+            s"Could not parse json: ${response.getBody}")
+        }
+        json.asOpt[TweetResult] match {
+          case Some(resp) =>
+            resp.data match {
+              case Some(data) => data
+              case None       => throw new RuntimeException("No response data")
+            }
+          case None =>
+            throw new RuntimeException(s"Received unexpected message: $json")
+        }
+      })
       .future
   }
 
   protected def handleTweet(
       message: String,
-      txId: DoubleSha256DigestBE): Future[TweetCreateResponse] =
+      txId: DoubleSha256DigestBE): Future[TweetData] =
     FutureUtil.makeAsync { () =>
       // Every 15th OP_RETURN we shill
       val count = shillCounter.getAndIncrement()
