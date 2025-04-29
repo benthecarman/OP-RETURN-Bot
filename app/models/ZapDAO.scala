@@ -71,15 +71,6 @@ case class ZapDAO()(implicit
     }
   }
 
-  def migrateTimeStamp(): Future[Int] = {
-    for {
-      items <- safeDatabase.runVec(table.filter(_.time === 0L).result)
-      updatedItems = items.map(item =>
-        item.copy(time = item.invoice.timestamp.toLong))
-      u <- safeDatabase.runVec(updateAllAction(updatedItems))
-    } yield u.size
-  }
-
   class ZabTable(tag: Tag) extends Table[ZapDb](tag, schemaName, "zaps") {
 
     def rHash: Rep[Sha256Digest] = column("r_hash", O.PrimaryKey)

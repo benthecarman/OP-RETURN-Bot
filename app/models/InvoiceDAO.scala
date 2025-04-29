@@ -78,15 +78,6 @@ case class InvoiceDAO()(implicit
     safeDatabase.run(query.result).map(_.headOption)
   }
 
-  def migrateTimeStamp(): Future[Int] = {
-    for {
-      items <- safeDatabase.runVec(table.filter(_.time === 0L).result)
-      updatedItems = items.map(item =>
-        item.copy(time = item.invoice.timestamp.toLong))
-      u <- safeDatabase.runVec(updateAllAction(updatedItems))
-    } yield u.size
-  }
-
   def completedAction(): DBIOAction[Vector[InvoiceDb],
                                     NoStream,
                                     Effect.Read] = {
