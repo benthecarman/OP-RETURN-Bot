@@ -20,7 +20,6 @@ import scala.util.Try
 case class InvoiceDb(
     rHash: Sha256Digest,
     invoice: LnInvoice,
-    message: String,
     noTwitter: Boolean,
     feeRate: SatoshisPerVirtualByte,
     closed: Boolean,
@@ -36,13 +35,9 @@ case class InvoiceDb(
     messageBytes: ByteVector) {
 
   def getMessage(): String = {
-    if (messageBytes.isEmpty) {
-      message
-    } else {
-      Try(
-        new String(messageBytes.toArray)
-      ).getOrElse("Message is not a string")
-    }
+    Try(
+      new String(messageBytes.toArray)
+    ).getOrElse("Message is not a string")
   }
 }
 
@@ -165,8 +160,6 @@ case class InvoiceDAO()(implicit
 
     def invoice: Rep[LnInvoice] = column("invoice")
 
-    def message: Rep[String] = column("message")
-
     def noTwitter: Rep[Boolean] = column("hash")
 
     def feeRate: Rep[SatoshisPerVirtualByte] = column("fee_rate")
@@ -196,7 +189,6 @@ case class InvoiceDAO()(implicit
     def * : ProvenShape[InvoiceDb] =
       (rHash,
        invoice,
-       message,
        noTwitter,
        feeRate,
        closed,

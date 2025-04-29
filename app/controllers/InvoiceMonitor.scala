@@ -550,7 +550,6 @@ class InvoiceMonitor(
           InvoiceDb(
             rHash = invoice.lnTags.paymentHash.hash,
             invoice = invoice,
-            message = message,
             noTwitter = noTwitter,
             feeRate = feeRate,
             closed = false,
@@ -591,7 +590,6 @@ class InvoiceMonitor(
             InvoiceDb(
               rHash = invoice.lnTags.paymentHash.hash,
               invoice = invoice,
-              message = message,
               noTwitter = false,
               feeRate = feeRate,
               closed = false,
