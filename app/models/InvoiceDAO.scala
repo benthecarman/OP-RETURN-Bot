@@ -158,16 +158,6 @@ case class InvoiceDAO()(implicit
     safeDatabase.runVec(query.result)
   }
 
-  def migrateMessageBytes(): Future[Int] = {
-    for {
-      need <- safeDatabase.runVec(table.result)
-      updated = need.map { db =>
-        db.copy(messageBytes = ByteVector(db.message.getBytes))
-      }
-      _ <- updateAll(updated)
-    } yield updated.size
-  }
-
   class InvoiceTable(tag: Tag)
       extends Table[InvoiceDb](tag, schemaName, "invoices") {
 

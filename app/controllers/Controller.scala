@@ -92,12 +92,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     invoiceMonitor.startSubscription()
     invoiceMonitor.setNostrMetadata()
     invoiceMonitor.listenForDMs()
-
-    invoiceDAO
-      .migrateMessageBytes()
-      .map(i => {
-        logger.info(s"Migrated $i invoices")
-      })
   }
 
   def notFound(route: String): Action[AnyContent] = {
