@@ -317,6 +317,8 @@ class TelegramHandler(controller: Controller)(implicit
 
       s"""
          |Total OP_RETURNs: ${intFormatter.format(completed.size)}
+         |Total Super Sized: ${intFormatter.format(
+          completed.count(_.messageBytes.length > 80))}
          |Total chain size: ${printSize(vbytes)}
          |Total chain fees: ${printAmount(chainFees)}
          |Total profit: ${printAmount(profit)}
