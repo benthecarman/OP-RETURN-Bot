@@ -368,9 +368,9 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
             case Some(invoiceDb) =>
               invoiceDb.txOpt match {
-                case Some(tx) =>
+                case Some(_) =>
                   Ok(
-                    views.html.success(tx,
+                    views.html.success(txId,
                                        invoiceDb.message.getBytes.length > 80))
                 case None =>
                   throw new RuntimeException(

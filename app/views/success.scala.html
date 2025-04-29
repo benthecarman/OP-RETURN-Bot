@@ -1,5 +1,5 @@
-@import org.bitcoins.core.protocol.transaction.Transaction
-@(tx: Transaction, warning: Boolean)(implicit request: MessagesRequestHeader)
+@import org.bitcoins.crypto.DoubleSha256DigestBE
+@(txid: DoubleSha256DigestBE, warning: Boolean)(implicit request: MessagesRequestHeader)
 
     @main("Success") {
 
@@ -9,11 +9,7 @@
             <pre>Your OP_RETURN is very large and is considered non-standard. It may not show up on block explorers until it is mined</pre>
         }
 
+        <p>Transaction ID:</p>
 
-        <label><a href="https://mempool.space/tx/@tx.txIdBE.hex">@tx.txIdBE.hex</a></label>
-
-        <h3>Raw Transaction:</h3>
-        <div class="jumbotron">
-            <code>@tx.hex</code>
-        </div>
+        <label><a href="https://mempool.space/tx/@txid.hex">@txid.hex</a></label>
     }
