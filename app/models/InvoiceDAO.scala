@@ -160,8 +160,7 @@ case class InvoiceDAO()(implicit
 
   def migrateMessageBytes(): Future[Int] = {
     for {
-      need <- safeDatabase.runVec(
-        table.filter(_.messageBytes === ByteVector.empty).result)
+      need <- safeDatabase.runVec(table.result)
       updated = need.map { db =>
         db.copy(messageBytes = ByteVector(db.message.getBytes))
       }
