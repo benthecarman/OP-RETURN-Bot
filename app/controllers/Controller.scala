@@ -10,6 +10,7 @@ import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.transaction._
+import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnurl.json.LnURLJsonModels._
@@ -91,6 +92,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     invoiceMonitor.startSubscription()
     invoiceMonitor.setNostrMetadata()
     invoiceMonitor.listenForDMs()
+
+    invoiceDAO
+      .migrateTimeStamp()
+      .flatMap { x =>
+        logger.info("Migrated time stamp for " + x + " invoices")
+        zapDAO
+          .migrateTimeStamp()
+          .map(y => logger.info("Migrated time stamp for " + y + " zaps"))
+      }
   }
 
   def notFound(route: String): Action[AnyContent] = {
@@ -228,7 +238,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                            myKey = myKey,
                            amount = amount,
                            request = decoded,
-                           noteId = None)
+                           noteId = None,
+                           time = TimeUtil.currentEpochSecond)
                 _ <- zapDAO.create(db)
               } yield {
                 val response = LnURLPayInvoice(invoice.invoice, None)

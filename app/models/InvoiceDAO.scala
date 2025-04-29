@@ -31,7 +31,8 @@ case class InvoiceDb(
     txOpt: Option[Transaction],
     txIdOpt: Option[DoubleSha256DigestBE],
     profitOpt: Option[CurrencyUnit],
-    chainFeeOpt: Option[CurrencyUnit])
+    chainFeeOpt: Option[CurrencyUnit],
+    time: Long)
 
 case class InvoiceDAO()(implicit
     override val ec: ExecutionContext,
@@ -77,10 +78,35 @@ case class InvoiceDAO()(implicit
     safeDatabase.run(query.result).map(_.headOption)
   }
 
+  def migrateTimeStamp(): Future[Int] = {
+    for {
+      items <- safeDatabase.runVec(table.filter(_.time === 0L).result)
+      updatedItems = items.map(item =>
+        item.copy(time = item.invoice.timestamp.toLong))
+      u <- safeDatabase.runVec(updateAllAction(updatedItems))
+    } yield u.size
+  }
+
   def completedAction(): DBIOAction[Vector[InvoiceDb],
                                     NoStream,
                                     Effect.Read] = {
     table.filter(_.txIdOpt.isDefined).result.map(_.toVector)
+  }
+
+  def completedAction(afterTimeOpt: Option[Long]): DBIOAction[Vector[InvoiceDb],
+                                                              NoStream,
+                                                              Effect.Read] = {
+    afterTimeOpt match {
+      case None =>
+        table.filter(_.txIdOpt.isDefined).result.map(_.toVector)
+      case Some(afterTime) =>
+        table
+          .filter(_.txIdOpt.isDefined)
+          .filter(_.time > afterTime)
+          .result
+          .map(_.toVector)
+
+    }
   }
 
   def completed(): Future[Vector[InvoiceDb]] = {
@@ -160,6 +186,8 @@ case class InvoiceDAO()(implicit
 
     def chainFeeOpt: Rep[Option[CurrencyUnit]] = column("chain_fee")
 
+    def time: Rep[Long] = column("time")
+
     def * : ProvenShape[InvoiceDb] =
       (rHash,
        invoice,
@@ -174,6 +202,7 @@ case class InvoiceDAO()(implicit
        transactionOpt,
        txIdOpt,
        profitOpt,
-       chainFeeOpt).<>(InvoiceDb.tupled, InvoiceDb.unapply)
+       chainFeeOpt,
+       time).<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }

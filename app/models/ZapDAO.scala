@@ -3,11 +3,7 @@ package models
 import config.OpReturnBotAppConfig
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
-import org.bitcoins.core.protocol.ln.node.NodeId
-import org.bitcoins.core.protocol.transaction.Transaction
-import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
 import org.bitcoins.db.{CRUD, DbCommonsColumnMappers, SlickUtil}
 import org.scalastr.core.{NostrEvent, NostrNoteId}
@@ -22,7 +18,8 @@ case class ZapDb(
     myKey: SchnorrPublicKey,
     amount: MilliSatoshis,
     request: String,
-    noteId: Option[Sha256Digest]) {
+    noteId: Option[Sha256Digest],
+    time: Long) {
   def requestEvent: NostrEvent = Json.parse(request).as[NostrEvent]
   def noteIdOpt: Option[NostrNoteId] = noteId.map(NostrNoteId(_))
 }
@@ -52,13 +49,35 @@ case class ZapDAO()(implicit
       ts: Vector[ZapDb]): Query[ZabTable, ZapDb, Seq] =
     findByPrimaryKeys(ts.map(_.rHash))
 
-  def totalZappedAction(): DBIOAction[Satoshis, NoStream, Effect.Read] = {
-    table
-      .filter(_.noteIdOpt.isDefined)
-      .map(_.amount)
-      .sum
-      .result
-      .map(_.map(_.toSatoshis).getOrElse(Satoshis.zero))
+  def totalZappedAction(afterTimeOpt: Option[Long]): DBIOAction[Satoshis,
+                                                                NoStream,
+                                                                Effect.Read] = {
+    afterTimeOpt match {
+      case Some(afterTime) =>
+        table
+          .filter(_.noteIdOpt.isDefined)
+          .filter(_.time > afterTime)
+          .map(_.amount)
+          .sum
+          .result
+          .map(_.map(_.toSatoshis).getOrElse(Satoshis.zero))
+      case None =>
+        table
+          .filter(_.noteIdOpt.isDefined)
+          .map(_.amount)
+          .sum
+          .result
+          .map(_.map(_.toSatoshis).getOrElse(Satoshis.zero))
+    }
+  }
+
+  def migrateTimeStamp(): Future[Int] = {
+    for {
+      items <- safeDatabase.runVec(table.filter(_.time === 0L).result)
+      updatedItems = items.map(item =>
+        item.copy(time = item.invoice.timestamp.toLong))
+      u <- safeDatabase.runVec(updateAllAction(updatedItems))
+    } yield u.size
   }
 
   class ZabTable(tag: Tag) extends Table[ZapDb](tag, schemaName, "zaps") {
@@ -75,8 +94,11 @@ case class ZapDAO()(implicit
 
     def noteIdOpt: Rep[Option[Sha256Digest]] = column("note_id", O.Unique)
 
+    def time: Rep[Long] = column("time")
+
     def * : ProvenShape[ZapDb] =
-      (rHash, invoice, myKey, amount, request, noteIdOpt).<>(ZapDb.tupled,
-                                                             ZapDb.unapply)
+      (rHash, invoice, myKey, amount, request, noteIdOpt, time).<>(
+        ZapDb.tupled,
+        ZapDb.unapply)
   }
 }

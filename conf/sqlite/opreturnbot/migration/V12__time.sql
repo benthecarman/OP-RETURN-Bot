@@ -1,0 +1,4 @@
+ALTER TABLE "invoices"
+    ADD COLUMN `time` INTEGER DEFAULT 0;
+ALTER TABLE "zaps"
+    ADD COLUMN `time` INTEGER DEFAULT 0;

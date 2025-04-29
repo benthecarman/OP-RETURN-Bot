@@ -561,7 +561,8 @@ class InvoiceMonitor(
             txOpt = None,
             txIdOpt = None,
             profitOpt = None,
-            chainFeeOpt = None
+            chainFeeOpt = None,
+            time = TimeUtil.currentEpochSecond
           )
         invoiceDAO.create(db)
       }
@@ -600,7 +601,8 @@ class InvoiceMonitor(
               txOpt = None,
               txIdOpt = None,
               profitOpt = None,
-              chainFeeOpt = None
+              chainFeeOpt = None,
+              time = TimeUtil.currentEpochSecond
             )
 
           val action = nip5DAO.getPublicKeyAction(name).flatMap {

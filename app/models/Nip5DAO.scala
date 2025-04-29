@@ -62,13 +62,26 @@ case class Nip5DAO()(implicit
     safeDatabase.run(getPublicKeyAction(name))
   }
 
-  def getNumCompletedAction(): DBIOAction[Int, NoStream, Effect.Read] = {
-    table
-      .join(invoiceTable)
-      .on(_.rHash === _.rHash)
-      .filter(_._2.txIdOpt.isDefined)
-      .result
-      .map(_.size)
+  def getNumCompletedAction(
+      afterTimeOpt: Option[Long]): DBIOAction[Int, NoStream, Effect.Read] = {
+    afterTimeOpt match {
+      case None =>
+        table
+          .join(invoiceTable)
+          .on(_.rHash === _.rHash)
+          .filter(_._2.txIdOpt.isDefined)
+          .result
+          .map(_.size)
+      case Some(afterTime) =>
+        table
+          .join(invoiceTable)
+          .on(_.rHash === _.rHash)
+          .filter(_._2.txIdOpt.isDefined)
+          .filter(_._2.time > afterTime)
+          .result
+          .map(_.size)
+    }
+
   }
 
   class Nip5Table(tag: Tag) extends Table[Nip5Db](tag, schemaName, "nip5") {

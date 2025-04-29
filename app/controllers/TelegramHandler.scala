@@ -14,10 +14,10 @@ import models._
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.core.util.StartStopAsync
+import org.bitcoins.core.util.{StartStopAsync, TimeUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
-import org.scalastr.core.{NostrEvent, NostrNoteId, NostrPublicKey}
+import org.scalastr.core.{NostrNoteId, NostrPublicKey}
 import sttp.capabilities.akka.AkkaStreams
 import sttp.client3.SttpBackend
 import sttp.client3.akkahttp.AkkaHttpBackend
@@ -80,7 +80,9 @@ class TelegramHandler(controller: Controller)(implicit
 
   onCommand("report") { implicit msg =>
     if (checkAdminMessage(msg)) {
-      createReport().flatMap { report =>
+      val secAgo = getTimeParam(msg)
+      val afterTimeOpt = secAgo.map(secondsAgo)
+      createReport(afterTimeOpt).flatMap { report =>
         reply(report).map(_ => ())
       }
     } else {
@@ -270,11 +272,42 @@ class TelegramHandler(controller: Controller)(implicit
     sendTelegramMessage(telegramMsg, myTelegramId)
   }
 
-  private def createReport(): Future[String] = {
+  final private val HOURLY_SECONDS: Long = 3_600
+  final private val DAILY_SECONDS: Long = 86_400
+  final private val WEEKLY_SECONDS: Long = 604_800
+  final private val MONTHLY_SECONDS: Long = 2_629_800
+  final private val YEARLY_SECONDS: Long = 31_557_600
+
+  private def getTimeParam(msg: Message): Option[Long] = {
+    Try {
+      val str = msg.text.get.trim.split(" ", 2).last
+      val num = str.init.trim.toLong
+      if (str.endsWith("h")) {
+        Some(num * HOURLY_SECONDS)
+      } else if (str.endsWith("hr")) {
+        val num = str.dropRight(2).toLong
+        Some(num * HOURLY_SECONDS)
+      } else if (str.endsWith("d")) {
+        Some(num * DAILY_SECONDS)
+      } else if (str.endsWith("w")) {
+        Some(num * WEEKLY_SECONDS)
+      } else if (str.endsWith("m")) {
+        Some(num * MONTHLY_SECONDS)
+      } else if (str.endsWith("y")) {
+        Some(num * YEARLY_SECONDS)
+      } else None
+    }.toOption.flatten
+  }
+
+  protected def secondsAgo(seconds: Long): Long = {
+    TimeUtil.now.minusSeconds(seconds).getEpochSecond
+  }
+
+  private def createReport(afterTimeOpt: Option[Long]): Future[String] = {
     val action = for {
-      completed <- invoiceDAO.completedAction()
-      nip5s <- nip5DAO.getNumCompletedAction()
-      zapped <- zapDAO.totalZappedAction()
+      completed <- invoiceDAO.completedAction(afterTimeOpt)
+      nip5s <- nip5DAO.getNumCompletedAction(afterTimeOpt)
+      zapped <- zapDAO.totalZappedAction(afterTimeOpt)
     } yield (completed, nip5s, zapped)
 
     invoiceDAO.safeDatabase.run(action).map { case (completed, nip5s, zapped) =>
