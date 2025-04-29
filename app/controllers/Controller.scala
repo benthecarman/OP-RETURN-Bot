@@ -92,6 +92,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     invoiceMonitor.startSubscription()
     invoiceMonitor.setNostrMetadata()
     invoiceMonitor.listenForDMs()
+
+    invoiceDAO
+      .migrateMessageBytes()
+      .map(i => {
+        logger.info(s"Migrated $i invoices")
+      })
   }
 
   def notFound(route: String): Action[AnyContent] = {
@@ -309,7 +315,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         case None =>
           BadRequest("Tx does not originate from OP_RETURN Bot")
         case Some(invoiceDb: InvoiceDb) =>
-          Ok(invoiceDb.message)
+          Ok(invoiceDb.getMessage())
       }
     }
   }
@@ -347,7 +353,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               invoiceDb.txIdOpt match {
                 case Some(txId) => Redirect(routes.Controller.success(txId.hex))
                 case None =>
-                  Ok(views.html.showInvoice(invoiceDb.message, invoice))
+                  Ok(views.html.showInvoice(invoiceDb.getMessage(), invoice))
               }
           }
       }
@@ -371,7 +377,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                 case Some(_) =>
                   Ok(
                     views.html.success(txId,
-                                       invoiceDb.message.getBytes.length > 80))
+                                       invoiceDb.messageBytes.length > 80))
                 case None =>
                   throw new RuntimeException(
                     s"This is impossible, ${invoiceDb.invoice}")

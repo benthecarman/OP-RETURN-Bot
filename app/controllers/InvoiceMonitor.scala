@@ -252,7 +252,7 @@ class InvoiceMonitor(
   def onInvoicePaid(
       invoiceDb: InvoiceDb,
       npubOpt: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
-    val message = invoiceDb.message
+    val message = invoiceDb.getMessage()
     val invoice = invoiceDb.invoice
     val feeRate = invoiceDb.feeRate
     val noTwitter = invoiceDb.noTwitter
@@ -261,7 +261,7 @@ class InvoiceMonitor(
     logger.info(s"Received ${invoice.amount.get.toSatoshis}!")
 
     val spk = {
-      val messageBytes = ByteVector(message.getBytes)
+      val messageBytes = invoiceDb.messageBytes
 
       val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
         messageBytes) :+ ScriptConstant.fromBytes(messageBytes)
@@ -562,7 +562,8 @@ class InvoiceMonitor(
             txIdOpt = None,
             profitOpt = None,
             chainFeeOpt = None,
-            time = TimeUtil.currentEpochSecond
+            time = TimeUtil.currentEpochSecond,
+            messageBytes = ByteVector(message.getBytes)
           )
         invoiceDAO.create(db)
       }
@@ -602,7 +603,8 @@ class InvoiceMonitor(
               txIdOpt = None,
               profitOpt = None,
               chainFeeOpt = None,
-              time = TimeUtil.currentEpochSecond
+              time = TimeUtil.currentEpochSecond,
+              messageBytes = ByteVector(message.getBytes)
             )
 
           val action = nip5DAO.getPublicKeyAction(name).flatMap {

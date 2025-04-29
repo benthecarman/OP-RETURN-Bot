@@ -1,0 +1,1 @@
+ALTER TABLE invoices ADD COLUMN message_bytes BLOB NOT NULL DEFAULT X'';

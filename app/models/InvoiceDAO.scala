@@ -3,19 +3,19 @@ package models
 import config.OpReturnBotAppConfig
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.core.protocol.ln.LnTag.PaymentHashTag
 import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.transaction.Transaction
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
 import org.bitcoins.db.{CRUD, DbCommonsColumnMappers, SlickUtil}
-import org.scalastr.core
 import org.scalastr.core.NostrEvent
 import org.scalastr.core.NostrEvent._
 import play.api.libs.json.Json
+import scodec.bits.ByteVector
 import slick.lifted.ProvenShape
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 case class InvoiceDb(
     rHash: Sha256Digest,
@@ -32,7 +32,19 @@ case class InvoiceDb(
     txIdOpt: Option[DoubleSha256DigestBE],
     profitOpt: Option[CurrencyUnit],
     chainFeeOpt: Option[CurrencyUnit],
-    time: Long)
+    time: Long,
+    messageBytes: ByteVector) {
+
+  def getMessage(): String = {
+    if (messageBytes.isEmpty) {
+      message
+    } else {
+      Try(
+        new String(messageBytes.toArray)
+      ).getOrElse("Message is not a string")
+    }
+  }
+}
 
 case class InvoiceDAO()(implicit
     override val ec: ExecutionContext,
@@ -146,6 +158,17 @@ case class InvoiceDAO()(implicit
     safeDatabase.runVec(query.result)
   }
 
+  def migrateMessageBytes(): Future[Int] = {
+    for {
+      need <- safeDatabase.runVec(
+        table.filter(_.messageBytes === ByteVector.empty).result)
+      updated = need.map { db =>
+        db.copy(messageBytes = ByteVector(db.message.getBytes))
+      }
+      _ <- updateAll(updated)
+    } yield updated.size
+  }
+
   class InvoiceTable(tag: Tag)
       extends Table[InvoiceDb](tag, schemaName, "invoices") {
 
@@ -179,6 +202,8 @@ case class InvoiceDAO()(implicit
 
     def time: Rep[Long] = column("time")
 
+    def messageBytes: Rep[ByteVector] = column("message_bytes")
+
     def * : ProvenShape[InvoiceDb] =
       (rHash,
        invoice,
@@ -194,6 +219,7 @@ case class InvoiceDAO()(implicit
        txIdOpt,
        profitOpt,
        chainFeeOpt,
-       time).<>(InvoiceDb.tupled, InvoiceDb.unapply)
+       time,
+       messageBytes).<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }
