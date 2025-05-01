@@ -195,14 +195,8 @@ case class OpReturnBotAppConfig(
     } else Vector.empty
   }
 
-  lazy val badBoyNostrRelays: Vector[String] = {
-    if (config.hasPath("nostr.badBoyNostrRelays")) {
-      config.getStringList(s"nostr.badBoyNostrRelays").asScala.toVector
-    } else Vector.empty
-  }
-
   lazy val allRelays: Vector[String] =
-    nostrRelays ++ badBoyNostrRelays ++ writeOnlyRelays
+    nostrRelays ++ writeOnlyRelays
 
   def seedExists(): Boolean = {
     WalletStorage.seedExists(seedPath)

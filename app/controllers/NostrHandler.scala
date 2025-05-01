@@ -280,14 +280,11 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       message: String,
       npubOpt: Option[SchnorrPublicKey],
       txId: DoubleSha256DigestBE): Future[Option[Sha256Digest]] = {
-
-    val censored = config.censorMessage(message)
-
     val content =
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |
-         |$censored
+         |$message
          |
          |https://mempool.space/tx/${txId.hex}
          |""".stripMargin
@@ -305,30 +302,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       content = content
     )
 
-    sendNostrEvents(Vector(event), config.allRelays).map(_.headOption).flatMap {
-      res =>
-        if (censored != message) {
-          val content =
-            s"""
-               |🔔 🔔 NEW OP_RETURN 🔔 🔔
-               |
-               |$message
-               |
-               |https://mempool.space/tx/${txId.hex}
-               |""".stripMargin
-
-          val event = NostrEvent.build(
-            privateKey = nostrPrivateKey,
-            created_at = TimeUtil.currentEpochSecond,
-            kind = NostrKind.TextNote,
-            tags = Vector.empty,
-            content = content
-          )
-
-          sendNostrEvents(Vector(event), config.badBoyNostrRelays).map(
-            _.headOption.orElse(res))
-        } else Future.successful(res)
-    }
+    sendNostrEvents(Vector(event), config.allRelays).map(_.headOption)
   }
 
   protected def sendNostrDM(
