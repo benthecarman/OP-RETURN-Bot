@@ -201,8 +201,9 @@ class TelegramHandler(controller: Controller)(implicit
       "DVM"
     } else "Web"
 
-    val superSized =
-      if (message.getBytes.length > 80) "Super Sized!"
+    val nonStd =
+      if (message.getBytes.length > 80)
+        s"Non-standard output! ${printSize(message.getBytes.length)}"
       else ""
 
     val tweetLine = tweetOpt match {
@@ -225,7 +226,7 @@ class TelegramHandler(controller: Controller)(implicit
          |tx: https://mempool.space/tx/${txDetails.txId.hex}
          |tweet: $tweetLine
          |nostr: $nostrLine
-         |$superSized
+         |$nonStd
          |
          |fee rate: $feeRate
          |invoice amount: ${printAmount(amount)}
@@ -314,12 +315,17 @@ class TelegramHandler(controller: Controller)(implicit
       val chainFees = completed.flatMap(_.chainFeeOpt).sum
       val profit = completed.flatMap(_.profitOpt).sum
       val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
+      val nonStdVbytes = completed
+        .filter(_.messageBytes.length > 80)
+        .flatMap(_.txOpt.map(_.vsize))
+        .sum
 
       s"""
          |Total OP_RETURNs: ${intFormatter.format(completed.size)}
-         |Total Super Sized: ${intFormatter.format(
+         |Total Non-standard: ${intFormatter.format(
           completed.count(_.messageBytes.length > 80))}
          |Total chain size: ${printSize(vbytes)}
+         |Total non-std chain size: ${printSize(nonStdVbytes)}
          |Total chain fees: ${printAmount(chainFees)}
          |Total profit: ${printAmount(profit)}
          |
