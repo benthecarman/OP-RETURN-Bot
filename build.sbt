@@ -6,7 +6,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 
-val bitcoinsV = "1.9.7-412-195cfbd2-SNAPSHOT"
+val bitcoinsV = "1.9.7-491-00b969b0-SNAPSHOT"
 val scalastrV = "0.0.0-77-b957faa6-SNAPSHOT"
 val akkaV = "2.6.20"
 
