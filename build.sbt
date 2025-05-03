@@ -25,7 +25,7 @@ lazy val root = project
     maintainer := "benthecarman",
     libraryDependencies ++= Seq(
       guice,
-      "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
+      "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test,
       "org.bitcoin-s" %% "bitcoin-s-lnurl" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
