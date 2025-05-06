@@ -2,6 +2,7 @@ package controllers
 
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
+import chainrpc.BlockEpoch
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import lnrpc.Invoice
@@ -46,6 +47,8 @@ class InvoiceMonitor(
     with TwitterHandler {
   import system.dispatcher
 
+  var mempoolLimit = false
+
   val feeProvider: MempoolSpaceProvider =
     MempoolSpaceProvider(FastestFeeTarget, MainNet, None)
 
@@ -60,6 +63,22 @@ class InvoiceMonitor(
 
   def startSubscription(): Unit = {
     val parallelism = Runtime.getRuntime.availableProcessors()
+
+    lnd.chainClient
+      .registerBlockEpochNtfn(BlockEpoch())
+      .mapAsync(1) { _ =>
+        if (mempoolLimit) {
+          mempoolLimit = false
+          logger.info("Mempool limit lifted, resuming invoices")
+          telegramHandlerOpt
+            .map(
+              _.sendTelegramMessage("Mempool limit lifted, resuming invoices"))
+            .getOrElse(Future.unit)
+        } else {
+          Future.unit
+        }
+      }
+      .runWith(Sink.ignore)
 
     lnd
       .subscribeInvoices()
@@ -471,11 +490,26 @@ class InvoiceMonitor(
       logger.error(
         s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ",
         err)
+
+      val limitF =
+        if (err.toString.contains("too many unconfirmed ancestors")) {
+          mempoolLimit = true
+          logger.warn(
+            "We've hit the mempool limit, disallowing invoices until next block!")
+          telegramHandlerOpt
+            .map(_.sendTelegramMessage(
+              s"We've hit the mempool limit, disallowing invoices until next block!"))
+            .getOrElse(Future.unit)
+        } else {
+          Future.unit
+        }
+
       for {
         _ <- telegramHandlerOpt
           .map(_.sendTelegramMessage(
             s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ${err.getMessage}"))
           .getOrElse(Future.unit)
+        _ <- limitF
       } yield invoiceDb
     }
   }

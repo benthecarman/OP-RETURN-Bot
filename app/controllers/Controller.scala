@@ -402,6 +402,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def create: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
+      if (invoiceMonitor.mempoolLimit) {
+        val form = opReturnRequestForm.withError(
+          "message",
+          "Too many requests at this time, try again later")
+        Future.successful(
+          BadRequest(views.html
+            .index(recentTransactions.toSeq, form, postUrl)))
+      }
+
       def failure(badForm: Form[OpReturnRequest]): Future[Result] = {
         Future.successful(BadRequest(badForm.errorsAsJson))
       }
@@ -426,6 +435,15 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   // This will be the action that handles our form post
   def createRequest: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
+      if (invoiceMonitor.mempoolLimit) {
+        val form = opReturnRequestForm.withError(
+          "message",
+          "Too many requests at this time, try again later")
+        Future.successful(
+          BadRequest(views.html
+            .index(recentTransactions.toSeq, form, postUrl)))
+      }
+
       val errorFunction: Form[OpReturnRequest] => Future[Result] = {
         formWithErrors: Form[OpReturnRequest] =>
           // This is the bad case, where the form had validation errors.
