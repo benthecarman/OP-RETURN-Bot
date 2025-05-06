@@ -492,12 +492,14 @@ class InvoiceMonitor(
             lazy val action = for {
               profit <- invoiceDAO.totalProfitAction()
               chainFees <- invoiceDAO.totalChainFeesAction()
-            } yield (profit, chainFees)
+              inQueue <- invoiceDAO.numWaitingAction(None)
+            } yield (profit, chainFees, inQueue)
 
             val accountingTelegramF = telegramHandlerOpt
               .map { handler =>
                 for {
-                  (profit, chainFees) <- invoiceDAO.safeDatabase.run(action)
+                  (profit, chainFees, inQueue) <- invoiceDAO.safeDatabase.run(
+                    action)
                   tweetOpt <- tweetF
                   nostrOpt <- nostrF
                   _ <- handler.handleTelegram(
@@ -510,7 +512,8 @@ class InvoiceMonitor(
                     feeRate = feeRate,
                     txDetails = details,
                     totalProfit = profit,
-                    totalChainFees = chainFees
+                    totalChainFees = chainFees,
+                    remainingInQueue = inQueue
                   )
                 } yield ()
               }

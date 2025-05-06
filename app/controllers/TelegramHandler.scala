@@ -202,7 +202,8 @@ class TelegramHandler(controller: Controller)(implicit
       feeRate: SatoshisPerVirtualByte,
       txDetails: TxDetails,
       totalProfit: CurrencyUnit,
-      totalChainFees: CurrencyUnit): Future[Unit] = {
+      totalChainFees: CurrencyUnit,
+      remainingInQueue: Int): Future[Unit] = {
     val amount = invoice.amount.get.toSatoshis
     val profit = amount - txDetails.totalFees
 
@@ -250,6 +251,7 @@ class TelegramHandler(controller: Controller)(implicit
          |
          |total chain fees: ${printAmount(totalChainFees)}
          |total profit: ${printAmount(totalProfit)}
+         |remainingInQueue: ${intFormatter.format(remainingInQueue)}
          |""".stripMargin
 
     sendTelegramMessage(telegramMsg, myTelegramId)
