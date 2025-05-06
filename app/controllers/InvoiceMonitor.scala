@@ -491,15 +491,22 @@ class InvoiceMonitor(
         s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ",
         err)
 
+      val wasSet = mempoolLimit
+
       val limitF =
         if (err.toString.contains("too many unconfirmed ancestors")) {
           mempoolLimit = true
           logger.warn(
             "We've hit the mempool limit, disallowing invoices until next block!")
-          telegramHandlerOpt
-            .map(_.sendTelegramMessage(
-              s"We've hit the mempool limit, disallowing invoices until next block!"))
-            .getOrElse(Future.unit)
+          if (!wasSet) {
+            // only send the message if we just hit the limit
+            telegramHandlerOpt
+              .map(_.sendTelegramMessage(
+                s"We've hit the mempool limit, disallowing invoices until next block!"))
+              .getOrElse(Future.unit)
+          } else {
+            Future.unit
+          }
         } else {
           Future.unit
         }
