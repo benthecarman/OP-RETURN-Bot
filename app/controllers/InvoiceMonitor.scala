@@ -269,8 +269,9 @@ class InvoiceMonitor(
   }
 
   def onInvoicePaid(
-      invoiceDb: InvoiceDb,
+      unpaidInvoiceDb: InvoiceDb,
       npubOpt: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
+    val invoiceDb = unpaidInvoiceDb.copy(paid = true)
     val message = invoiceDb.getMessage()
     val invoice = invoiceDb.invoice
     val feeRate = invoiceDb.feeRate
@@ -299,6 +300,9 @@ class InvoiceMonitor(
       spendUnconfirmed = true)
 
     val createTxF = for {
+      // start by marking paid
+      _ <- invoiceDAO.update(invoiceDb)
+
       transaction <- lnd.sendOutputs(request)
       _ = logger.info(s"Created tx: ${transaction.hex}")
       txId = transaction.txIdBE
@@ -603,7 +607,8 @@ class InvoiceMonitor(
             profitOpt = None,
             chainFeeOpt = None,
             time = TimeUtil.currentEpochSecond,
-            messageBytes = ByteVector(message.getBytes)
+            messageBytes = ByteVector(message.getBytes),
+            paid = false
           )
         invoiceDAO.create(db)
       }
@@ -643,7 +648,8 @@ class InvoiceMonitor(
               profitOpt = None,
               chainFeeOpt = None,
               time = TimeUtil.currentEpochSecond,
-              messageBytes = ByteVector(message.getBytes)
+              messageBytes = ByteVector(message.getBytes),
+              paid = false
             )
 
           val action = nip5DAO.getPublicKeyAction(name).flatMap {

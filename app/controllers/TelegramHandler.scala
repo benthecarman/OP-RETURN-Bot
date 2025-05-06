@@ -309,35 +309,39 @@ class TelegramHandler(controller: Controller)(implicit
       completed <- invoiceDAO.completedAction(afterTimeOpt)
       nip5s <- nip5DAO.getNumCompletedAction(afterTimeOpt)
       zapped <- zapDAO.totalZappedAction(afterTimeOpt)
-    } yield (completed, nip5s, zapped)
+      waitingAction <- invoiceDAO.numWaitingAction(afterTimeOpt)
+    } yield (completed, nip5s, zapped, waitingAction)
 
-    invoiceDAO.safeDatabase.run(action).map { case (completed, nip5s, zapped) =>
-      val chainFees = completed.flatMap(_.chainFeeOpt).sum
-      val profit = completed.flatMap(_.profitOpt).sum
-      val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
-      val nonStdVbytes = completed
-        .filter(_.messageBytes.length > 80)
-        .flatMap(_.txOpt.map(_.vsize))
-        .sum
+    invoiceDAO.safeDatabase.run(action).map {
+      case (completed, nip5s, zapped, waitingAction) =>
+        val chainFees = completed.flatMap(_.chainFeeOpt).sum
+        val profit = completed.flatMap(_.profitOpt).sum
+        val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
+        val nonStdVbytes = completed
+          .filter(_.messageBytes.length > 80)
+          .flatMap(_.txOpt.map(_.vsize))
+          .sum
 
-      s"""
-         |Total OP_RETURNs: ${intFormatter.format(completed.size)}
-         |Total Non-standard: ${intFormatter.format(
-          completed.count(_.messageBytes.length > 80))}
-         |Total chain size: ${printSize(vbytes)}
-         |Total non-std chain size: ${printSize(nonStdVbytes)}
-         |Total chain fees: ${printAmount(chainFees)}
-         |Total profit: ${printAmount(profit)}
-         |
-         |Total NIP-05s: ${intFormatter.format(nip5s)}
-         |Total Zapped: ${printAmount(zapped)}
-         |""".stripMargin
+        s"""
+           |Total OP_RETURNs: ${intFormatter.format(completed.size)}
+           |Total Non-standard: ${intFormatter.format(
+            completed.count(_.messageBytes.length > 80))}
+           |Total chain size: ${printSize(vbytes)}
+           |Total non-std chain size: ${printSize(nonStdVbytes)}
+           |Total chain fees: ${printAmount(chainFees)}
+           |Total profit: ${printAmount(profit)}
+           |
+           |Total NIP-05s: ${intFormatter.format(nip5s)}
+           |Total Zapped: ${printAmount(zapped)}
+           |
+           |Total waiting action: ${intFormatter.format(waitingAction)}
+           |""".stripMargin
     }
   }
 
   private def printSize(size: Long): String = {
     if (size < 1000) {
-      s"${currencyFormatter.format(size).tail} vbytes"
+      s"$size vbytes"
     } else if (size < 1000000) {
       s"${currencyFormatter.format(size / 1000.0).tail} vKB"
     } else if (size < 1000000000) {

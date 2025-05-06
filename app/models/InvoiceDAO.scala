@@ -32,7 +32,8 @@ case class InvoiceDb(
     profitOpt: Option[CurrencyUnit],
     chainFeeOpt: Option[CurrencyUnit],
     time: Long,
-    messageBytes: ByteVector) {
+    messageBytes: ByteVector,
+    paid: Boolean) {
 
   def getMessage(): String = {
     Try(
@@ -104,6 +105,21 @@ case class InvoiceDAO()(implicit
           .result
           .map(_.toVector)
 
+    }
+  }
+
+  def numWaitingAction(
+      afterTimeOpt: Option[Long]): DBIOAction[Int, NoStream, Effect.Read] = {
+    afterTimeOpt match {
+      case None =>
+        table.filter(_.txIdOpt.isEmpty).filter(_.paid).size.result
+      case Some(afterTime) =>
+        table
+          .filter(_.time > afterTime)
+          .filter(_.txIdOpt.isEmpty)
+          .filter(_.paid)
+          .size
+          .result
     }
   }
 
@@ -186,6 +202,8 @@ case class InvoiceDAO()(implicit
 
     def messageBytes: Rep[ByteVector] = column("message_bytes")
 
+    def paid: Rep[Boolean] = column("paid")
+
     def * : ProvenShape[InvoiceDb] =
       (rHash,
        invoice,
@@ -201,6 +219,7 @@ case class InvoiceDAO()(implicit
        profitOpt,
        chainFeeOpt,
        time,
-       messageBytes).<>(InvoiceDb.tupled, InvoiceDb.unapply)
+       messageBytes,
+       paid).<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }
