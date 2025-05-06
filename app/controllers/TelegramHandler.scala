@@ -90,13 +90,26 @@ class TelegramHandler(controller: Controller)(implicit
 
   onCommand("processunhandled") { implicit msg =>
     if (checkAdminMessage(msg)) {
-      val num = Try {
-        val str = msg.text.get.trim.split(" ", 2).last
-        str.trim.toInt
-      }.toOption
-      controller.invoiceMonitor.processUnhandledInvoices(num).flatMap { dbs =>
-        reply(s"Updated ${dbs.size} invoices").map(_ => ())
+      val (num, liftMempoolLimit) = Try {
+        val pieces = msg.text.get.trim.split(" ")
+        if (pieces.length == 1) {
+          (None, false)
+        } else if (pieces.length == 2) {
+          (Some(pieces(1).trim.toInt), false)
+        } else if (pieces.length == 3) {
+          (Some(pieces(1).trim.toInt), pieces(2).trim.toBoolean)
+        } else {
+          throw new IllegalArgumentException(
+            "Usage: /processunhandled <num> <liftMempoolLimit>")
+        }
       }
+        .getOrElse((None, false))
+
+      controller.invoiceMonitor
+        .processUnhandledInvoices(num, liftMempoolLimit)
+        .flatMap { dbs =>
+          reply(s"Updated ${dbs.size} invoices").map(_ => ())
+        }
     } else {
       reply("You are not allowed to use this command!").map(_ => ())
     }

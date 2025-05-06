@@ -70,7 +70,7 @@ class InvoiceMonitor(
           mempoolLimit = false
 
           // process some unhandled invoices
-          processUnhandledInvoices(Some(100))
+          processUnhandledInvoices(Some(100), liftMempoolLimit = false)
 
           logger.info("Mempool limit lifted, resuming invoices")
           telegramHandlerOpt
@@ -159,12 +159,17 @@ class InvoiceMonitor(
   }
 
   def processUnhandledInvoices(
-      limit: Option[Int]): Future[Vector[InvoiceDb]] = {
+      limit: Option[Int],
+      liftMempoolLimit: Boolean): Future[Vector[InvoiceDb]] = {
     invoiceDAO.findUnclosed().flatMap { items =>
       if (items.nonEmpty) {
         val unclosed = limit match {
           case Some(l) => items.sortBy(_.time).take(l)
           case None    => items
+        }
+
+        if (liftMempoolLimit) {
+          mempoolLimit = false
         }
 
         val time = System.currentTimeMillis()
