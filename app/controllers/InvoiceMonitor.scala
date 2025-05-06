@@ -598,12 +598,14 @@ class InvoiceMonitor(
 
         // Add fee if no tweet
         val noTwitterFee = if (noTwitter) Satoshis(1000) else Satoshis.zero
+        // add fee if non standard transaction
+        val noStdFee = if (messageSize > 80) Satoshis(10000) else Satoshis.zero
 
-        // tx fee + app fee (1337) + twitter fee
+        // tx fee + app fee (1337) + twitter fee + non standard fee
         val sats =
           // multiply by 2 just in case
           (feeRate * 2 * (baseSize + messageSize)) +
-            Satoshis(1337) + noTwitterFee
+            Satoshis(1337) + noTwitterFee + noStdFee
         val expiry = 60 * 5 // 5 minutes
 
         val hash = CryptoUtil.sha256(message)
