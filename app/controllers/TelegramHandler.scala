@@ -92,7 +92,11 @@ class TelegramHandler(controller: Controller)(implicit
 
   onCommand("processunhandled") { implicit msg =>
     if (checkAdminMessage(msg)) {
-      controller.invoiceMonitor.processUnhandledInvoices(None).flatMap { dbs =>
+      val num = Try {
+        val str = msg.text.get.trim.split(" ", 2).last
+        str.trim.toInt
+      }.toOption
+      controller.invoiceMonitor.processUnhandledInvoices(num).flatMap { dbs =>
         reply(s"Updated ${dbs.size} invoices").map(_ => ())
       }
     } else {
