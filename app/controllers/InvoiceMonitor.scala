@@ -373,7 +373,10 @@ class InvoiceMonitor(
         } yield ()
       }.recover(_ => ())
 
-      txDetailsOpt <- lnd.getTransaction(txId)
+      txDetailsOpt <- lnd
+        .getTransactions(895562)
+        .map(_.find(_.txId == txId))
+        .recover(_ => None)
 
       _ = Try {
         recentTransactions += txId
