@@ -353,28 +353,35 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       }
     }
 
-  def success(txIdStr: String): Action[AnyContent] = {
+  def success(rHashStr: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
-      Try(DoubleSha256DigestBE.fromHex(txIdStr)) match {
+      Try(Sha256Digest.fromHex(rHashStr)) match {
         case Failure(exception) =>
           logger.error(exception)
           Future.successful(
             BadRequest(views.html
               .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
-        case Success(txId) =>
-          invoiceDAO.findByTxId(txId).map {
+        case Success(rHash) =>
+          invoiceDAO.read(rHash).map {
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
             case Some(invoiceDb) =>
-              invoiceDb.txOpt match {
-                case Some(_) =>
+              invoiceDb.txIdOpt match {
+                case Some(txId) =>
                   Ok(
                     views.html.success(txId,
                                        invoiceDb.messageBytes.length > 80))
                 case None =>
-                  throw new RuntimeException(
-                    s"This is impossible, ${invoiceDb.invoice}")
+                  if (invoiceDb.paid) {
+                    Ok(views.html.pending())
+                  } else {
+                    BadRequest(
+                      views.html
+                        .index(recentTransactions.toSeq,
+                               opReturnRequestForm,
+                               postUrl))
+                  }
               }
           }
       }

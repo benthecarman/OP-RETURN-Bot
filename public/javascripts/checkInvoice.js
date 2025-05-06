@@ -5,9 +5,7 @@ function queryAPI(rHash) {
                 const text = await response.text();
                 if (response.ok) {
                     // Navigate to the URL on success
-                    if (text) {
-                        window.location.href = 'https://opreturnbot.com/success?txId=' + text;
-                    }
+                    window.location.href = 'https://opreturnbot.com/success?rHash=' + rHash;
                 } else if (response.status === 400 && text) {
                     // Handle the 400 error
                     console.error('Bad Request: ' + text);

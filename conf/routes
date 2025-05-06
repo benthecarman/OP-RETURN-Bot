@@ -9,7 +9,7 @@ POST        /createRequest                   controllers.Controller.createReques
 POST        /createNip5Request               controllers.Controller.createNip5Request
 
 GET         /invoice                         controllers.Controller.invoice(invoice)
-GET         /success                         controllers.Controller.success(txId)
+GET         /success                         controllers.Controller.success(rHash)
 GET         /connect                         controllers.Controller.connect
 GET         /lnurlp/:meta                    controllers.Controller.lnurlPay(meta, user: Option[String])
 GET         /.well-known/lnurlp/*user        controllers.Controller.getLnurlPay(user)
