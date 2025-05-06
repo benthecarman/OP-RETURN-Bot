@@ -157,7 +157,7 @@ class InvoiceMonitor(
     invoiceDAO.findUnclosed().flatMap { items =>
       if (items.nonEmpty) {
         val unclosed = limit match {
-          case Some(l) => items.take(l)
+          case Some(l) => items.sortBy(_.time).take(l)
           case None    => items
         }
 
