@@ -1,5 +1,6 @@
 package controllers
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
 import chainrpc.BlockEpoch
@@ -61,9 +62,7 @@ class InvoiceMonitor(
 
   val esplora = new EsploraClient(MempoolSpaceEsploraSite(MainNet), None)
 
-  def startSubscription(): Unit = {
-    val parallelism = Runtime.getRuntime.availableProcessors()
-
+  def startBlockSubscription(): Future[Done] = {
     lnd.chainClient
       .registerBlockEpochNtfn(BlockEpoch())
       .mapAsync(1) { _ =>
@@ -83,6 +82,12 @@ class InvoiceMonitor(
         }
       }
       .runWith(Sink.ignore)
+      .flatMap(_ => startBlockSubscription())
+      .recoverWith(_ => startBlockSubscription())
+  }
+
+  def startSubscription(): Future[Done] = {
+    val parallelism = Runtime.getRuntime.availableProcessors()
 
     lnd
       .subscribeInvoices()
@@ -149,7 +154,8 @@ class InvoiceMonitor(
         }
       }
       .runWith(Sink.ignore)
-    ()
+      .flatMap(_ => startSubscription())
+      .recoverWith(_ => startSubscription())
   }
 
   def processUnhandledInvoices(

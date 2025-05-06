@@ -89,7 +89,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   startF.map { _ =>
     setURI()
     telegramHandler.start()
-    invoiceMonitor.startSubscription()
+    val _ = invoiceMonitor.startSubscription()
+    val _ = invoiceMonitor.startBlockSubscription()
     invoiceMonitor.setNostrMetadata()
     invoiceMonitor.listenForDMs()
   }
