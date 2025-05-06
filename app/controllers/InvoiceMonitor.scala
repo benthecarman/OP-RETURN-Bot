@@ -331,7 +331,11 @@ class InvoiceMonitor(
       // start by marking paid
       _ <- invoiceDAO.update(invoiceDb)
 
-      transaction <- lnd.sendOutputs(request)
+      transaction <- lnd
+        .sendOutputs(request)
+        .recover(e => {
+          throw new RuntimeException(s"SendOutputs error: $e")
+        })
       _ = logger.info(s"Created tx: ${transaction.hex}")
       txId = transaction.txIdBE
 
