@@ -67,10 +67,8 @@ class InvoiceMonitor(
       .registerBlockEpochNtfn(BlockEpoch())
       .mapAsync(1) { _ =>
         if (mempoolLimit) {
-          mempoolLimit = false
-
-          // process some unhandled invoices
-          processUnhandledInvoices(Some(100), liftMempoolLimit = false)
+          // process some unhandled invoices, lifting the limit
+          processUnhandledInvoices(Some(100), liftMempoolLimit = true)
 
           logger.info("Mempool limit lifted, resuming invoices")
           telegramHandlerOpt
@@ -175,7 +173,7 @@ class InvoiceMonitor(
         val time = System.currentTimeMillis()
         logger.info(s"Processing ${unclosed.size} unhandled invoices")
 
-        val updateFs = unclosed.map { db =>
+        def processInvoice(db: InvoiceDb): Future[InvoiceDb] = {
           if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
           else {
             lnd
@@ -201,8 +199,23 @@ class InvoiceMonitor(
           }
         }
 
+        // if we're lifting the limit, process in sequence
+        val updateF = if (liftMempoolLimit) {
+          unclosed
+            .foldLeft(Future.successful(Vector.empty[InvoiceDb])) {
+              case (accF, db) =>
+                accF.flatMap { acc =>
+                  processInvoice(db).map { db =>
+                    acc :+ db
+                  }
+                }
+            }
+        } else {
+          Future.sequence(unclosed.map(processInvoice))
+        }
+
         val f = for {
-          updates <- Future.sequence(updateFs)
+          updates <- updateF
           dbs <- invoiceDAO.updateAll(updates)
           took = System.currentTimeMillis() - time
           _ = logger.info(
