@@ -326,7 +326,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         case Some(invoiceDb) =>
           invoiceDb.txIdOpt match {
             case Some(txId) => Ok(txId.hex)
-            case None       => BadRequest("Invoice has not been paid")
+            case None =>
+              if (invoiceDb.paid) {
+                Ok("null")
+              } else {
+                BadRequest("Invoice has not been paid")
+              }
           }
       }
     }
