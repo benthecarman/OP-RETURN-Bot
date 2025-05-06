@@ -400,6 +400,18 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
+  def mempoolLimit: Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      Future.successful(
+        if (invoiceMonitor.mempoolLimit) {
+          Ok("true")
+        } else {
+          Ok("false")
+        }
+      )
+    }
+  }
+
   def create: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       if (invoiceMonitor.mempoolLimit) {

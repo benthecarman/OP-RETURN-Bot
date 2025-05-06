@@ -69,6 +69,10 @@ class InvoiceMonitor(
       .mapAsync(1) { _ =>
         if (mempoolLimit) {
           mempoolLimit = false
+
+          // process some unhandled invoices
+          processUnhandledInvoices(Some(100))
+
           logger.info("Mempool limit lifted, resuming invoices")
           telegramHandlerOpt
             .map(
@@ -148,9 +152,15 @@ class InvoiceMonitor(
     ()
   }
 
-  def processUnhandledInvoices(): Future[Vector[InvoiceDb]] = {
-    invoiceDAO.findUnclosed().flatMap { unclosed =>
-      if (unclosed.nonEmpty) {
+  def processUnhandledInvoices(
+      limit: Option[Int]): Future[Vector[InvoiceDb]] = {
+    invoiceDAO.findUnclosed().flatMap { items =>
+      if (items.nonEmpty) {
+        val unclosed = limit match {
+          case Some(l) => items.take(l)
+          case None    => items
+        }
+
         val time = System.currentTimeMillis()
         logger.info(s"Processing ${unclosed.size} unhandled invoices")
 
@@ -272,6 +282,13 @@ class InvoiceMonitor(
       unpaidInvoiceDb: InvoiceDb,
       npubOpt: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
     val invoiceDb = unpaidInvoiceDb.copy(paid = true)
+
+    // just mark paid and skip for now
+    if (mempoolLimit) {
+      logger.warn("Mempool limit in action, skipping for now")
+      return invoiceDAO.update(invoiceDb)
+    }
+
     val message = invoiceDb.getMessage()
     val invoice = invoiceDb.invoice
     val feeRate = invoiceDb.feeRate

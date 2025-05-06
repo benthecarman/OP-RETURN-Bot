@@ -92,7 +92,7 @@ class TelegramHandler(controller: Controller)(implicit
 
   onCommand("processunhandled") { implicit msg =>
     if (checkAdminMessage(msg)) {
-      controller.invoiceMonitor.processUnhandledInvoices().flatMap { dbs =>
+      controller.invoiceMonitor.processUnhandledInvoices(None).flatMap { dbs =>
         reply(s"Updated ${dbs.size} invoices").map(_ => ())
       }
     } else {
@@ -335,6 +335,7 @@ class TelegramHandler(controller: Controller)(implicit
            |Total Zapped: ${printAmount(zapped)}
            |
            |Total waiting action: ${intFormatter.format(waitingAction)}
+           |Mempool limit: ${controller.invoiceMonitor.mempoolLimit}
            |""".stripMargin
     }
   }
