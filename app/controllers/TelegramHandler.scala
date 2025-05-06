@@ -57,8 +57,6 @@ class TelegramHandler(controller: Controller)(implicit
 
   override def start(): Future[Unit] = {
     val commands = List(
-      BotCommand("report", "Generate report of profit and total on chain fees"),
-      BotCommand("processunhandled", "Forces processing of invoices"),
       BotCommand("create", "Creating an invoice with the given message")
     )
 
