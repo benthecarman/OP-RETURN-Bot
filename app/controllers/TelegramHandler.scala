@@ -76,6 +76,21 @@ class TelegramHandler(controller: Controller)(implicit
     }
   }
 
+  onCommand("rebroadcast") { implicit msg =>
+    if (checkAdminMessage(msg)) {
+      controller.invoiceMonitor
+        .rebroadcastAncestors()
+        .flatMap { _ =>
+          reply("rebroadcasted ancestors!").map(_ => ())
+        }
+        .recoverWith { e =>
+          reply(s"Error rebroadcasting ancestors: ${e.getMessage}").map(_ => ())
+        }
+    } else {
+      reply("You are not allowed to use this command!").map(_ => ())
+    }
+  }
+
   onCommand("report") { implicit msg =>
     if (checkAdminMessage(msg)) {
       val secAgo = getTimeParam(msg)
@@ -365,7 +380,6 @@ class TelegramHandler(controller: Controller)(implicit
            |
            |Remaining in Queue: ${intFormatter.format(waitingAction)}
            |Mempool limit: ${controller.invoiceMonitor.mempoolLimit}
-           |Locked UTXOs: ${controller.invoiceMonitor.lockedOutpoints.size}
            |""".stripMargin
     }
   }

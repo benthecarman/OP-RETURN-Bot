@@ -171,7 +171,6 @@ class InvoiceMonitor(
 
         val unlockF = if (liftMempoolLimit) {
           mempoolLimit = false
-          unLockAncestorUtxos().map(_ => ())
         } else Future.unit
 
         val time = System.currentTimeMillis()
@@ -205,18 +204,15 @@ class InvoiceMonitor(
 
         // if we're lifting the limit, process in sequence
         val updateF = if (liftMempoolLimit) {
-          // don't start processing until we unlock the utxos
-          unlockF.flatMap { _ =>
-            unclosed
-              .foldLeft(Future.successful(Vector.empty[InvoiceDb])) {
-                case (accF, db) =>
-                  accF.flatMap { acc =>
-                    processInvoice(db).map { db =>
-                      acc :+ db
-                    }
+          unclosed
+            .foldLeft(Future.successful(Vector.empty[InvoiceDb])) {
+              case (accF, db) =>
+                accF.flatMap { acc =>
+                  processInvoice(db).map { db =>
+                    acc :+ db
                   }
-              }
-          }
+                }
+            }
         } else {
           Future.sequence(unclosed.map(processInvoice))
         }
@@ -568,8 +564,7 @@ class InvoiceMonitor(
           logger.warn(
             "We've hit the mempool limit, disallowing invoices until next block!")
           if (!wasSet) {
-            // only send the message and lock utxos if we just hit the limit
-            lockAncestorMaxUtxos()
+            // only send the message if we just hit the limit
             telegramHandlerOpt
               .map(_.sendTelegramMessage(
                 s"We've hit the mempool limit, disallowing invoices until next block!"))
@@ -743,65 +738,39 @@ class InvoiceMonitor(
     }
   }
 
-  def listUtxoAncestorCount(): Future[Map[TransactionOutPoint, Int]] = {
+  private def listUtxoAncestorTxIds(): Future[
+    Map[TransactionOutPoint, Vector[DoubleSha256DigestBE]]] = {
     for {
       utxos <- lnd.listUnspent
       ancestors <- Future
         .sequence(utxos.filter(t => t.outPointOpt.isDefined).map { utxo =>
           if (utxo.confirmations > 0) {
-            Future.successful((utxo.outPointOpt.get, 0))
+            Future.successful((utxo.outPointOpt.get, Vector.empty))
           } else {
             config.bitcoindClient
               .getMemPoolAncestors(utxo.outPointOpt.get.txId)
-              .map(_.size)
-              .map((utxo.outPointOpt.get, _))
+              .map(t => (utxo.outPointOpt.get, t))
           }
         })
         .map(_.toMap)
     } yield ancestors
   }
 
-  def lockAncestorMaxUtxos(): Future[Vector[TransactionOutPoint]] = {
-    logger.info("Locking ancestor maxxed UTXOs")
+  def rebroadcastAncestors(): Future[Unit] = {
     for {
-      ancestors <- listUtxoAncestorCount()
-      toLock = ancestors.filter(_._2 >= 24).keys.toVector
-      _ = logger.info(s"Found ${toLock.size} utxos to lock")
-      locked <- toLock
-        .foldLeft(Future.successful(Vector.empty[TransactionOutPoint])) {
-          case (accF, outpoint) =>
-            accF.flatMap { acc =>
-              // lease for 10 minutes
-              lnd.leaseOutput(outpoint, 600).map { _ =>
-                acc :+ outpoint
-              }
-            }
-        }
-    } yield {
-      lockedOutpoints = locked
-      logger.info(s"${lockedOutpoints.size} utxos locked")
-      locked
-    }
-  }
-
-  def unLockAncestorUtxos(): Future[Vector[TransactionOutPoint]] = {
-    logger.info(s"Unlocking ${lockedOutpoints.size} utxos")
-    val unlockF = lockedOutpoints.foldLeft(
-      Future.successful(Vector.empty[TransactionOutPoint])) {
-      case (accF, outpoint) =>
-        accF.flatMap { acc =>
-          lnd.releaseOutput(outpoint).map { _ =>
-            acc :+ outpoint
+      map <- listUtxoAncestorTxIds()
+      _ <- Future.sequence(map.map { case (utxo, txIds) =>
+        logger.info(s"Rebroadcasting ${txIds.size} ancestors for utxo $utxo")
+        txIds
+          .foldLeft(Future.successful(())) { case (accF, txId) =>
+            for {
+              _ <- accF
+              tx <- config.bitcoindClient.getRawTransactionRaw(txId)
+              _ <- slipStreamClient.publishTx(tx.hex)
+              _ <- config.bitcoindClient.broadcastTransaction(tx)
+            } yield ()
           }
-        }
-    }
-
-    unlockF.map { unlocked =>
-      lockedOutpoints = Vector.empty
-      logger.info(s"${unlocked.size} utxos unlocked")
-      unlocked
-    }
+      })
+    } yield ()
   }
-
-  var lockedOutpoints: Vector[TransactionOutPoint] = Vector.empty
 }
