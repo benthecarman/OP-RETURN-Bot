@@ -51,6 +51,8 @@ class InvoiceMonitor(
 
   var mempoolLimit = false
 
+  val slipStreamClient = new SlipStreamClient()
+
   val feeProvider: MempoolSpaceProvider =
     MempoolSpaceProvider(FastestFeeTarget, MainNet, None)
 
@@ -377,12 +379,7 @@ class InvoiceMonitor(
       // try to broadcast to slipstream
       _ = {
         val broadcast = transaction.hex
-        val slipStreamClient = new SlipStreamClient()
-        for {
-          _ <- slipStreamClient.start()
-          _ <- slipStreamClient.publishTx(broadcast)
-          _ <- slipStreamClient.stop()
-        } yield ()
+        slipStreamClient.publishTx(broadcast)
       }
 
       height <- heightF
