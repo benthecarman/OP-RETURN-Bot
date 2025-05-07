@@ -4,7 +4,7 @@ import com.github.scribejava.core.model.{OAuthRequest, Verb}
 import grizzled.slf4j.Logging
 import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto.DoubleSha256DigestBE
-import play.api.libs.json.{JsValue, Json, Reads}
+import play.api.libs.json.{JsObject, JsValue, Json, Reads}
 
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
@@ -60,7 +60,12 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
 
   protected def handleTweet(
       message: String,
-      txId: DoubleSha256DigestBE): Future[TweetData] =
+      txId: DoubleSha256DigestBE): Future[Option[TweetData]] = {
+    if (Try(Json.parse(message).asOpt[JsObject].isDefined).getOrElse(false)) {
+      logger.warn(s"Message is a JSON object, not sending to twitter")
+      return Future.successful(None)
+    }
+
     FutureUtil.makeAsync { () =>
       val usedMessage = config.censorMessage(message)
 
@@ -73,6 +78,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
            |https://mempool.space/tx/${txId.hex}
            |""".stripMargin
 
-      sendTweet(tweet)
+      sendTweet(tweet).map(Some(_))
     }.flatten
+  }
 }

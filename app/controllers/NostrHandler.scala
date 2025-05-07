@@ -280,6 +280,11 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       message: String,
       npubOpt: Option[SchnorrPublicKey],
       txId: DoubleSha256DigestBE): Future[Option[Sha256Digest]] = {
+    if (Try(Json.parse(message).asOpt[JsObject].isDefined).getOrElse(false)) {
+      logger.warn(s"Message is a JSON object, not sending to nostr")
+      return Future.successful(None)
+    }
+
     val content =
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔

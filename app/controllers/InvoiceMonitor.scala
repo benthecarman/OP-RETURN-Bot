@@ -358,12 +358,17 @@ class InvoiceMonitor(
         case Some(error) =>
           logger.error(
             s"Error when broadcasting transaction ${txId.hex}, $error")
+          throw new RuntimeException(
+            s"Error when broadcasting transaction ${txId.hex}, $error")
         case None =>
           logger.info(s"Successfully created tx: ${txId.hex}")
       }
-      _ <- esplora.broadcastTransaction(transaction).recover(_ => txId)
+      // broadcast to esplora in bg, only if standard
+      _ = if (invoiceDb.messageBytes.length <= 80) {
+        esplora.broadcastTransaction(transaction).recover(_ => txId)
+      }
       // try to broadcast to slipstream
-      _ <- {
+      _ = {
         val broadcast = transaction.hex
         val slipStreamClient = new SlipStreamClient()
         for {
@@ -371,7 +376,7 @@ class InvoiceMonitor(
           _ <- slipStreamClient.publishTx(broadcast)
           _ <- slipStreamClient.stop()
         } yield ()
-      }.recover(_ => ())
+      }
 
       txDetailsOpt <- lnd
         .getTransactions(895562)
@@ -458,7 +463,7 @@ class InvoiceMonitor(
         } else {
           logger.info("Tweeting...")
           handleTweet(message, txId)
-            .map(Option(_))
+            .map(x => Option(x).flatten)
             .recover { err =>
               logger.error(
                 s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
