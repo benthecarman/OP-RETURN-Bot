@@ -378,10 +378,14 @@ class InvoiceMonitor(
         } yield ()
       }
 
+      getTxStart = System.currentTimeMillis()
       txDetailsOpt <- lnd
         .getTransactions(895562)
         .map(_.find(_.txId == txId))
         .recover(_ => None)
+      getTxEnd = System.currentTimeMillis()
+      _ = logger.info(
+        s"Get tx took ${getTxEnd - getTxStart} ms, tx: ${txId.hex}")
 
       _ = Try {
         recentTransactions += txId
