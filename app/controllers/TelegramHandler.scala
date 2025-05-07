@@ -393,7 +393,7 @@ class TelegramHandler(controller: Controller)(implicit
       s"""
          |Total OP_RETURNs: ${intFormatter.format(numCompleted)}
          |Total Non-standard: ${intFormatter.format(
-          nonStdCompleted)} (${currencyFormatter.format(percentNonStd)}%)
+          nonStdCompleted)} (${currencyFormatter.format(percentNonStd).tail}%)
          |Total chain size: ${printSize(vbytes)}
          |Total non-std chain size: ${printSize(nonStdVbytes)}
          |Total chain fees: ${printAmount(chainFees)}
