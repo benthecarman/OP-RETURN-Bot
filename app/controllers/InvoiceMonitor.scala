@@ -738,7 +738,7 @@ class InvoiceMonitor(
     }
   }
 
-  private def listUtxoAncestorTxIds(): Future[
+  def listUtxoAncestorTxIds(): Future[
     Map[TransactionOutPoint, Vector[DoubleSha256DigestBE]]] = {
     for {
       utxos <- lnd.listUnspent

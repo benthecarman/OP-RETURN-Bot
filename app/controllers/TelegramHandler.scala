@@ -91,6 +91,24 @@ class TelegramHandler(controller: Controller)(implicit
     }
   }
 
+  onCommand("utxos") { implicit msg =>
+    if (checkAdminMessage(msg)) {
+      controller.invoiceMonitor
+        .listUtxoAncestorTxIds()
+        .flatMap { map =>
+          val utxos = map
+            .map { case (outpoint, ancestors) =>
+              s"${outpoint.toHumanReadableString}: ${ancestors.size} ancestors"
+            }
+            .mkString("\n")
+
+          reply(utxos).map(_ => ())
+        }
+    } else {
+      reply("You are not allowed to use this command!").map(_ => ())
+    }
+  }
+
   onCommand("report") { implicit msg =>
     if (checkAdminMessage(msg)) {
       val secAgo = getTimeParam(msg)
