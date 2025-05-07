@@ -768,7 +768,7 @@ class InvoiceMonitor(
     logger.info("Locking ancestor maxxed UTXOs")
     for {
       ancestors <- listUtxoAncestorCount()
-      toLock = ancestors.filter(_._2 >= 25).keys.toVector
+      toLock = ancestors.filter(_._2 >= 24).keys.toVector
       _ = logger.info(s"Found ${toLock.size} utxos to lock")
       locked <- toLock
         .foldLeft(Future.successful(Vector.empty[TransactionOutPoint])) {
