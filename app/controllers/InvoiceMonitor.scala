@@ -765,9 +765,11 @@ class InvoiceMonitor(
   }
 
   def lockAncestorMaxUtxos(): Future[Vector[TransactionOutPoint]] = {
+    logger.info("Locking ancestor maxxed UTXOs")
     for {
       ancestors <- listUtxoAncestorCount()
       toLock = ancestors.filter(_._2 >= 25).keys.toVector
+      _ = logger.info(s"Found ${toLock.size} utxos to lock")
       locked <- toLock
         .foldLeft(Future.successful(Vector.empty[TransactionOutPoint])) {
           case (accF, outpoint) =>
@@ -778,11 +780,15 @@ class InvoiceMonitor(
               }
             }
         }
+    } yield {
       lockedOutpoints = locked
-    } yield locked
+      logger.info(s"${lockedOutpoints.size} utxos locked")
+      locked
+    }
   }
 
   def unLockAncestorUtxos(): Future[Vector[TransactionOutPoint]] = {
+    logger.info(s"Unlocking ${lockedOutpoints.size} utxos")
     val unlockF = lockedOutpoints.foldLeft(
       Future.successful(Vector.empty[TransactionOutPoint])) {
       case (accF, outpoint) =>
@@ -795,6 +801,7 @@ class InvoiceMonitor(
 
     unlockF.map { unlocked =>
       lockedOutpoints = Vector.empty
+      logger.info(s"${unlocked.size} utxos unlocked")
       unlocked
     }
   }
