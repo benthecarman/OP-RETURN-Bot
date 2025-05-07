@@ -88,6 +88,18 @@ class TelegramHandler(controller: Controller)(implicit
     }
   }
 
+  onCommand("publicreport") { implicit msg =>
+    if (checkAdminMessage(msg)) {
+      val secAgo = getTimeParam(msg)
+      val afterTimeOpt = secAgo.map(secondsAgo)
+      createPublicReport(afterTimeOpt).flatMap { report =>
+        reply(report).map(_ => ())
+      }
+    } else {
+      reply("You are not allowed to use this command!").map(_ => ())
+    }
+  }
+
   onCommand("processunhandled") { implicit msg =>
     if (checkAdminMessage(msg)) {
       val (num, liftMempoolLimit) = Try {
@@ -251,7 +263,7 @@ class TelegramHandler(controller: Controller)(implicit
          |
          |total chain fees: ${printAmount(totalChainFees)}
          |total profit: ${printAmount(totalProfit)}
-         |remainingInQueue: ${intFormatter.format(remainingInQueue)}
+         |remaining in queue: ${intFormatter.format(remainingInQueue)}
          |""".stripMargin
 
     sendTelegramMessage(telegramMsg, myTelegramId)
@@ -351,9 +363,41 @@ class TelegramHandler(controller: Controller)(implicit
            |Total NIP-05s: ${intFormatter.format(nip5s)}
            |Total Zapped: ${printAmount(zapped)}
            |
-           |Total waiting action: ${intFormatter.format(waitingAction)}
+           |Remaining in Queue: ${intFormatter.format(waitingAction)}
            |Mempool limit: ${controller.invoiceMonitor.mempoolLimit}
            |""".stripMargin
+    }
+  }
+
+  private def createPublicReport(afterTimeOpt: Option[Long]): Future[String] = {
+    val action = for {
+      completed <- invoiceDAO.completedAction(afterTimeOpt)
+      waitingAction <- invoiceDAO.numWaitingAction(afterTimeOpt)
+    } yield (completed, waitingAction)
+
+    invoiceDAO.safeDatabase.run(action).map { case (completed, waitingAction) =>
+      val numCompleted = completed.size
+      val nonStdCompleted =
+        completed.count(_.messageBytes.length > 80)
+      val percentNonStd =
+        if (numCompleted == 0) 0.0
+        else nonStdCompleted.toDouble / numCompleted.toDouble * 100.0
+      val chainFees = completed.flatMap(_.chainFeeOpt).sum
+      val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
+      val nonStdVbytes = completed
+        .filter(_.messageBytes.length > 80)
+        .flatMap(_.txOpt.map(_.vsize))
+        .sum
+
+      s"""
+         |Total OP_RETURNs: ${intFormatter.format(numCompleted)}
+         |Total Non-standard: ${intFormatter.format(nonStdCompleted)} (${currencyFormatter.format(percentNonStd)}%)
+         |Total chain size: ${printSize(vbytes)}
+         |Total non-std chain size: ${printSize(nonStdVbytes)}
+         |Total chain fees: ${printAmount(chainFees)}
+         |
+         |Remaining in Queue: ${intFormatter.format(waitingAction)}
+         |""".stripMargin
     }
   }
 
