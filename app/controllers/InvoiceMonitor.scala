@@ -344,6 +344,8 @@ class InvoiceMonitor(
       // start by marking paid
       _ <- invoiceDAO.update(invoiceDb)
 
+      heightF = lnd.getInfo.map(_.blockHeight)
+
       transaction <- lnd
         .sendOutputs(request)
         .recover(e => {
@@ -378,9 +380,10 @@ class InvoiceMonitor(
         } yield ()
       }
 
+      height <- heightF
       getTxStart = System.currentTimeMillis()
       txDetailsOpt <- lnd
-        .getTransactions(895562)
+        .getTransactions(height.toInt)
         .map(_.find(_.txId == txId))
         .recover(_ => None)
       getTxEnd = System.currentTimeMillis()
