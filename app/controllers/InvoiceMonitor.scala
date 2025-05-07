@@ -19,7 +19,7 @@ import org.bitcoins.core.protocol.script.ScriptPubKey
 import org.bitcoins.core.protocol.transaction.TransactionOutPoint
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
-import org.bitcoins.core.util.{BitcoinScriptUtil, TimeUtil}
+import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil, TimeUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto._
 import org.bitcoins.esplora.{EsploraClient, MempoolSpaceEsploraSite}
@@ -772,5 +772,23 @@ class InvoiceMonitor(
           }
       })
     } yield ()
+  }
+
+  def checkTxIds(): Future[Int] = {
+    for {
+      completed <- invoiceDAO.completed()
+      items <- FutureUtil.foldLeftAsync(Vector.empty[InvoiceDb], completed) {
+        (acc, invoice) =>
+          config.bitcoindClient
+            .getRawTransactionRaw(invoice.txIdOpt.get)
+            .map(_ => acc)
+            .recover(_ => {
+              logger.warn(
+                s"Transaction ${invoice.txIdOpt.get.hex} not found, marking invoice as unconfirmed")
+              acc :+ invoice.copy(closed = false)
+            })
+      }
+      _ <- invoiceDAO.updateAll(items)
+    } yield items.size
   }
 }

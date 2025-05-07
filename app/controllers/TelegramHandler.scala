@@ -91,6 +91,22 @@ class TelegramHandler(controller: Controller)(implicit
     }
   }
 
+  onCommand("checktxids") { implicit msg =>
+    if (checkAdminMessage(msg)) {
+      controller.invoiceMonitor
+        .checkTxIds()
+        .flatMap { num =>
+          if (num == 0) reply("No txids missing!").map(_ => ())
+          else reply(s"$num txids missing!").map(_ => ())
+        }
+        .recoverWith { e =>
+          reply(s"Error checking txids: $e").map(_ => ())
+        }
+    } else {
+      reply("You are not allowed to use this command!").map(_ => ())
+    }
+  }
+
   onCommand("utxos") { implicit msg =>
     if (checkAdminMessage(msg)) {
       controller.invoiceMonitor
