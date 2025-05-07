@@ -16,6 +16,7 @@ import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.script.ScriptPubKey
+import org.bitcoins.core.protocol.transaction.TransactionOutPoint
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, TimeUtil}
@@ -166,9 +167,10 @@ class InvoiceMonitor(
           case None    => items
         }
 
-        if (liftMempoolLimit) {
+        val unlockF = if (liftMempoolLimit) {
           mempoolLimit = false
-        }
+          unLockAncestorUtxos().map(_ => ())
+        } else Future.unit
 
         val time = System.currentTimeMillis()
         logger.info(s"Processing ${unclosed.size} unhandled invoices")
@@ -201,15 +203,18 @@ class InvoiceMonitor(
 
         // if we're lifting the limit, process in sequence
         val updateF = if (liftMempoolLimit) {
-          unclosed
-            .foldLeft(Future.successful(Vector.empty[InvoiceDb])) {
-              case (accF, db) =>
-                accF.flatMap { acc =>
-                  processInvoice(db).map { db =>
-                    acc :+ db
+          // don't start processing until we unlock the utxos
+          unlockF.flatMap { _ =>
+            unclosed
+              .foldLeft(Future.successful(Vector.empty[InvoiceDb])) {
+                case (accF, db) =>
+                  accF.flatMap { acc =>
+                    processInvoice(db).map { db =>
+                      acc :+ db
+                    }
                   }
-                }
-            }
+              }
+          }
         } else {
           Future.sequence(unclosed.map(processInvoice))
         }
@@ -566,7 +571,8 @@ class InvoiceMonitor(
           logger.warn(
             "We've hit the mempool limit, disallowing invoices until next block!")
           if (!wasSet) {
-            // only send the message if we just hit the limit
+            // only send the message and lock utxos if we just hit the limit
+            lockAncestorMaxUtxos()
             telegramHandlerOpt
               .map(_.sendTelegramMessage(
                 s"We've hit the mempool limit, disallowing invoices until next block!"))
@@ -739,4 +745,59 @@ class InvoiceMonitor(
       feeProviderBackup.getFeeRate()
     }
   }
+
+  def listUtxoAncestorCount(): Future[Map[TransactionOutPoint, Int]] = {
+    for {
+      utxos <- lnd.listUnspent
+      ancestors <- Future
+        .sequence(utxos.filter(t => t.outPointOpt.isDefined).map { utxo =>
+          if (utxo.confirmations > 0) {
+            Future.successful((utxo.outPointOpt.get, 0))
+          } else {
+            config.bitcoindClient
+              .getMemPoolAncestors(utxo.outPointOpt.get.txId)
+              .map(_.size)
+              .map((utxo.outPointOpt.get, _))
+          }
+        })
+        .map(_.toMap)
+    } yield ancestors
+  }
+
+  def lockAncestorMaxUtxos(): Future[Vector[TransactionOutPoint]] = {
+    for {
+      ancestors <- listUtxoAncestorCount()
+      toLock = ancestors.filter(_._2 >= 25).keys.toVector
+      locked <- toLock
+        .foldLeft(Future.successful(Vector.empty[TransactionOutPoint])) {
+          case (accF, outpoint) =>
+            accF.flatMap { acc =>
+              // lease for 10 minutes
+              lnd.leaseOutput(outpoint, 600).map { _ =>
+                acc :+ outpoint
+              }
+            }
+        }
+      lockedOutpoints = locked
+    } yield locked
+  }
+
+  def unLockAncestorUtxos(): Future[Vector[TransactionOutPoint]] = {
+    val unlockF = lockedOutpoints.foldLeft(
+      Future.successful(Vector.empty[TransactionOutPoint])) {
+      case (accF, outpoint) =>
+        accF.flatMap { acc =>
+          lnd.releaseOutput(outpoint).map { _ =>
+            acc :+ outpoint
+          }
+        }
+    }
+
+    unlockF.map { unlocked =>
+      lockedOutpoints = Vector.empty
+      unlocked
+    }
+  }
+
+  var lockedOutpoints: Vector[TransactionOutPoint] = Vector.empty
 }

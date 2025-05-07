@@ -33,6 +33,7 @@ lazy val root = project
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-key-manager" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-esplora" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-bitcoind-rpc" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),

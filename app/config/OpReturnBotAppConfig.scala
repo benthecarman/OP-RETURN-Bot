@@ -19,6 +19,9 @@ import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config._
+import org.bitcoins.rpc.client.v24.BitcoindV24RpcClient
+import org.bitcoins.rpc.config.BitcoindAuthCredentials.PasswordBased
+import org.bitcoins.rpc.config.BitcoindInstanceRemote
 import org.scalastr.core.NostrPrivateKey
 import scodec.bits.ByteVector
 
@@ -126,6 +129,35 @@ case class OpReturnBotAppConfig(
 
   lazy val lndRpcClient: LndRpcClient =
     new LndRpcClient(lndInstance, Try(lndBinary).toOption)
+
+  private lazy val bitcoindUri: String = {
+    config.getString(s"bitcoin-s.bitcoind.uri")
+  }
+
+  private lazy val bitcoindRpcUri: String = {
+    config.getString(s"bitcoin-s.bitcoind.rpcUri")
+  }
+
+  private lazy val bitcoindRpcUser: String = {
+    config.getString(s"bitcoin-s.bitcoind.auth.user")
+  }
+
+  private lazy val bitcoindRpcPassword: String = {
+    config.getString(s"bitcoin-s.bitcoind.auth.password")
+  }
+
+  private lazy val bitcoindInstance: BitcoindInstanceRemote = {
+    BitcoindInstanceRemote(network,
+                           new URI(bitcoindUri),
+                           new URI(bitcoindRpcUri),
+                           PasswordBased(
+                             bitcoindRpcUser,
+                             bitcoindRpcPassword
+                           ))
+  }
+
+  lazy val bitcoindClient: BitcoindV24RpcClient =
+    new BitcoindV24RpcClient(bitcoindInstance)
 
   lazy val telegramCreds: String =
     config.getStringOrElse(s"bitcoin-s.$moduleName.telegramCreds", "")

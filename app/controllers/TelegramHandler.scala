@@ -365,6 +365,7 @@ class TelegramHandler(controller: Controller)(implicit
            |
            |Remaining in Queue: ${intFormatter.format(waitingAction)}
            |Mempool limit: ${controller.invoiceMonitor.mempoolLimit}
+           |Locked UTXOs: ${controller.invoiceMonitor.lockedOutpoints.size}
            |""".stripMargin
     }
   }
