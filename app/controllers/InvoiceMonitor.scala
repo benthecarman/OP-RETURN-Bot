@@ -587,11 +587,11 @@ class InvoiceMonitor(
   }
 
   private def createInvoice(
-      message: String,
+      message: ByteVector,
       noTwitter: Boolean): Future[(LnInvoice, SatoshisPerVirtualByte)] = {
     require(
-      message.getBytes.length <= 9000,
-      "OP_Return message received was too long, must be less than 9000 bytes")
+      message.length <= 90_000,
+      "OP_Return message received was too long, must be less than 90,000 bytes")
 
     val rateF = fetchFeeRate()
     val heightF = lnd.getInfo.map(_.blockHeight.toLong)
@@ -605,7 +605,7 @@ class InvoiceMonitor(
       .flatMap { params =>
         val (rate, height) = params
         val baseSize = 125 // 125 base tx size
-        val messageSize = message.getBytes.length
+        val messageSize = message.length
 
         // if this is non-standard, double the fee rate and make sure it's at least 5 sats/vbyte
         // we double the fee rate to make sure it gets in since there is only a few pools that will accept it
@@ -646,7 +646,7 @@ class InvoiceMonitor(
   }
 
   def createInvoice(
-      message: String,
+      message: ByteVector,
       noTwitter: Boolean,
       nodeIdOpt: Option[NodeId],
       telegramId: Option[Long],
@@ -670,7 +670,7 @@ class InvoiceMonitor(
             profitOpt = None,
             chainFeeOpt = None,
             time = TimeUtil.currentEpochSecond,
-            messageBytes = ByteVector(message.getBytes),
+            messageBytes = message,
             paid = false
           )
         invoiceDAO.create(db)
@@ -693,7 +693,7 @@ class InvoiceMonitor(
     } else {
       val message = s"nip5:$name:${publicKey.hex}"
 
-      createInvoice(message, noTwitter = false)
+      createInvoice(ByteVector(message.getBytes("UTF-8")), noTwitter = false)
         .flatMap { case (invoice, feeRate) =>
           val db: InvoiceDb =
             InvoiceDb(

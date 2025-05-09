@@ -18,6 +18,7 @@ import org.bitcoins.core.util.{StartStopAsync, TimeUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest
 import org.scalastr.core.{NostrNoteId, NostrPublicKey}
+import scodec.bits.ByteVector
 import sttp.capabilities.akka.AkkaStreams
 import sttp.client3.SttpBackend
 import sttp.client3.akkahttp.AkkaHttpBackend
@@ -205,7 +206,7 @@ class TelegramHandler(controller: Controller)(implicit
       val str = vec(1)
       val id = msg.chat.id
       controller.invoiceMonitor
-        .createInvoice(message = str,
+        .createInvoice(message = ByteVector(str.getBytes("UTF-8")),
                        noTwitter = false,
                        nodeIdOpt = None,
                        telegramId = Some(id),

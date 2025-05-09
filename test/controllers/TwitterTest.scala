@@ -11,23 +11,27 @@ import scala.concurrent.Future
 
 class TwitterTest extends LndFixture {
 
+  val clientId = ""
+  val clientSecret = ""
+  val accessToken = ""
+  val accessSecret = ""
+
   val twitterConfig: Config = {
-    ConfigFactory.parseString(
-      """
-        |twitter {
-        |  clientid = "4o7jynudksbCA51FtrOedXGwX"
-        |  clientsecret = "uW44r8udEycx1k4cZC4kgrSwJ367NPBLzkWwdRGX3ro9zEGBaG"
-        |  access.token = "1234956880742682625-79ilHjBjn89LXRMhNVRehn0yk9RI1p"
-        |  access.secret = "rZjnJWjco2CZgCoCstz9IMzuncg9ggECychOTD32YjjbI"
-        |}
-        |""".stripMargin)
+    ConfigFactory.parseString(s"""
+                                 |twitter {
+                                 |  clientid = "$clientId"
+                                 |  clientsecret = "$clientSecret"
+                                 |  access.token = "$accessToken"
+                                 |  access.secret = "$accessSecret"
+                                 |}
+                                 |""".stripMargin)
   }
 
   implicit val config: OpReturnBotAppConfig =
     OpReturnBotAppConfig(tmpDir(), Vector(twitterConfig))
 
   it must "send a tweet" in { lnd =>
-    if (EnvUtil.isCI) {
+    if (EnvUtil.isCI || clientId.isEmpty) {
       Future.successful(succeed)
     } else {
       val monitor =

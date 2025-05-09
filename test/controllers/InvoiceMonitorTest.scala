@@ -6,6 +6,7 @@ import org.bitcoins.core.script.ScriptType
 import org.bitcoins.testkit.BitcoinSTestAppConfig.tmpDir
 import org.bitcoins.testkit.async.TestAsyncUtil
 import org.bitcoins.testkit.fixtures.DualLndFixture
+import scodec.bits.ByteVector
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
@@ -35,12 +36,13 @@ class InvoiceMonitorTest extends DualLndFixture {
     monitor.startSubscription()
 
     for {
-      toPay <- monitor.createInvoice(message = "hello world",
-                                     noTwitter = true,
-                                     nodeIdOpt = None,
-                                     telegramId = None,
-                                     nostrKey = None,
-                                     dvmEvent = None)
+      toPay <- monitor.createInvoice(
+        message = ByteVector("hello world".getBytes("UTF-8")),
+        noTwitter = true,
+        nodeIdOpt = None,
+        telegramId = None,
+        nostrKey = None,
+        dvmEvent = None)
       invoiceDb <- monitor.onInvoicePaid(toPay, None)
     } yield {
       assert(invoiceDb.invoice == toPay.invoice)
@@ -63,7 +65,8 @@ class InvoiceMonitorTest extends DualLndFixture {
       mempool <- bitcoind.getRawMemPool
       _ = assert(mempool.isEmpty)
 
-      db <- monitor.createInvoice(message = "hello world",
+      db <- monitor.createInvoice(message =
+                                    ByteVector("hello world".getBytes("UTF-8")),
                                   noTwitter = true,
                                   nodeIdOpt = None,
                                   telegramId = None,

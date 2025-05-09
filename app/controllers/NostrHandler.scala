@@ -129,13 +129,12 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         } else JsString("text")
 
         val message = inputType match {
-          case "text" => inputData
+          case "text" => ByteVector(inputData.getBytes("UTF-8"))
           case "raw" =>
-            val bytes = ByteVector.fromHex(inputData).getOrElse {
+            ByteVector.fromHex(inputData).getOrElse {
               logger.warn(s"Got unexpected inputData: $inputData")
               return Future.unit
             }
-            new String(bytes.toArray, "UTF-8")
         }
 
         for {
@@ -188,7 +187,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         val message = NostrEvent.decryptDM(event, nostrPrivateKey)
 
         for {
-          db <- createInvoice(message = message,
+          db <- createInvoice(message = ByteVector(message.getBytes("UTF-8")),
                               noTwitter = false,
                               nodeIdOpt = None,
                               telegramId = None,

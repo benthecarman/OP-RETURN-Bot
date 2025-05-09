@@ -442,12 +442,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       def success(input: OpReturnRequest): Future[Result] = {
         for {
-          invoiceDb <- invoiceMonitor.createInvoice(message = input.message,
-                                                    noTwitter = input.noTwitter,
-                                                    nodeIdOpt = None,
-                                                    telegramId = None,
-                                                    nostrKey = None,
-                                                    dvmEvent = None)
+          invoiceDb <- invoiceMonitor.createInvoice(
+            message = ByteVector(input.message.getBytes("UTF-8")),
+            noTwitter = input.noTwitter,
+            nodeIdOpt = None,
+            telegramId = None,
+            nostrKey = None,
+            dvmEvent = None)
         } yield {
           Ok(invoiceDb.invoice.toString())
         }
@@ -487,7 +488,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
           invoiceMonitor
-            .createInvoice(data.message, data.noTwitter, None, None, None, None)
+            .createInvoice(message = ByteVector(data.message.getBytes("UTF-8")),
+                           noTwitter = data.noTwitter,
+                           nodeIdOpt = None,
+                           telegramId = None,
+                           nostrKey = None,
+                           dvmEvent = None)
             .map { invoiceDb =>
               Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
             }
