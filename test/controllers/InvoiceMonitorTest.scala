@@ -1,7 +1,7 @@
 package controllers
 
 import config.OpReturnBotAppConfig
-import org.bitcoins.core.currency.Satoshis
+import org.bitcoins.core.currency.{CurrencyUnits, Satoshis}
 import org.bitcoins.core.script.ScriptType
 import org.bitcoins.testkit.BitcoinSTestAppConfig.tmpDir
 import org.bitcoins.testkit.async.TestAsyncUtil
@@ -85,6 +85,7 @@ class InvoiceMonitorTest extends DualLndFixture {
         monitor.invoiceDAO.read(db.rHash).map(_.exists(_.closed)))
 
       findOpt <- monitor.invoiceDAO.read(db.rHash)
+      report <- monitor.createReport(None)
     } yield {
       assert(tx.outputs.exists(_.value == Satoshis.zero))
       assert(
@@ -100,6 +101,14 @@ class InvoiceMonitorTest extends DualLndFixture {
           assert(invoiceDb.chainFeeOpt.isDefined)
         case None => fail("invoice not found")
       }
+
+      assert(report.num == 1)
+      assert(report.profit > CurrencyUnits.zero)
+      assert(report.chainFees > CurrencyUnits.zero)
+      assert(report.vbytes > 0)
+
+      assert(report.nonStd == 0)
+      assert(report.nonStdVbytes == 0)
     }
   }
 }

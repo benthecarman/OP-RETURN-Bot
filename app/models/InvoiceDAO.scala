@@ -33,7 +33,8 @@ case class InvoiceDb(
     chainFeeOpt: Option[CurrencyUnit],
     time: Long,
     messageBytes: ByteVector,
-    paid: Boolean) {
+    paid: Boolean,
+    vsize: Option[Long]) {
 
   def getMessage(): String = {
     Try(
@@ -123,14 +124,53 @@ case class InvoiceDAO()(implicit
     }
   }
 
+  def numCompletedAction(
+      afterTimeOpt: Option[Long]): DBIOAction[Int, NoStream, Effect.Read] = {
+    afterTimeOpt match {
+      case None =>
+        table.filter(_.txIdOpt.isDefined).size.result
+      case Some(afterTime) =>
+        table
+          .filter(_.time > afterTime)
+          .filter(_.txIdOpt.isDefined)
+          .size
+          .result
+    }
+  }
+
+  def numNonStdCompletedAction(
+      afterTimeOpt: Option[Long]): DBIOAction[Int, NoStream, Effect.Read] = {
+    afterTimeOpt match {
+      case None =>
+        table
+          .filter(_.txIdOpt.isDefined)
+          .filter(t => {
+            SimpleFunction
+              .unary[ByteVector, Int]("length")
+              .apply(t.messageBytes) > 80
+          })
+          .size
+          .result
+      case Some(afterTime) =>
+        table
+          .filter(_.time > afterTime)
+          .filter(t => {
+            SimpleFunction
+              .unary[ByteVector, Int]("length")
+              .apply(t.messageBytes) > 80
+          })
+          .filter(_.txIdOpt.isDefined)
+          .size
+          .result
+    }
+  }
+
   def completed(): Future[Vector[InvoiceDb]] = {
     safeDatabase.run(completedAction())
   }
 
   def numCompleted(): Future[Int] = {
-    val query = table.filter(_.txIdOpt.isDefined).size
-
-    safeDatabase.run(query.result)
+    safeDatabase.run(numCompletedAction(None))
   }
 
   def lastFiveCompleted(): Future[Vector[DoubleSha256DigestBE]] = {
@@ -145,22 +185,101 @@ case class InvoiceDAO()(implicit
     safeDatabase.runVec(query)
   }
 
-  def totalProfitAction(): DBIOAction[CurrencyUnit, NoStream, Effect.Read] = {
-    table
-      .filter(_.profitOpt.isDefined)
-      .map(_.profitOpt)
-      .result
-      .map(_.flatten.sum)
+  def totalProfitAction(afterTimeOpt: Option[Long]): DBIOAction[CurrencyUnit,
+                                                                NoStream,
+                                                                Effect.Read] = {
+    afterTimeOpt match {
+      case Some(t) =>
+        table
+          .filter(_.profitOpt.isDefined)
+          .filter(_.time > t)
+          .map(_.profitOpt)
+          .sum
+          .getOrElse(CurrencyUnits.zero)
+          .result
+      case None =>
+        table
+          .filter(_.profitOpt.isDefined)
+          .map(_.profitOpt)
+          .sum
+          .getOrElse(CurrencyUnits.zero)
+          .result
+    }
   }
 
-  def totalChainFeesAction(): DBIOAction[CurrencyUnit,
-                                         NoStream,
-                                         Effect.Read] = {
-    table
-      .filter(_.chainFeeOpt.isDefined)
-      .map(_.chainFeeOpt)
-      .result
-      .map(_.flatten.sum)
+  def totalChainFeesAction(
+      afterTimeOpt: Option[Long]): DBIOAction[CurrencyUnit,
+                                              NoStream,
+                                              Effect.Read] = {
+    afterTimeOpt match {
+      case Some(t) =>
+        table
+          .filter(_.chainFeeOpt.isDefined)
+          .filter(_.time > t)
+          .map(_.chainFeeOpt)
+          .sum
+          .getOrElse(CurrencyUnits.zero)
+          .result
+      case None =>
+        table
+          .filter(_.chainFeeOpt.isDefined)
+          .map(_.chainFeeOpt)
+          .sum
+          .getOrElse(CurrencyUnits.zero)
+          .result
+    }
+  }
+
+  def totalChainSizeAction(
+      afterTimeOpt: Option[Long]): DBIOAction[Long, NoStream, Effect.Read] = {
+    afterTimeOpt match {
+      case Some(t) =>
+        table
+          .filter(_.vsize.isDefined)
+          .filter(_.time > t)
+          .map(_.vsize)
+          .sum
+          .getOrElse(0L)
+          .result
+      case None =>
+        table
+          .filter(_.vsize.isDefined)
+          .map(_.vsize)
+          .sum
+          .getOrElse(0L)
+          .result
+    }
+  }
+
+  def totalNonStdChainSizeAction(
+      afterTimeOpt: Option[Long]): DBIOAction[Long, NoStream, Effect.Read] = {
+    afterTimeOpt match {
+      case Some(t) =>
+        table
+          .filter(_.vsize.isDefined)
+          .filter(_.time > t)
+          .filter(t => {
+            SimpleFunction
+              .unary[ByteVector, Int]("length")
+              .apply(t.messageBytes) > 80
+          })
+          .map(_.vsize)
+          .sum
+          .getOrElse(0L)
+          .result
+      case None =>
+        table
+          .filter(_.vsize.isDefined)
+          .filter(t => {
+            SimpleFunction
+              .unary[ByteVector, Int]("length")
+              .apply(t.messageBytes) > 80
+          })
+          .map(_.vsize)
+          .sum
+          .getOrElse(0L)
+          .result
+    }
   }
 
   def findUnclosed(): Future[Vector[InvoiceDb]] = {
@@ -204,6 +323,8 @@ case class InvoiceDAO()(implicit
 
     def paid: Rep[Boolean] = column("paid")
 
+    def vsize: Rep[Option[Long]] = column("vsize")
+
     def * : ProvenShape[InvoiceDb] =
       (rHash,
        invoice,
@@ -220,6 +341,7 @@ case class InvoiceDAO()(implicit
        chainFeeOpt,
        time,
        messageBytes,
-       paid).<>(InvoiceDb.tupled, InvoiceDb.unapply)
+       paid,
+       vsize).<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }

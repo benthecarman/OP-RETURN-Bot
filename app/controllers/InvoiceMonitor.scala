@@ -9,7 +9,7 @@ import grizzled.slf4j.Logging
 import lnrpc.Invoice
 import models._
 import org.bitcoins.core.config.MainNet
-import org.bitcoins.core.currency.Satoshis
+import org.bitcoins.core.currency.{CurrencyUnit, Satoshis}
 import org.bitcoins.core.number._
 import org.bitcoins.core.protocol.ln.LnTag._
 import org.bitcoins.core.protocol.ln._
@@ -406,6 +406,7 @@ class InvoiceMonitor(
       dbWithTx: InvoiceDb = invoiceDb.copy(closed = true,
                                            txOpt = Some(transaction),
                                            txIdOpt = Some(txId),
+                                           vsize = Some(transaction.vsize),
                                            profitOpt = profitOpt,
                                            chainFeeOpt = chainFeeOpt)
 
@@ -500,8 +501,8 @@ class InvoiceMonitor(
               .getOrElse(Future.unit)
 
             lazy val action = for {
-              profit <- invoiceDAO.totalProfitAction()
-              chainFees <- invoiceDAO.totalChainFeesAction()
+              profit <- invoiceDAO.totalProfitAction(None)
+              chainFees <- invoiceDAO.totalChainFeesAction(None)
               inQueue <- invoiceDAO.numWaitingAction(None)
             } yield (profit, chainFees, inQueue)
 
@@ -671,7 +672,8 @@ class InvoiceMonitor(
             chainFeeOpt = None,
             time = TimeUtil.currentEpochSecond,
             messageBytes = message,
-            paid = false
+            paid = false,
+            vsize = None
           )
         invoiceDAO.create(db)
       }
@@ -712,7 +714,8 @@ class InvoiceMonitor(
               chainFeeOpt = None,
               time = TimeUtil.currentEpochSecond,
               messageBytes = ByteVector(message.getBytes),
-              paid = false
+              paid = false,
+              vsize = None
             )
 
           val action = nip5DAO.getPublicKeyAction(name).flatMap {
@@ -791,4 +794,40 @@ class InvoiceMonitor(
       _ <- invoiceDAO.updateAll(items)
     } yield items.size
   }
+
+  def createReport(afterTimeOpt: Option[Long]): Future[Report] = {
+    val action = for {
+      num <- invoiceDAO.numCompletedAction(afterTimeOpt)
+      nonStd <- invoiceDAO.numNonStdCompletedAction(afterTimeOpt)
+      chainFees <- invoiceDAO.totalChainFeesAction(afterTimeOpt)
+      profit <- invoiceDAO.totalProfitAction(afterTimeOpt)
+      vbytes <- invoiceDAO.totalChainSizeAction(afterTimeOpt)
+      nonStdVbytes <- invoiceDAO.totalNonStdChainSizeAction(afterTimeOpt)
+      nip5s <- nip5DAO.getNumCompletedAction(afterTimeOpt)
+      zapped <- zapDAO.totalZappedAction(afterTimeOpt)
+      waitingAction <- invoiceDAO.numWaitingAction(afterTimeOpt)
+    } yield Report(num,
+                   nonStd,
+                   chainFees,
+                   profit,
+                   vbytes,
+                   nonStdVbytes,
+                   nip5s,
+                   zapped,
+                   waitingAction)
+
+    invoiceDAO.safeDatabase.run(action)
+  }
 }
+
+case class Report(
+    num: Int,
+    nonStd: Int,
+    chainFees: CurrencyUnit,
+    profit: CurrencyUnit,
+    vbytes: Long,
+    nonStdVbytes: Long,
+    nip5s: Int,
+    zapped: CurrencyUnit,
+    waitingAction: Int
+)
