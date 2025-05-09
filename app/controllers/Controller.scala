@@ -306,12 +306,20 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   def viewMessage(txIdStr: String): Action[AnyContent] = {
     Action.async { _ =>
       val txId = DoubleSha256DigestBE(txIdStr)
-      invoiceDAO.findByTxId(txId).map {
+      val res = invoiceDAO.findByTxId(txId).map {
         case None =>
           BadRequest("Tx does not originate from OP_RETURN Bot")
         case Some(invoiceDb: InvoiceDb) =>
           Ok(invoiceDb.getMessage())
       }
+
+      res.map(
+        _.withHeaders(
+          "Access-Control-Allow-Origin" -> "*",
+          "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+          "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+          "Access-Control-Allow-Credentials" -> "true"
+        ))
     }
   }
 
@@ -320,7 +328,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val hash = Sha256Digest
         .fromHexT(rHash)
         .getOrElse(LnInvoice.fromString(rHash).lnTags.paymentHash.hash)
-      invoiceDAO.read(hash).map {
+      val res = invoiceDAO.read(hash).map {
         case None =>
           BadRequest("Invoice not from OP_RETURN Bot")
         case Some(invoiceDb) =>
@@ -334,6 +342,14 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               }
           }
       }
+
+      res.map(
+        _.withHeaders(
+          "Access-Control-Allow-Origin" -> "*",
+          "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+          "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+          "Access-Control-Allow-Credentials" -> "true"
+        ))
     }
   }
 
@@ -450,7 +466,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             nostrKey = None,
             dvmEvent = None)
         } yield {
-          Ok(invoiceDb.invoice.toString())
+          Ok(invoiceDb.invoice.toString()).withHeaders(
+            "Access-Control-Allow-Origin" -> "*",
+            "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+            "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+            "Access-Control-Allow-Credentials" -> "true"
+          )
         }
       }
 
