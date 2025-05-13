@@ -59,7 +59,8 @@ class InvoiceMonitor(
   val feeProviderBackup: BitcoinerLiveFeeRateProvider =
     BitcoinerLiveFeeRateProvider(30, None)
 
-  val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val opReturnDAO: OpReturnRequestDAO = OpReturnRequestDAO()
+  val invoiceDAO: PaymentDAO = PaymentDAO()
   val zapDAO: ZapDAO = ZapDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
 
@@ -100,21 +101,25 @@ class InvoiceMonitor(
             Future.unit
           case lnrpc.Invoice.InvoiceState.CANCELED =>
             val action = invoiceDAO
-              .findByPrimaryKeyAction(Sha256Digest(invoice.rHash))
+              .findOpReturnRequestByRHashAction(Sha256Digest(invoice.rHash))
               .flatMap {
                 case None => DBIOAction.successful(())
-                case Some(invoiceDb) =>
-                  invoiceDAO.updateAction(invoiceDb.copy(closed = true))
+                case Some((_, request_db)) =>
+                  opReturnDAO.updateAction(request_db.copy(closed = true))
               }
 
             invoiceDAO.safeDatabase.run(action)
           case lnrpc.Invoice.InvoiceState.SETTLED =>
             val rHash = Sha256Digest(invoice.rHash)
             val readAction = for {
-              invOpt <- invoiceDAO.findByPrimaryKeyAction(rHash)
-              npubOpt <- nip5DAO
-                .findByPrimaryKeyAction(rHash)
-                .map(_.map(_.publicKey))
+              invOpt <- invoiceDAO.findOpReturnRequestByRHashAction(rHash)
+              npubOpt <- invOpt.map(_._1.opReturnRequestId) match {
+                case Some(id) =>
+                  nip5DAO
+                    .findByPrimaryKeyAction(id)
+                    .map(_.map(_.publicKey))
+                case None => DBIOAction.successful(None)
+              }
               zapOpt <- zapDAO.findByPrimaryKeyAction(rHash)
             } yield (invOpt, npubOpt, zapOpt)
 
@@ -128,8 +133,8 @@ class InvoiceMonitor(
                   case (Some(_), Some(_)) =>
                     throw new RuntimeException(
                       "Invoice found in op_return and zap tables??")
-                  case (Some(invoiceDb), None) =>
-                    invoiceDb.txIdOpt match {
+                  case (Some((invoiceDb, requestDb)), None) =>
+                    requestDb.txIdOpt match {
                       case Some(_) =>
                         logger.warn(
                           s"Processed invoice that already has a tx associated with it, rHash: ${invoice.rHash.toBase16}")
@@ -137,7 +142,8 @@ class InvoiceMonitor(
                       case None =>
                         require(invoice.amtPaidMsat >= invoice.valueMsat,
                                 "User did not pay invoice in full")
-                        onInvoicePaid(invoiceDb, npubOpt).map(_ => ())
+                        onInvoicePaid(invoiceDb, requestDb, npubOpt).map(_ =>
+                          ())
                     }
                   case (None, Some(zapDb)) =>
                     zapDb.noteId match {
@@ -161,69 +167,88 @@ class InvoiceMonitor(
 
   def processUnhandledInvoices(
       limit: Option[Int],
-      liftMempoolLimit: Boolean): Future[Vector[InvoiceDb]] = {
+      liftMempoolLimit: Boolean): Future[
+    Vector[(PaymentDb, OpReturnRequestDb)]] = {
     invoiceDAO.findUnclosed().flatMap { items =>
       if (items.nonEmpty) {
+        val sorted = items.sortBy(_._2.time)
         val unclosed = limit match {
-          case Some(l) => items.sortBy(_.time).take(l)
-          case None    => items
+          case Some(l) => sorted.take(l)
+          case None    => sorted
         }
 
-        val unlockF = if (liftMempoolLimit) {
+        if (liftMempoolLimit) {
           mempoolLimit = false
-        } else Future.unit
+        }
 
         val time = System.currentTimeMillis()
         logger.info(s"Processing ${unclosed.size} unhandled invoices")
 
-        def processInvoice(db: InvoiceDb): Future[InvoiceDb] = {
-          if (db.txOpt.isDefined) Future.successful(db.copy(closed = true))
+        def processInvoice(
+            invoiceDb: PaymentDb,
+            requestDb: OpReturnRequestDb): Future[(PaymentDb,
+                                                   OpReturnRequestDb)] = {
+          if (requestDb.txOpt.isDefined)
+            Future.successful((invoiceDb, requestDb.copy(closed = true)))
           else {
             lnd
-              .lookupInvoice(PaymentHashTag(db.rHash))
+              .lookupInvoice(PaymentHashTag(invoiceDb.rHash))
               .flatMap { inv =>
                 inv.state match {
                   case Invoice.InvoiceState.OPEN |
                       Invoice.InvoiceState.ACCEPTED =>
-                    Future.successful(db)
+                    Future.successful((invoiceDb, requestDb))
                   case Invoice.InvoiceState.SETTLED =>
                     if (inv.amtPaidMsat >= inv.valueMsat) {
-                      nip5DAO.read(db.rHash).flatMap { nip5Opt =>
-                        onInvoicePaid(db, nip5Opt.map(_.publicKey))
+                      nip5DAO.read(invoiceDb.opReturnRequestId).flatMap {
+                        nip5Opt =>
+                          onInvoicePaid(invoiceDb,
+                                        requestDb,
+                                        nip5Opt.map(_.publicKey))
                       }
-                    } else Future.successful(db.copy(closed = true))
+                    } else
+                      Future.successful(
+                        (invoiceDb, requestDb.copy(closed = true)))
                   case Invoice.InvoiceState.CANCELED =>
-                    Future.successful(db.copy(closed = false))
+                    Future.successful(
+                      (invoiceDb, requestDb.copy(closed = false)))
                   case Invoice.InvoiceState.Unrecognized(_) =>
-                    Future.successful(db)
+                    Future.successful((invoiceDb, requestDb))
                 }
               }
-              .recover { case _: Throwable => db.copy(closed = true) }
+              .recover { case _: Throwable => (invoiceDb, requestDb) }
           }
         }
 
         // if we're lifting the limit, process in sequence
         val updateF = if (liftMempoolLimit) {
           unclosed
-            .foldLeft(Future.successful(Vector.empty[InvoiceDb])) {
-              case (accF, db) =>
+            .foldLeft(
+              Future.successful(Vector.empty[(PaymentDb, OpReturnRequestDb)])) {
+              case (accF, (db, req)) =>
                 accF.flatMap { acc =>
-                  processInvoice(db).map { db =>
+                  processInvoice(db, req).map { db =>
                     acc :+ db
                   }
                 }
             }
         } else {
-          Future.sequence(unclosed.map(processInvoice))
+          Future.sequence(unclosed.map(x => processInvoice(x._1, x._2)))
         }
 
         val f = for {
           updates <- updateF
-          dbs <- invoiceDAO.updateAll(updates)
+          payments = updates.map(_._1)
+          requests = updates.map(_._2)
+          action = for {
+            _ <- invoiceDAO.updateAllAction(payments)
+            _ <- opReturnDAO.updateAllAction(requests)
+          } yield ()
+          _ <- invoiceDAO.safeDatabase.run(action)
           took = System.currentTimeMillis() - time
           _ = logger.info(
-            s"Processed ${dbs.size} unhandled invoices, took $took ms")
-        } yield dbs
+            s"Processed ${updates.size} unhandled invoices, took $took ms")
+        } yield updates
 
         f.failed.map(logger.error("Error processing unhandled invoices", _))
 
@@ -306,26 +331,28 @@ class InvoiceMonitor(
   }
 
   def onInvoicePaid(
-      unpaidInvoiceDb: InvoiceDb,
-      npubOpt: Option[SchnorrPublicKey]): Future[InvoiceDb] = {
+      unpaidInvoiceDb: PaymentDb,
+      requestDb: OpReturnRequestDb,
+      npubOpt: Option[SchnorrPublicKey]): Future[(PaymentDb,
+                                                  OpReturnRequestDb)] = {
     val invoiceDb = unpaidInvoiceDb.copy(paid = true)
 
     // just mark paid and skip for now
     if (mempoolLimit) {
       logger.warn("Mempool limit in action, skipping for now")
-      return invoiceDAO.update(invoiceDb)
+      return invoiceDAO.update(invoiceDb).map((_, requestDb))
     }
 
-    val message = invoiceDb.getMessage()
+    val message = requestDb.getMessage()
     val invoice = invoiceDb.invoice
-    val feeRate = invoiceDb.feeRate
-    val noTwitter = invoiceDb.noTwitter
+    val feeRate = requestDb.feeRate
+    val noTwitter = requestDb.noTwitter
     val rHash = PaymentHashTag(invoiceDb.rHash)
 
     logger.info(s"Received ${invoice.amount.get.toSatoshis}!")
 
     val spk = {
-      val messageBytes = invoiceDb.messageBytes
+      val messageBytes = requestDb.messageBytes
 
       val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
         messageBytes) :+ ScriptConstant.fromBytes(messageBytes)
@@ -369,7 +396,7 @@ class InvoiceMonitor(
           logger.info(s"Successfully created tx: ${txId.hex}")
       }
       // broadcast to esplora in bg, only if standard
-      _ = if (invoiceDb.messageBytes.length <= 80) {
+      _ = if (requestDb.messageBytes.length <= 80) {
         esplora.broadcastTransaction(transaction).recover(_ => txId)
       }
       // try to broadcast to slipstream
@@ -403,18 +430,18 @@ class InvoiceMonitor(
       chainFeeOpt = txDetailsOpt.map(_.totalFees)
       profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
 
-      dbWithTx: InvoiceDb = invoiceDb.copy(closed = true,
-                                           txOpt = Some(transaction),
-                                           txIdOpt = Some(txId),
-                                           vsize = Some(transaction.vsize),
-                                           profitOpt = profitOpt,
-                                           chainFeeOpt = chainFeeOpt)
+      dbWithTx = requestDb.copy(closed = true,
+                                txOpt = Some(transaction),
+                                txIdOpt = Some(txId),
+                                vsize = Some(transaction.vsize),
+                                profitOpt = profitOpt,
+                                chainFeeOpt = chainFeeOpt)
 
-      res <- invoiceDAO.update(dbWithTx)
+      res <- opReturnDAO.update(dbWithTx)
       _ = logger.info(s"Successfully saved tx: ${txId.hex} to database")
 
       // send if nostr
-      _ <- invoiceDb.nostrKey match {
+      _ <- res.nostrKey match {
         case Some(nostrKey) =>
           val message =
             s"""
@@ -442,7 +469,7 @@ class InvoiceMonitor(
       }
 
       // send if DVM
-      _ <- invoiceDb.dvmEvent match {
+      _ <- res.dvmEvent match {
         case Some(event) =>
           sendDvmJobResult(txId, event)
             .map {
@@ -494,15 +521,15 @@ class InvoiceMonitor(
       _ <- {
         val telegramF = txDetailsOpt match {
           case Some(details) =>
-            val userTelegramF = invoiceDb.telegramIdOpt
+            val userTelegramF = res.telegramIdOpt
               .flatMap(telegramId =>
                 telegramHandlerOpt.map(
                   _.handleTelegramUserPurchase(telegramId, details)))
               .getOrElse(Future.unit)
 
             lazy val action = for {
-              profit <- invoiceDAO.totalProfitAction(None)
-              chainFees <- invoiceDAO.totalChainFeesAction(None)
+              profit <- opReturnDAO.totalProfitAction(None)
+              chainFees <- opReturnDAO.totalChainFeesAction(None)
               inQueue <- invoiceDAO.numWaitingAction(None)
             } yield (profit, chainFees, inQueue)
 
@@ -516,7 +543,7 @@ class InvoiceMonitor(
                   _ <- handler.handleTelegram(
                     rHash = rHash.hash,
                     invoice = invoice,
-                    invoiceDb = res,
+                    requestDb = res,
                     tweetOpt = tweetOpt,
                     nostrOpt = nostrOpt,
                     message = message,
@@ -550,7 +577,7 @@ class InvoiceMonitor(
             s"Failed to send telegram message for invoice ${rHash.hash.hex}, got error $err")
         }
       }
-    } yield res
+    } yield (invoiceDb, res)
 
     createTxF.recoverWith { case err: Throwable =>
       logger.error(
@@ -583,7 +610,7 @@ class InvoiceMonitor(
             s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ${err.getMessage}"))
           .getOrElse(Future.unit)
         _ <- limitF
-      } yield invoiceDb
+      } yield (invoiceDb, requestDb)
     }
   }
 
@@ -652,13 +679,12 @@ class InvoiceMonitor(
       nodeIdOpt: Option[NodeId],
       telegramId: Option[Long],
       nostrKey: Option[SchnorrPublicKey],
-      dvmEvent: Option[NostrEvent]): Future[InvoiceDb] = {
+      dvmEvent: Option[NostrEvent]): Future[(PaymentDb, OpReturnRequestDb)] = {
     createInvoice(message, noTwitter)
       .flatMap { case (invoice, feeRate) =>
-        val db: InvoiceDb =
-          InvoiceDb(
-            rHash = invoice.lnTags.paymentHash.hash,
-            invoice = invoice,
+        val requestDb =
+          OpReturnRequestDb(
+            id = None,
             noTwitter = noTwitter,
             feeRate = feeRate,
             closed = false,
@@ -672,10 +698,21 @@ class InvoiceMonitor(
             chainFeeOpt = None,
             time = TimeUtil.currentEpochSecond,
             messageBytes = message,
-            paid = false,
             vsize = None
           )
-        invoiceDAO.create(db)
+
+        val action = for {
+          createdReq <- opReturnDAO.createAction(requestDb)
+          invoiceDb = PaymentDb(
+            rHash = invoice.lnTags.paymentHash.hash,
+            opReturnRequestId = createdReq.id.get,
+            invoice = invoice,
+            paid = false
+          )
+          createdInv <- invoiceDAO.createAction(invoiceDb)
+        } yield (createdInv, createdReq)
+
+        invoiceDAO.safeDatabase.run(action)
       }
   }
 
@@ -688,7 +725,7 @@ class InvoiceMonitor(
 
   def createNip5Invoice(
       name: String,
-      publicKey: NostrPublicKey): Future[InvoiceDb] = {
+      publicKey: NostrPublicKey): Future[(PaymentDb, OpReturnRequestDb)] = {
     if (takenNames.contains(name)) {
       Future.failed(
         new IllegalArgumentException(s"Cannot create invoice for NIP-05 $name"))
@@ -697,10 +734,9 @@ class InvoiceMonitor(
 
       createInvoice(ByteVector(message.getBytes("UTF-8")), noTwitter = false)
         .flatMap { case (invoice, feeRate) =>
-          val db: InvoiceDb =
-            InvoiceDb(
-              rHash = invoice.lnTags.paymentHash.hash,
-              invoice = invoice,
+          val requestDb =
+            OpReturnRequestDb(
+              id = None,
               noTwitter = false,
               feeRate = feeRate,
               closed = false,
@@ -714,7 +750,6 @@ class InvoiceMonitor(
               chainFeeOpt = None,
               time = TimeUtil.currentEpochSecond,
               messageBytes = ByteVector(message.getBytes),
-              paid = false,
               vsize = None
             )
 
@@ -725,9 +760,17 @@ class InvoiceMonitor(
                 s"Cannot create invoice for NIP-05 $name, already exists for key $nostrKey"))
             case None =>
               for {
-                db <- invoiceDAO.createAction(db)
-                _ <- nip5DAO.createAction(Nip5Db(db.rHash, name, publicKey.key))
-              } yield db
+                createdReq <- opReturnDAO.createAction(requestDb)
+                invoiceDb = PaymentDb(
+                  rHash = invoice.lnTags.paymentHash.hash,
+                  opReturnRequestId = createdReq.id.get,
+                  invoice = invoice,
+                  paid = false
+                )
+                createdInv <- invoiceDAO.createAction(invoiceDb)
+                _ <- nip5DAO.createAction(
+                  Nip5Db(invoiceDb.opReturnRequestId, name, publicKey.key))
+              } yield (createdInv, createdReq)
           }
 
           invoiceDAO.safeDatabase.run(action)
@@ -779,30 +822,30 @@ class InvoiceMonitor(
 
   def checkTxIds(): Future[Int] = {
     for {
-      completed <- invoiceDAO.completed()
-      items <- FutureUtil.foldLeftAsync(Vector.empty[InvoiceDb], completed) {
-        (acc, invoice) =>
-          config.bitcoindClient
-            .getRawTransactionRaw(invoice.txIdOpt.get)
-            .map(_ => acc)
-            .recover(_ => {
-              logger.warn(
-                s"Transaction ${invoice.txIdOpt.get.hex} not found, marking invoice as unconfirmed")
-              acc :+ invoice.copy(closed = false)
-            })
+      completed <- opReturnDAO.completed()
+      items <- FutureUtil.foldLeftAsync(Vector.empty[OpReturnRequestDb],
+                                        completed) { (acc, db) =>
+        config.bitcoindClient
+          .getRawTransactionRaw(db.txIdOpt.get)
+          .map(_ => acc)
+          .recover(_ => {
+            logger.warn(
+              s"Transaction ${db.txIdOpt.get.hex} not found, marking invoice as unconfirmed")
+            acc :+ db.copy(closed = false)
+          })
       }
-      _ <- invoiceDAO.updateAll(items)
+      _ <- opReturnDAO.updateAll(items)
     } yield items.size
   }
 
   def createReport(afterTimeOpt: Option[Long]): Future[Report] = {
     val action = for {
-      num <- invoiceDAO.numCompletedAction(afterTimeOpt)
-      nonStd <- invoiceDAO.numNonStdCompletedAction(afterTimeOpt)
-      chainFees <- invoiceDAO.totalChainFeesAction(afterTimeOpt)
-      profit <- invoiceDAO.totalProfitAction(afterTimeOpt)
-      vbytes <- invoiceDAO.totalChainSizeAction(afterTimeOpt)
-      nonStdVbytes <- invoiceDAO.totalNonStdChainSizeAction(afterTimeOpt)
+      num <- opReturnDAO.numCompletedAction(afterTimeOpt)
+      nonStd <- opReturnDAO.numNonStdCompletedAction(afterTimeOpt)
+      chainFees <- opReturnDAO.totalChainFeesAction(afterTimeOpt)
+      profit <- opReturnDAO.totalProfitAction(afterTimeOpt)
+      vbytes <- opReturnDAO.totalChainSizeAction(afterTimeOpt)
+      nonStdVbytes <- opReturnDAO.totalNonStdChainSizeAction(afterTimeOpt)
       nip5s <- nip5DAO.getNumCompletedAction(afterTimeOpt)
       zapped <- zapDAO.totalZappedAction(afterTimeOpt)
       waitingAction <- invoiceDAO.numWaitingAction(afterTimeOpt)

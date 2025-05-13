@@ -36,21 +36,23 @@ class InvoiceMonitorTest extends DualLndFixture {
     monitor.startSubscription()
 
     for {
-      toPay <- monitor.createInvoice(
+      (invDb, reqDb) <- monitor.createInvoice(
         message = ByteVector("hello world".getBytes("UTF-8")),
         noTwitter = true,
         nodeIdOpt = None,
         telegramId = None,
         nostrKey = None,
         dvmEvent = None)
-      invoiceDb <- monitor.onInvoicePaid(toPay, None)
+      (invoiceDb, requestDb) <- monitor.onInvoicePaid(invDb, reqDb, None)
     } yield {
-      assert(invoiceDb.invoice == toPay.invoice)
-      assert(invoiceDb.noTwitter)
-      assert(invoiceDb.closed)
-      assert(invoiceDb.txIdOpt.isDefined)
-      assert(invoiceDb.txOpt.isDefined)
-      assert(invoiceDb.chainFeeOpt.isDefined)
+      assert(invoiceDb.invoice == invDb.invoice)
+      assert(invoiceDb.opReturnRequestId == requestDb.id.get)
+      assert(invoiceDb.paid)
+      assert(requestDb.noTwitter)
+      assert(requestDb.closed)
+      assert(requestDb.txIdOpt.isDefined)
+      assert(requestDb.txOpt.isDefined)
+      assert(requestDb.chainFeeOpt.isDefined)
     }
   }
 
@@ -65,14 +67,14 @@ class InvoiceMonitorTest extends DualLndFixture {
       mempool <- bitcoind.getRawMemPool
       _ = assert(mempool.isEmpty)
 
-      db <- monitor.createInvoice(message =
-                                    ByteVector("hello world".getBytes("UTF-8")),
-                                  noTwitter = true,
-                                  nodeIdOpt = None,
-                                  telegramId = None,
-                                  nostrKey = None,
-                                  dvmEvent = None)
-      invoice = db.invoice
+      (invDb, reqDb) <- monitor.createInvoice(
+        message = ByteVector("hello world".getBytes("UTF-8")),
+        noTwitter = true,
+        nodeIdOpt = None,
+        telegramId = None,
+        nostrKey = None,
+        dvmEvent = None)
+      invoice = invDb.invoice
 
       _ <- lndB.sendPayment(invoice, 60.seconds)
       _ <- TestAsyncUtil.awaitConditionF(() =>
@@ -82,9 +84,9 @@ class InvoiceMonitorTest extends DualLndFixture {
       tx <- bitcoind.getRawTransactionRaw(hash)
 
       _ <- TestAsyncUtil.awaitConditionF(() =>
-        monitor.invoiceDAO.read(db.rHash).map(_.exists(_.closed)))
+        monitor.opReturnDAO.read(reqDb.id.get).map(_.exists(_.closed)))
 
-      findOpt <- monitor.invoiceDAO.read(db.rHash)
+      findOpt <- monitor.opReturnDAO.read(reqDb.id.get)
       report <- monitor.createReport(None)
     } yield {
       assert(tx.outputs.exists(_.value == Satoshis.zero))
@@ -92,13 +94,13 @@ class InvoiceMonitorTest extends DualLndFixture {
         tx.outputs.exists(_.scriptPubKey.scriptType == ScriptType.NONSTANDARD))
 
       findOpt match {
-        case Some(invoiceDb) =>
-          assert(invoiceDb.invoice == invoice)
-          assert(invoiceDb.noTwitter)
-          assert(invoiceDb.closed)
-          assert(invoiceDb.txIdOpt.contains(hash))
-          assert(invoiceDb.txOpt.contains(tx))
-          assert(invoiceDb.chainFeeOpt.isDefined)
+        case Some(reqDb) =>
+          assert(reqDb.id.get == invDb.opReturnRequestId)
+          assert(reqDb.noTwitter)
+          assert(reqDb.closed)
+          assert(reqDb.txIdOpt.contains(hash))
+          assert(reqDb.txOpt.contains(tx))
+          assert(reqDb.chainFeeOpt.isDefined)
         case None => fail("invoice not found")
       }
 

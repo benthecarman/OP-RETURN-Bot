@@ -7,7 +7,7 @@ import com.github.scribejava.core.model.OAuth1AccessToken
 import com.github.scribejava.core.oauth.OAuth10aService
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
-import models.InvoiceDAO
+import models.{Nip5DAO, OpReturnRequestDAO, PaymentDAO, ZapDAO}
 import org.bitcoins.commons.config._
 import org.bitcoins.commons.util.NativeProcessFactory
 import org.bitcoins.core.hd.HDPurposes
@@ -268,7 +268,7 @@ case class OpReturnBotAppConfig(
   override lazy val dbPath: Path = baseDatadir
 
   override val allTables: List[TableQuery[Table[_]]] =
-    List(InvoiceDAO()(ec, this).table)
+    List(OpReturnRequestDAO()(ec, this).table)
 }
 
 object OpReturnBotAppConfig

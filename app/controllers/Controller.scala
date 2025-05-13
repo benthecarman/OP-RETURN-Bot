@@ -63,7 +63,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val opReturnDAO: OpReturnRequestDAO = OpReturnRequestDAO()
+  val paymentDAO: PaymentDAO = PaymentDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
   val zapDAO: ZapDAO = ZapDAO()
 
@@ -73,7 +74,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   private val postUrl = routes.Controller.createRequest
 
   private val recentTransactions: ArrayBuffer[DoubleSha256DigestBE] = {
-    val f = startF.flatMap(_ => invoiceDAO.lastFiveCompleted())
+    val f = startF.flatMap(_ => opReturnDAO.lastFiveCompleted())
     val res = Await.result(f, 30.seconds)
     mutable.ArrayBuffer[DoubleSha256DigestBE]().addAll(res)
   }
@@ -306,11 +307,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   def viewMessage(txIdStr: String): Action[AnyContent] = {
     Action.async { _ =>
       val txId = DoubleSha256DigestBE(txIdStr)
-      val res = invoiceDAO.findByTxId(txId).map {
+      val res = opReturnDAO.findByTxId(txId).map {
         case None =>
           BadRequest("Tx does not originate from OP_RETURN Bot")
-        case Some(invoiceDb: InvoiceDb) =>
-          Ok(invoiceDb.getMessage())
+        case Some(db) =>
+          Ok(db.getMessage())
       }
 
       res.map(
@@ -328,11 +329,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val hash = Sha256Digest
         .fromHexT(rHash)
         .getOrElse(LnInvoice.fromString(rHash).lnTags.paymentHash.hash)
-      val res = invoiceDAO.read(hash).map {
+      val res = paymentDAO.findOpReturnRequestByRHash(hash).map {
         case None =>
           BadRequest("Invoice not from OP_RETURN Bot")
-        case Some(invoiceDb) =>
-          invoiceDb.txIdOpt match {
+        case Some((invoiceDb, requestDb)) =>
+          requestDb.txIdOpt match {
             case Some(txId) => Ok(txId.hex)
             case None =>
               if (invoiceDb.paid) {
@@ -362,16 +363,24 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             BadRequest(views.html
               .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
         case Success(invoice) =>
-          invoiceDAO.read(invoice.lnTags.paymentHash.hash).map {
-            case None =>
-              BadRequest("Invoice not from OP_RETURN Bot")
-            case Some(invoiceDb) =>
-              invoiceDb.txIdOpt match {
-                case Some(txId) => Redirect(routes.Controller.success(txId.hex))
-                case None =>
-                  Ok(views.html.showInvoice(invoiceDb.getMessage(), invoice))
-              }
-          }
+          paymentDAO
+            .findOpReturnRequestByRHash(invoice.lnTags.paymentHash.hash)
+            .map {
+              case None =>
+                BadRequest("Invoice not from OP_RETURN Bot")
+              case Some((invoiceDb, requestDb)) =>
+                requestDb.txIdOpt match {
+                  case Some(txId) =>
+                    Redirect(routes.Controller.success(txId.hex))
+                  case None =>
+                    if (invoiceDb.paid) {
+                      Ok(views.html.pending())
+                    } else {
+                      Ok(
+                        views.html.showInvoice(requestDb.getMessage(), invoice))
+                    }
+                }
+            }
       }
     }
 
@@ -384,16 +393,16 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             BadRequest(views.html
               .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
         case Success(rHash) =>
-          invoiceDAO.read(rHash).map {
+          paymentDAO.findOpReturnRequestByRHash(rHash).map {
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
-            case Some(invoiceDb) =>
-              invoiceDb.txIdOpt match {
+            case Some((invoiceDb, requestDb)) =>
+              requestDb.txIdOpt match {
                 case Some(txId) =>
                   Ok(
                     views.html.success(txId,
-                                       invoiceDb.messageBytes.length > 80))
+                                       requestDb.messageBytes.length > 80))
                 case None =>
                   if (invoiceDb.paid) {
                     Ok(views.html.pending())
@@ -458,7 +467,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
       def success(input: OpReturnRequest): Future[Result] = {
         for {
-          invoiceDb <- invoiceMonitor.createInvoice(
+          (invoiceDb, _) <- invoiceMonitor.createInvoice(
             message = ByteVector(input.message.getBytes("UTF-8")),
             noTwitter = input.noTwitter,
             nodeIdOpt = None,
@@ -515,7 +524,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                            telegramId = None,
                            nostrKey = None,
                            dvmEvent = None)
-            .map { invoiceDb =>
+            .map { case (invoiceDb, _) =>
               Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
             }
       }
@@ -545,7 +554,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         data: Nip5Request =>
           invoiceMonitor
             .createNip5Invoice(data.name, data.publicKey)
-            .map { invoiceDb =>
+            .map { case (invoiceDb, _) =>
               Redirect(routes.Controller.invoice(invoiceDb.invoice.toString))
             }
       }

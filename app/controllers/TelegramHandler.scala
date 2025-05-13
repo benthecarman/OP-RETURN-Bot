@@ -43,7 +43,8 @@ class TelegramHandler(controller: Controller)(implicit
   private val currencyFormatter: NumberFormat =
     java.text.NumberFormat.getCurrencyInstance(Locale.US)
 
-  val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val opReturnDAO: OpReturnRequestDAO = OpReturnRequestDAO()
+  val invoiceDAO: PaymentDAO = PaymentDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
   val zapDAO: ZapDAO = ZapDAO()
 
@@ -212,7 +213,7 @@ class TelegramHandler(controller: Controller)(implicit
                        telegramId = Some(id),
                        nostrKey = None,
                        dvmEvent = None)
-        .flatMap { db =>
+        .flatMap { case (db, _) =>
           val replyF = reply(db.invoice.toString)
 
           val url =
@@ -257,7 +258,7 @@ class TelegramHandler(controller: Controller)(implicit
   def handleTelegram(
       rHash: Sha256Digest,
       invoice: LnInvoice,
-      invoiceDb: InvoiceDb,
+      requestDb: OpReturnRequestDb,
       tweetOpt: Option[TweetData],
       nostrOpt: Option[Sha256Digest],
       message: String,
@@ -269,13 +270,13 @@ class TelegramHandler(controller: Controller)(implicit
     val amount = invoice.amount.get.toSatoshis
     val profit = amount - txDetails.totalFees
 
-    val deliveryMethod = if (invoiceDb.nostrKey.isDefined) {
+    val deliveryMethod = if (requestDb.nostrKey.isDefined) {
       "Nostr"
-    } else if (invoiceDb.telegramIdOpt.isDefined) {
+    } else if (requestDb.telegramIdOpt.isDefined) {
       "Telegram"
-    } else if (invoiceDb.nodeIdOpt.isDefined) {
+    } else if (requestDb.nodeIdOpt.isDefined) {
       "Lightning Onion Message"
-    } else if (invoiceDb.dvmEvent.isDefined) {
+    } else if (requestDb.dvmEvent.isDefined) {
       "DVM"
     } else "Web"
 
@@ -413,34 +414,30 @@ class TelegramHandler(controller: Controller)(implicit
 
   private def createPublicReport(afterTimeOpt: Option[Long]): Future[String] = {
     val action = for {
-      completed <- invoiceDAO.completedAction(afterTimeOpt)
+      num <- opReturnDAO.numCompletedAction(afterTimeOpt)
+      nonStd <- opReturnDAO.numNonStdCompletedAction(afterTimeOpt)
+      chainFees <- opReturnDAO.totalChainFeesAction(afterTimeOpt)
+      vbytes <- opReturnDAO.totalChainSizeAction(afterTimeOpt)
+      nonStdVbytes <- opReturnDAO.totalNonStdChainSizeAction(afterTimeOpt)
       waitingAction <- invoiceDAO.numWaitingAction(afterTimeOpt)
-    } yield (completed, waitingAction)
+    } yield (num, nonStd, chainFees, vbytes, nonStdVbytes, waitingAction)
 
-    invoiceDAO.safeDatabase.run(action).map { case (completed, waitingAction) =>
-      val numCompleted = completed.size
-      val nonStdCompleted =
-        completed.count(_.messageBytes.length > 80)
-      val percentNonStd =
-        if (numCompleted == 0) 0.0
-        else nonStdCompleted.toDouble / numCompleted.toDouble * 100.0
-      val chainFees = completed.flatMap(_.chainFeeOpt).sum
-      val vbytes = completed.flatMap(_.txOpt.map(_.vsize)).sum
-      val nonStdVbytes = completed
-        .filter(_.messageBytes.length > 80)
-        .flatMap(_.txOpt.map(_.vsize))
-        .sum
+    invoiceDAO.safeDatabase.run(action).map {
+      case (num, nonStd, chainFees, vbytes, nonStdVbytes, waitingAction) =>
+        val percentNonStd =
+          if (num == 0) 0.0
+          else nonStd.toDouble / num.toDouble * 100.0
 
-      s"""
-         |Total OP_RETURNs: ${intFormatter.format(numCompleted)}
-         |Total Non-standard: ${intFormatter.format(
-          nonStdCompleted)} (${currencyFormatter.format(percentNonStd).tail}%)
-         |Total chain size: ${printSize(vbytes)}
-         |Total non-std chain size: ${printSize(nonStdVbytes)}
-         |Total chain fees: ${printAmount(chainFees)}
-         |
-         |Remaining in Queue: ${intFormatter.format(waitingAction)}
-         |""".stripMargin
+        s"""
+           |Total OP_RETURNs: ${intFormatter.format(num)}
+           |Total Non-standard: ${intFormatter.format(
+            nonStd)} (${currencyFormatter.format(percentNonStd).tail}%)
+           |Total chain size: ${printSize(vbytes)}
+           |Total non-std chain size: ${printSize(nonStdVbytes)}
+           |Total chain fees: ${printAmount(chainFees)}
+           |
+           |Remaining in Queue: ${intFormatter.format(waitingAction)}
+           |""".stripMargin
     }
   }
 

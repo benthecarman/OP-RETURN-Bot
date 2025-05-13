@@ -138,12 +138,12 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         }
 
         for {
-          db <- createInvoice(message = message,
-                              noTwitter = false,
-                              nodeIdOpt = None,
-                              telegramId = None,
-                              nostrKey = None,
-                              dvmEvent = Some(event))
+          (db, _) <- createInvoice(message = message,
+                                   noTwitter = false,
+                                   nodeIdOpt = None,
+                                   telegramId = None,
+                                   nostrKey = None,
+                                   dvmEvent = Some(event))
 
           reply = NostrEvent.build(
             privateKey = nostrPrivateKey,
@@ -187,12 +187,13 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
         val message = NostrEvent.decryptDM(event, nostrPrivateKey)
 
         for {
-          db <- createInvoice(message = ByteVector(message.getBytes("UTF-8")),
-                              noTwitter = false,
-                              nodeIdOpt = None,
-                              telegramId = None,
-                              nostrKey = Some(event.pubkey),
-                              None)
+          (db, _) <- createInvoice(message =
+                                     ByteVector(message.getBytes("UTF-8")),
+                                   noTwitter = false,
+                                   nodeIdOpt = None,
+                                   telegramId = None,
+                                   nostrKey = Some(event.pubkey),
+                                   None)
           dmOpt <- sendNostrDM(db.invoice.toString, event.pubkey)
         } yield {
           dmOpt match {
