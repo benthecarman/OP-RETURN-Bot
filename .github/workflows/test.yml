@@ -22,6 +22,6 @@ jobs:
           path: |
             ~/.ivy2/cache
             ~/.sbt
-          key: ${{ runner.os }}-cache
+          key: ${{ runner.os }}-cache-${{ hashFiles('**/build.sbt') }}
       - name: Compile and Check Formatting
         run: sbt downloadBitcoind downloadLnd test:compile scalafmtCheckAll test
