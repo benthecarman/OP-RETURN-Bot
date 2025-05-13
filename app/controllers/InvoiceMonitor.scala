@@ -210,6 +210,7 @@ class InvoiceMonitor(
                       Future.successful(
                         (invoiceDb, requestDb.copy(closed = true)))
                   case Invoice.InvoiceState.CANCELED =>
+                    // idk why I mark as not closed here, things seem to work however
                     Future.successful(
                       (invoiceDb, requestDb.copy(closed = false)))
                   case Invoice.InvoiceState.Unrecognized(_) =>
