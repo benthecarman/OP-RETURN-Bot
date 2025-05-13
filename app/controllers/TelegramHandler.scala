@@ -256,8 +256,8 @@ class TelegramHandler(controller: Controller)(implicit
   }
 
   def handleTelegram(
-      rHash: Sha256Digest,
-      invoice: LnInvoice,
+      requestId: Long,
+      amount: Satoshis,
       requestDb: OpReturnRequestDb,
       tweetOpt: Option[TweetData],
       nostrOpt: Option[Sha256Digest],
@@ -267,7 +267,6 @@ class TelegramHandler(controller: Controller)(implicit
       totalProfit: CurrencyUnit,
       totalChainFees: CurrencyUnit,
       remainingInQueue: Int): Future[Unit] = {
-    val amount = invoice.amount.get.toSatoshis
     val profit = amount - txDetails.totalFees
 
     val deliveryMethod = if (requestDb.nostrKey.isDefined) {
@@ -301,7 +300,7 @@ class TelegramHandler(controller: Controller)(implicit
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |Message: $message
          |Delivery: $deliveryMethod
-         |rhash: ${rHash.hex}
+         |id: $requestId
          |tx: https://mempool.space/tx/${txDetails.txId.hex}
          |tweet: $tweetLine
          |nostr: $nostrLine

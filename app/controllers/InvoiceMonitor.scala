@@ -220,21 +220,16 @@ class InvoiceMonitor(
           }
         }
 
-        // if we're lifting the limit, process in sequence
-        val updateF = if (liftMempoolLimit) {
-          unclosed
-            .foldLeft(
-              Future.successful(Vector.empty[(InvoiceDb, OpReturnRequestDb)])) {
-              case (accF, (db, req)) =>
-                accF.flatMap { acc =>
-                  processInvoice(db, req).map { db =>
-                    acc :+ db
-                  }
+        val updateF = unclosed
+          .foldLeft(
+            Future.successful(Vector.empty[(InvoiceDb, OpReturnRequestDb)])) {
+            case (accF, (db, req)) =>
+              accF.flatMap { acc =>
+                processInvoice(db, req).map { db =>
+                  acc :+ db
                 }
-            }
-        } else {
-          Future.sequence(unclosed.map(x => processInvoice(x._1, x._2)))
-        }
+              }
+          }
 
         val f = for {
           updates <- updateF
@@ -331,25 +326,32 @@ class InvoiceMonitor(
   }
 
   def onInvoicePaid(
-      unpaidInvoiceDb: InvoiceDb,
+      invoiceDb: InvoiceDb,
       requestDb: OpReturnRequestDb,
       npubOpt: Option[SchnorrPublicKey]): Future[(InvoiceDb,
                                                   OpReturnRequestDb)] = {
-    val invoiceDb = unpaidInvoiceDb.copy(paid = true)
+    for {
+      db <- invoiceDAO.update(invoiceDb.copy(paid = true))
+      res <-
+        onRequestPaid(requestDb, db.invoice.amount.get.toSatoshis, npubOpt)
+    } yield (db, res)
+  }
 
-    // just mark paid and skip for now
+  def onRequestPaid(
+      requestDb: OpReturnRequestDb,
+      amount: Satoshis,
+      npubOpt: Option[SchnorrPublicKey]): Future[OpReturnRequestDb] = {
+    // just mark paid and skip for now if we have a mempool limit
     if (mempoolLimit) {
       logger.warn("Mempool limit in action, skipping for now")
-      return invoiceDAO.update(invoiceDb).map((_, requestDb))
+      return Future.successful(requestDb)
     }
 
     val message = requestDb.getMessage()
-    val invoice = invoiceDb.invoice
     val feeRate = requestDb.feeRate
     val noTwitter = requestDb.noTwitter
-    val rHash = PaymentHashTag(invoiceDb.rHash)
 
-    logger.info(s"Received ${invoice.amount.get.toSatoshis}!")
+    logger.info(s"Received $amount!")
 
     val spk = {
       val messageBytes = requestDb.messageBytes
@@ -370,11 +372,9 @@ class InvoiceMonitor(
       label = s"OP_RETURN Bot",
       spendUnconfirmed = true)
 
-    val createTxF = for {
-      // start by marking paid
-      _ <- invoiceDAO.update(invoiceDb)
+    val heightF = lnd.getInfo.map(_.blockHeight)
 
-      heightF = lnd.getInfo.map(_.blockHeight)
+    val createTxF = for {
 
       transaction <- lnd
         .sendOutputs(request)
@@ -425,7 +425,6 @@ class InvoiceMonitor(
         logger.info(s"Updated saved tx: ${txId.hex} to in recent txs list")
       }
 
-      amount = invoice.amount.get.toSatoshis
       // Need to make sure we upsert the tx and txid even if this fails, so we can't call .get
       chainFeeOpt = txDetailsOpt.map(_.totalFees)
       profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
@@ -499,7 +498,7 @@ class InvoiceMonitor(
             .map(x => Option(x).flatten)
             .recover { err =>
               logger.error(
-                s"Failed to create tweet for invoice ${rHash.hash.hex}, got error $err")
+                s"Failed to create tweet for tx ${txId.hex}, got error $err")
               None
             }
         }
@@ -513,7 +512,7 @@ class InvoiceMonitor(
           announceOnNostr(message, npubOpt, txId)
             .recover { err =>
               logger.error(
-                s"Failed to create nostr note for invoice ${rHash.hash.hex}, got error $err")
+                s"Failed to create nostr note for tx ${txId.hex}, got error $err")
               None
             }
         }
@@ -541,8 +540,8 @@ class InvoiceMonitor(
                   tweetOpt <- tweetF
                   nostrOpt <- nostrF
                   _ <- handler.handleTelegram(
-                    rHash = rHash.hash,
-                    invoice = invoice,
+                    requestId = requestDb.id.get,
+                    amount = amount,
                     requestDb = res,
                     tweetOpt = tweetOpt,
                     nostrOpt = nostrOpt,
@@ -563,8 +562,7 @@ class InvoiceMonitor(
             } yield ()
           case None =>
             val msg =
-              s"Failed to get transaction details for ${rHash.hash.hex}\n" +
-                s"Transaction (${txId.hex}): ${transaction.hex}"
+              s"Failed to get transaction details for Transaction (${txId.hex})"
             logger.warn(msg)
 
             telegramHandlerOpt
@@ -574,14 +572,14 @@ class InvoiceMonitor(
 
         telegramF.recover { err =>
           logger.error(
-            s"Failed to send telegram message for invoice ${rHash.hash.hex}, got error $err")
+            s"Failed to send telegram message for request ${requestDb.id.get}, got error $err")
         }
       }
-    } yield (invoiceDb, res)
+    } yield res
 
     createTxF.recoverWith { case err: Throwable =>
       logger.error(
-        s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ",
+        s"Failed to create tx for request ${requestDb.id.get}, got error: ",
         err)
 
       val wasSet = mempoolLimit
@@ -607,10 +605,10 @@ class InvoiceMonitor(
       for {
         _ <- telegramHandlerOpt
           .map(_.sendTelegramMessage(
-            s"Failed to create tx for invoice ${rHash.hash.hex}, got error: ${err.getMessage}"))
+            s"Failed to create tx for request ${requestDb.id.get}, got error: ${err.getMessage}"))
           .getOrElse(Future.unit)
         _ <- limitF
-      } yield (invoiceDb, requestDb)
+      } yield requestDb
     }
   }
 
