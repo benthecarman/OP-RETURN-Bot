@@ -64,7 +64,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   }
 
   val opReturnDAO: OpReturnRequestDAO = OpReturnRequestDAO()
-  val paymentDAO: PaymentDAO = PaymentDAO()
+  val invoiceDAO: InvoiceDAO = InvoiceDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
   val zapDAO: ZapDAO = ZapDAO()
 
@@ -329,7 +329,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val hash = Sha256Digest
         .fromHexT(rHash)
         .getOrElse(LnInvoice.fromString(rHash).lnTags.paymentHash.hash)
-      val res = paymentDAO.findOpReturnRequestByRHash(hash).map {
+      val res = invoiceDAO.findOpReturnRequestByRHash(hash).map {
         case None =>
           BadRequest("Invoice not from OP_RETURN Bot")
         case Some((invoiceDb, requestDb)) =>
@@ -363,7 +363,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             BadRequest(views.html
               .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
         case Success(invoice) =>
-          paymentDAO
+          invoiceDAO
             .findOpReturnRequestByRHash(invoice.lnTags.paymentHash.hash)
             .map {
               case None =>
@@ -393,7 +393,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             BadRequest(views.html
               .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
         case Success(rHash) =>
-          paymentDAO.findOpReturnRequestByRHash(rHash).map {
+          invoiceDAO.findOpReturnRequestByRHash(rHash).map {
             case None =>
               BadRequest(views.html
                 .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))

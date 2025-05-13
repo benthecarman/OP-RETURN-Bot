@@ -8,17 +8,17 @@ import slick.lifted.{ForeignKeyQuery, ProvenShape}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class PaymentDb(
+case class InvoiceDb(
     rHash: Sha256Digest,
     opReturnRequestId: Long, // Foreign key to OpReturnRequestDb.id
     invoice: LnInvoice,
     paid: Boolean)
 
-case class PaymentDAO()(implicit
+case class InvoiceDAO()(implicit
     override val ec: ExecutionContext,
     override val appConfig: OpReturnBotAppConfig)
-    extends CRUD[PaymentDb, Sha256Digest]
-    with SlickUtil[PaymentDb, Sha256Digest] {
+    extends CRUD[InvoiceDb, Sha256Digest]
+    with SlickUtil[InvoiceDb, Sha256Digest] {
 
   import profile.api._
 
@@ -30,27 +30,27 @@ case class PaymentDAO()(implicit
     OpReturnRequestDAO#OpReturnRequestTable] =
     OpReturnRequestDAO().table
 
-  override val table: TableQuery[PaymentTable] = TableQuery[PaymentTable]
+  override val table: TableQuery[InvoiceTable] = TableQuery[InvoiceTable]
 
-  override def createAll(ts: Vector[PaymentDb]): Future[Vector[PaymentDb]] =
+  override def createAll(ts: Vector[InvoiceDb]): Future[Vector[InvoiceDb]] =
     createAllNoAutoInc(ts, safeDatabase) // rHash is not auto-incrementing
 
   override protected def findByPrimaryKeys(
-      ids: Vector[Sha256Digest]): Query[PaymentTable, PaymentDb, Seq] =
+      ids: Vector[Sha256Digest]): Query[InvoiceTable, InvoiceDb, Seq] =
     table.filter(_.rHash.inSet(ids))
 
   override protected def findAll(
-      ts: Vector[PaymentDb]): Query[PaymentTable, PaymentDb, Seq] =
+      ts: Vector[InvoiceDb]): Query[InvoiceTable, InvoiceDb, Seq] =
     findByPrimaryKeys(ts.map(_.rHash))
 
   def findByOpReturnRequestId(
-      opReturnRequestId: Long): Future[Option[PaymentDb]] = {
+      opReturnRequestId: Long): Future[Option[InvoiceDb]] = {
     val query = table.filter(_.opReturnRequestId === opReturnRequestId)
     safeDatabase.run(query.result).map(_.headOption)
   }
 
   def findOpReturnRequestByRHashAction(
-      rHash: Sha256Digest): DBIOAction[Option[(PaymentDb, OpReturnRequestDb)],
+      rHash: Sha256Digest): DBIOAction[Option[(InvoiceDb, OpReturnRequestDb)],
                                        NoStream,
                                        Effect.Read] = {
     table
@@ -62,29 +62,8 @@ case class PaymentDAO()(implicit
   }
 
   def findOpReturnRequestByRHash(
-      rHash: Sha256Digest): Future[Option[(PaymentDb, OpReturnRequestDb)]] = {
+      rHash: Sha256Digest): Future[Option[(InvoiceDb, OpReturnRequestDb)]] = {
     safeDatabase.run(findOpReturnRequestByRHashAction(rHash))
-  }
-
-  def findPendingPaymentsForProcessing(
-      limit: Option[Int]): Future[Vector[(PaymentDb, OpReturnRequestDb)]] = {
-    val query = table
-      .filter(_.paid === true) // Payment is marked as paid
-      .join(opReturnRequestTableQuery)
-      .on(_.opReturnRequestId === _.id)
-      .filter(
-        _._2.txIdOpt.isEmpty
-      ) // But OpReturnRequest has no txId yet (not broadcasted)
-      .filter(_._2.closed === false) // And OpReturnRequest is not closed
-
-    val limitedQuery = limit match {
-      case Some(l) => query.take(l)
-      case None    => query
-    }
-
-    safeDatabase
-      .run(limitedQuery.result)
-      .map(_.toVector.map { case (payment, opReturn) => (payment, opReturn) })
   }
 
   def numWaitingAction(
@@ -105,7 +84,7 @@ case class PaymentDAO()(implicit
     timedQuery.length.result
   }
 
-  def findUnclosed(): Future[Vector[(PaymentDb, OpReturnRequestDb)]] = {
+  def findUnclosed(): Future[Vector[(InvoiceDb, OpReturnRequestDb)]] = {
     val query = table
       .join(opReturnRequestTableQuery)
       .on(_.opReturnRequestId === _.id)
@@ -114,17 +93,17 @@ case class PaymentDAO()(implicit
     safeDatabase.runVec(query.result)
   }
 
-  class PaymentTable(tag: Tag)
-      extends Table[PaymentDb](tag, schemaName, "payments") {
+  class InvoiceTable(tag: Tag)
+      extends Table[InvoiceDb](tag, schemaName, "invoices") {
 
     def rHash: Rep[Sha256Digest] = column("r_hash", O.PrimaryKey)
     def opReturnRequestId: Rep[Long] = column("op_return_request_id")
     def invoice: Rep[LnInvoice] = column("invoice")
     def paid: Rep[Boolean] = column("paid")
 
-    def * : ProvenShape[PaymentDb] =
-      (rHash, opReturnRequestId, invoice, paid).<>(PaymentDb.tupled,
-                                                   PaymentDb.unapply)
+    def * : ProvenShape[InvoiceDb] =
+      (rHash, opReturnRequestId, invoice, paid).<>(InvoiceDb.tupled,
+                                                   InvoiceDb.unapply)
 
     def opReturnRequestFk: ForeignKeyQuery[
       OpReturnRequestDAO#OpReturnRequestTable,

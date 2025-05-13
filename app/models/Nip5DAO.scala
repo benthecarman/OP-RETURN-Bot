@@ -20,9 +20,6 @@ case class Nip5DAO()(implicit
 
   import profile.api._
 
-  private val paymentTable: TableQuery[PaymentDAO#PaymentTable] =
-    PaymentDAO().table
-
   private val opReturnRequestTable: TableQuery[
     OpReturnRequestDAO#OpReturnRequestTable] =
     OpReturnRequestDAO().table

@@ -60,7 +60,7 @@ class InvoiceMonitor(
     BitcoinerLiveFeeRateProvider(30, None)
 
   val opReturnDAO: OpReturnRequestDAO = OpReturnRequestDAO()
-  val invoiceDAO: PaymentDAO = PaymentDAO()
+  val invoiceDAO: InvoiceDAO = InvoiceDAO()
   val zapDAO: ZapDAO = ZapDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
 
@@ -168,7 +168,7 @@ class InvoiceMonitor(
   def processUnhandledInvoices(
       limit: Option[Int],
       liftMempoolLimit: Boolean): Future[
-    Vector[(PaymentDb, OpReturnRequestDb)]] = {
+    Vector[(InvoiceDb, OpReturnRequestDb)]] = {
     invoiceDAO.findUnclosed().flatMap { items =>
       if (items.nonEmpty) {
         val sorted = items.sortBy(_._2.time)
@@ -185,8 +185,8 @@ class InvoiceMonitor(
         logger.info(s"Processing ${unclosed.size} unhandled invoices")
 
         def processInvoice(
-            invoiceDb: PaymentDb,
-            requestDb: OpReturnRequestDb): Future[(PaymentDb,
+            invoiceDb: InvoiceDb,
+            requestDb: OpReturnRequestDb): Future[(InvoiceDb,
                                                    OpReturnRequestDb)] = {
           if (requestDb.txOpt.isDefined)
             Future.successful((invoiceDb, requestDb.copy(closed = true)))
@@ -224,7 +224,7 @@ class InvoiceMonitor(
         val updateF = if (liftMempoolLimit) {
           unclosed
             .foldLeft(
-              Future.successful(Vector.empty[(PaymentDb, OpReturnRequestDb)])) {
+              Future.successful(Vector.empty[(InvoiceDb, OpReturnRequestDb)])) {
               case (accF, (db, req)) =>
                 accF.flatMap { acc =>
                   processInvoice(db, req).map { db =>
@@ -238,10 +238,10 @@ class InvoiceMonitor(
 
         val f = for {
           updates <- updateF
-          payments = updates.map(_._1)
+          invoices = updates.map(_._1)
           requests = updates.map(_._2)
           action = for {
-            _ <- invoiceDAO.updateAllAction(payments)
+            _ <- invoiceDAO.updateAllAction(invoices)
             _ <- opReturnDAO.updateAllAction(requests)
           } yield ()
           _ <- invoiceDAO.safeDatabase.run(action)
@@ -331,9 +331,9 @@ class InvoiceMonitor(
   }
 
   def onInvoicePaid(
-      unpaidInvoiceDb: PaymentDb,
+      unpaidInvoiceDb: InvoiceDb,
       requestDb: OpReturnRequestDb,
-      npubOpt: Option[SchnorrPublicKey]): Future[(PaymentDb,
+      npubOpt: Option[SchnorrPublicKey]): Future[(InvoiceDb,
                                                   OpReturnRequestDb)] = {
     val invoiceDb = unpaidInvoiceDb.copy(paid = true)
 
@@ -679,7 +679,7 @@ class InvoiceMonitor(
       nodeIdOpt: Option[NodeId],
       telegramId: Option[Long],
       nostrKey: Option[SchnorrPublicKey],
-      dvmEvent: Option[NostrEvent]): Future[(PaymentDb, OpReturnRequestDb)] = {
+      dvmEvent: Option[NostrEvent]): Future[(InvoiceDb, OpReturnRequestDb)] = {
     createInvoice(message, noTwitter)
       .flatMap { case (invoice, feeRate) =>
         val requestDb =
@@ -703,7 +703,7 @@ class InvoiceMonitor(
 
         val action = for {
           createdReq <- opReturnDAO.createAction(requestDb)
-          invoiceDb = PaymentDb(
+          invoiceDb = InvoiceDb(
             rHash = invoice.lnTags.paymentHash.hash,
             opReturnRequestId = createdReq.id.get,
             invoice = invoice,
@@ -725,7 +725,7 @@ class InvoiceMonitor(
 
   def createNip5Invoice(
       name: String,
-      publicKey: NostrPublicKey): Future[(PaymentDb, OpReturnRequestDb)] = {
+      publicKey: NostrPublicKey): Future[(InvoiceDb, OpReturnRequestDb)] = {
     if (takenNames.contains(name)) {
       Future.failed(
         new IllegalArgumentException(s"Cannot create invoice for NIP-05 $name"))
@@ -761,7 +761,7 @@ class InvoiceMonitor(
             case None =>
               for {
                 createdReq <- opReturnDAO.createAction(requestDb)
-                invoiceDb = PaymentDb(
+                invoiceDb = InvoiceDb(
                   rHash = invoice.lnTags.paymentHash.hash,
                   opReturnRequestId = createdReq.id.get,
                   invoice = invoice,

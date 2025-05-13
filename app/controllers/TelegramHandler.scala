@@ -44,7 +44,7 @@ class TelegramHandler(controller: Controller)(implicit
     java.text.NumberFormat.getCurrencyInstance(Locale.US)
 
   val opReturnDAO: OpReturnRequestDAO = OpReturnRequestDAO()
-  val invoiceDAO: PaymentDAO = PaymentDAO()
+  val invoiceDAO: InvoiceDAO = InvoiceDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
   val zapDAO: ZapDAO = ZapDAO()
 
