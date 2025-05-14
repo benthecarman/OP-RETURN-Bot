@@ -169,9 +169,9 @@ class TelegramHandler(controller: Controller)(implicit
         .getOrElse((None, false))
 
       controller.invoiceMonitor
-        .processUnhandledInvoices(num, liftMempoolLimit)
-        .flatMap { dbs =>
-          reply(s"Updated ${dbs.size} invoices").map(_ => ())
+        .processUnhandledRequests(num, liftMempoolLimit)
+        .flatMap { num =>
+          reply(s"Updated $num requests").map(_ => ())
         }
     } else {
       reply("You are not allowed to use this command!").map(_ => ())
@@ -258,6 +258,7 @@ class TelegramHandler(controller: Controller)(implicit
   def handleTelegram(
       requestId: Long,
       amount: Satoshis,
+      isOnChain: Boolean,
       requestDb: OpReturnRequestDb,
       tweetOpt: Option[TweetData],
       nostrOpt: Option[Sha256Digest],
@@ -277,7 +278,11 @@ class TelegramHandler(controller: Controller)(implicit
       "Lightning Onion Message"
     } else if (requestDb.dvmEvent.isDefined) {
       "DVM"
-    } else "Web"
+    } else if (isOnChain) {
+      "Web (On-chain)"
+    } else {
+      "Web (Lightning)"
+    }
 
     val nonStd =
       if (message.getBytes.length > 80)
@@ -387,6 +392,7 @@ class TelegramHandler(controller: Controller)(implicit
     controller.invoiceMonitor.createReport(afterTimeOpt).map {
       case Report(num,
                   nonStd,
+                  numOnChain,
                   chainFees,
                   profit,
                   vbytes,
@@ -394,9 +400,20 @@ class TelegramHandler(controller: Controller)(implicit
                   nip5s,
                   zapped,
                   waitingAction) =>
+        val percentNonStd =
+          if (num == 0) 0.0
+          else nonStd.toDouble / num.toDouble * 100.0
+
+        val percentOnChain =
+          if (num == 0) 0.0
+          else numOnChain.toDouble / num.toDouble * 100.0
         s"""
            |Total OP_RETURNs: ${intFormatter.format(num)}
-           |Total Non-standard: ${intFormatter.format(nonStd)}
+           |Total Non-standard: ${intFormatter.format(
+            nonStd)} (${currencyFormatter.format(percentNonStd).tail}%)
+           |Paid On-Chain: ${intFormatter.format(
+            numOnChain)} (${currencyFormatter.format(percentOnChain).tail}%)
+           |
            |Total chain size: ${printSize(vbytes)}
            |Total non-std chain size: ${printSize(nonStdVbytes)}
            |Total chain fees: ${printAmount(chainFees)}
@@ -418,7 +435,7 @@ class TelegramHandler(controller: Controller)(implicit
       chainFees <- opReturnDAO.totalChainFeesAction(afterTimeOpt)
       vbytes <- opReturnDAO.totalChainSizeAction(afterTimeOpt)
       nonStdVbytes <- opReturnDAO.totalNonStdChainSizeAction(afterTimeOpt)
-      waitingAction <- invoiceDAO.numWaitingAction(afterTimeOpt)
+      waitingAction <- opReturnDAO.numWaitingAction(afterTimeOpt)
     } yield (num, nonStd, chainFees, vbytes, nonStdVbytes, waitingAction)
 
     invoiceDAO.safeDatabase.run(action).map {

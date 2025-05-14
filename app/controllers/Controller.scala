@@ -19,6 +19,7 @@ import play.api.data._
 import play.api.libs.json._
 import play.api.mvc._
 import scodec.bits.ByteVector
+import slick.dbio.DBIOAction
 
 import java.awt.Color
 import java.awt.image.BufferedImage
@@ -65,6 +66,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   val opReturnDAO: OpReturnRequestDAO = OpReturnRequestDAO()
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val onChainDAO: OnChainPaymentDAO = OnChainPaymentDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
   val zapDAO: ZapDAO = ZapDAO()
 
@@ -91,6 +93,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     setURI()
     telegramHandler.start()
     val _ = invoiceMonitor.startSubscription()
+    val _ = invoiceMonitor.startTxSubscription()
     val _ = invoiceMonitor.startBlockSubscription()
     invoiceMonitor.setNostrMetadata()
     invoiceMonitor.listenForDMs()
@@ -329,17 +332,37 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val hash = Sha256Digest
         .fromHexT(rHash)
         .getOrElse(LnInvoice.fromString(rHash).lnTags.paymentHash.hash)
-      val res = invoiceDAO.findOpReturnRequestByRHash(hash).map {
+
+      val action = for {
+        opt <- invoiceDAO.findOpReturnRequestByRHashAction(hash)
+        res <- opt match {
+          case None => DBIOAction.successful(None)
+          case Some((invoiceDb, requestDb)) =>
+            onChainDAO
+              .findByOpReturnRequestIdAction(invoiceDb.opReturnRequestId)
+              .map(o => Some((o, invoiceDb, requestDb)))
+        }
+      } yield res
+
+      val res = invoiceDAO.safeDatabase.run(action).map {
         case None =>
           BadRequest("Invoice not from OP_RETURN Bot")
-        case Some((invoiceDb, requestDb)) =>
+        case Some((onChainOpt, invoiceDb, requestDb)) =>
           requestDb.txIdOpt match {
             case Some(txId) => Ok(txId.hex)
             case None =>
               if (invoiceDb.paid) {
                 Ok("null")
               } else {
-                BadRequest("Invoice has not been paid")
+                onChainOpt match {
+                  case Some(onChain) =>
+                    if (onChain.txid.isDefined) {
+                      Ok("null")
+                    } else {
+                      BadRequest("Invoice has not been paid")
+                    }
+                  case None => BadRequest("Invoice has not been paid")
+                }
               }
           }
       }
@@ -356,19 +379,35 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def invoice(invoiceStr: String): Action[AnyContent] =
     Action.async { implicit request: MessagesRequest[AnyContent] =>
-      LnInvoice.fromStringT(invoiceStr) match {
+      val hashT = Sha256Digest
+        .fromHexT(invoiceStr)
+        .orElse(
+          LnInvoice.fromStringT(invoiceStr).map(_.lnTags.paymentHash.hash))
+
+      hashT match {
         case Failure(exception) =>
           logger.error(exception)
           Future.successful(
             BadRequest(views.html
               .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
-        case Success(invoice) =>
-          invoiceDAO
-            .findOpReturnRequestByRHash(invoice.lnTags.paymentHash.hash)
+        case Success(hash) =>
+          val action = for {
+            opt <- invoiceDAO.findOpReturnRequestByRHashAction(hash)
+            res <- opt match {
+              case None => DBIOAction.successful(None)
+              case Some((invoiceDb, requestDb)) =>
+                onChainDAO
+                  .findByOpReturnRequestIdAction(invoiceDb.opReturnRequestId)
+                  .map(o => Some((o, invoiceDb, requestDb)))
+            }
+          } yield res
+
+          opReturnDAO.safeDatabase
+            .run(action)
             .map {
               case None =>
                 BadRequest("Invoice not from OP_RETURN Bot")
-              case Some((invoiceDb, requestDb)) =>
+              case Some((onChainOpt, invoiceDb, requestDb)) =>
                 requestDb.txIdOpt match {
                   case Some(txId) =>
                     Redirect(routes.Controller.success(txId.hex))
@@ -376,8 +415,20 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                     if (invoiceDb.paid) {
                       Ok(views.html.pending())
                     } else {
-                      Ok(
-                        views.html.showInvoice(requestDb.getMessage(), invoice))
+                      onChainOpt match {
+                        case None =>
+                          Ok(
+                            views.html.showInvoice(requestDb.getMessage(),
+                                                   invoiceDb.invoice))
+                        case Some(onChain) =>
+                          val btc = Bitcoins(onChain.expectedAmount.satoshis)
+                          val unified =
+                            s"bitcoin:${onChain.address}?amount=${btc.decimalString}&lightning=${invoiceDb.invoice}".toUpperCase
+                          Ok(
+                            views.html.showUnified(requestDb.getMessage(),
+                                                   invoiceDb.rHash.hex,
+                                                   unified))
+                      }
                     }
                 }
             }
@@ -452,15 +503,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def create: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
-      if (invoiceMonitor.mempoolLimit) {
-        val form = opReturnRequestForm.withError(
-          "message",
-          "Too many requests at this time, try again later")
-        Future.successful(
-          BadRequest(views.html
-            .index(recentTransactions.toSeq, form, postUrl)))
-      }
-
       def failure(badForm: Form[OpReturnRequest]): Future[Result] = {
         Future.successful(BadRequest(badForm.errorsAsJson))
       }
@@ -491,15 +533,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   // This will be the action that handles our form post
   def createRequest: Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
-      if (invoiceMonitor.mempoolLimit) {
-        val form = opReturnRequestForm.withError(
-          "message",
-          "Too many requests at this time, try again later")
-        Future.successful(
-          BadRequest(views.html
-            .index(recentTransactions.toSeq, form, postUrl)))
-      }
-
       val errorFunction: Form[OpReturnRequest] => Future[Result] = {
         formWithErrors: Form[OpReturnRequest] =>
           // This is the bad case, where the form had validation errors.
@@ -518,14 +551,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: OpReturnRequest => Future[Result] = {
         data: OpReturnRequest =>
           invoiceMonitor
-            .createInvoice(message = ByteVector(data.message.getBytes("UTF-8")),
-                           noTwitter = data.noTwitter,
-                           nodeIdOpt = None,
-                           telegramId = None,
-                           nostrKey = None,
-                           dvmEvent = None)
-            .map { case (invoiceDb, _) =>
-              Redirect(routes.Controller.invoice(invoiceDb.invoice.toString()))
+            .createUnified(message = ByteVector(data.message.getBytes("UTF-8")),
+                           noTwitter = data.noTwitter)
+            .map { case (invoiceDb, _, _) =>
+              Redirect(routes.Controller.invoice(invoiceDb.rHash.hex))
             }
       }
 
@@ -555,7 +584,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
           invoiceMonitor
             .createNip5Invoice(data.name, data.publicKey)
             .map { case (invoiceDb, _) =>
-              Redirect(routes.Controller.invoice(invoiceDb.invoice.toString))
+              Redirect(routes.Controller.invoice(invoiceDb.rHash.hex))
             }
       }
 

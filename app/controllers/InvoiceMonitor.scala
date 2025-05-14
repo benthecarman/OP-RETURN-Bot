@@ -61,6 +61,7 @@ class InvoiceMonitor(
 
   val opReturnDAO: OpReturnRequestDAO = OpReturnRequestDAO()
   val invoiceDAO: InvoiceDAO = InvoiceDAO()
+  val onChainDAO: OnChainPaymentDAO = OnChainPaymentDAO()
   val zapDAO: ZapDAO = ZapDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
 
@@ -72,13 +73,50 @@ class InvoiceMonitor(
       .mapAsync(1) { _ =>
         if (mempoolLimit) {
           // process some unhandled invoices, lifting the limit
-          processUnhandledInvoices(Some(100), liftMempoolLimit = true)
+          processUnhandledRequests(Some(100), liftMempoolLimit = true)
 
           logger.info("Mempool limit lifted, resuming invoices")
           telegramHandlerOpt
             .map(
               _.sendTelegramMessage("Mempool limit lifted, resuming invoices"))
             .getOrElse(Future.unit)
+        } else {
+          Future.unit
+        }
+      }
+      .runWith(Sink.ignore)
+      .flatMap(_ => startBlockSubscription())
+      .recoverWith(_ => startBlockSubscription())
+  }
+
+  def startTxSubscription(): Future[Done] = {
+    lnd
+      .subscribeTransactions()
+      .mapAsync(1) { txDetails =>
+        if (txDetails.numConfirmations > 0) {
+          FutureUtil.sequentially(
+            txDetails.outputDetails.filter(_.isOurAddress)) { outputDetails =>
+            // todo get npub for nip05
+            onChainDAO
+              .findOpReturnRequestByAddress(outputDetails.addressOpt.get)
+              .flatMap {
+                case None => Future.unit
+                case Some((onchainDb, requestDb)) =>
+                  if (
+                    onchainDb.expectedAmount <= outputDetails.amount && onchainDb.txid.isEmpty && requestDb.txIdOpt.isEmpty
+                  ) {
+                    onAddressPaid(onchainDb = onchainDb,
+                                  requestDb = requestDb,
+                                  amount = outputDetails.amount.satoshis,
+                                  txid = txDetails.txId,
+                                  npubOpt = None).map(_ => ())
+                  } else {
+                    logger.warn(
+                      s"Received ${outputDetails.amount} for address ${outputDetails.addressOpt.get}, expected ${onchainDb.expectedAmount}")
+                    Future.unit
+                  }
+              }
+          }
         } else {
           Future.unit
         }
@@ -165,24 +203,22 @@ class InvoiceMonitor(
       .recoverWith(_ => startSubscription())
   }
 
-  def processUnhandledInvoices(
+  def processUnhandledRequests(
       limit: Option[Int],
-      liftMempoolLimit: Boolean): Future[
-    Vector[(InvoiceDb, OpReturnRequestDb)]] = {
-    invoiceDAO.findUnclosed().flatMap { items =>
-      if (items.nonEmpty) {
-        val sorted = items.sortBy(_._2.time)
-        val unclosed = limit match {
-          case Some(l) => sorted.take(l)
-          case None    => sorted
-        }
-
+      liftMempoolLimit: Boolean): Future[Int] = {
+    opReturnDAO.findUnclosed(limit).flatMap { unclosed =>
+      if (unclosed.nonEmpty) {
         if (liftMempoolLimit) {
           mempoolLimit = false
         }
 
+        val txsF = for {
+          height <- lnd.getInfo.map(_.blockHeight.toInt)
+          txs <- lnd.getTransactions((height - 2016) min 0, height)
+        } yield txs
+
         val time = System.currentTimeMillis()
-        logger.info(s"Processing ${unclosed.size} unhandled invoices")
+        logger.info(s"Processing ${unclosed.size} unhandled requests")
 
         def processInvoice(
             invoiceDb: InvoiceDb,
@@ -210,9 +246,8 @@ class InvoiceMonitor(
                       Future.successful(
                         (invoiceDb, requestDb.copy(closed = true)))
                   case Invoice.InvoiceState.CANCELED =>
-                    // idk why I mark as not closed here, things seem to work however
                     Future.successful(
-                      (invoiceDb, requestDb.copy(closed = false)))
+                      (invoiceDb, requestDb.copy(closed = true)))
                   case Invoice.InvoiceState.Unrecognized(_) =>
                     Future.successful((invoiceDb, requestDb))
                 }
@@ -221,35 +256,99 @@ class InvoiceMonitor(
           }
         }
 
-        val updateF = unclosed
-          .foldLeft(
-            Future.successful(Vector.empty[(InvoiceDb, OpReturnRequestDb)])) {
-            case (accF, (db, req)) =>
-              accF.flatMap { acc =>
-                processInvoice(db, req).map { db =>
-                  acc :+ db
-                }
+        def processTx(
+            onChainDb: OnChainPaymentDb,
+            requestDb: OpReturnRequestDb): Future[(OnChainPaymentDb,
+                                                   OpReturnRequestDb)] = {
+          if (requestDb.txOpt.isDefined)
+            Future.successful((onChainDb, requestDb.copy(closed = true)))
+          else {
+            txsF
+              .map(_.find(_.outputDetails.exists(
+                _.addressOpt.contains(onChainDb.address))))
+              .flatMap {
+                case None =>
+                  // if has been 2 weeks, mark as closed
+                  if (
+                    requestDb.time + (86400 * 7) < TimeUtil.currentEpochSecond
+                  ) {
+                    logger.info(
+                      s"Closing request ${requestDb.id.get} after 2 weeks")
+                    Future.successful(
+                      (onChainDb, requestDb.copy(closed = true)))
+                  } else {
+                    Future.successful((onChainDb, requestDb))
+                  }
+                case Some(txDetails) =>
+                  val amtPaid = txDetails.outputDetails
+                    .find(_.addressOpt.contains(onChainDb.address))
+                    .map(_.amount)
+                    .getOrElse(Satoshis.zero)
+                  if (
+                    txDetails.numConfirmations > 0 && amtPaid >= onChainDb.expectedAmount
+                  ) {
+                    nip5DAO.read(onChainDb.opReturnRequestId).flatMap {
+                      nip5Opt =>
+                        onAddressPaid(onChainDb,
+                                      requestDb,
+                                      amtPaid.satoshis,
+                                      txDetails.txId,
+                                      nip5Opt.map(_.publicKey))
+                    }
+                  } else {
+                    logger.warn(
+                      s"Received $amtPaid for address ${onChainDb.address}, expected ${onChainDb.expectedAmount}")
+                    Future.successful((onChainDb, requestDb))
+                  }
               }
+              .recover { case _: Throwable => (onChainDb, requestDb) }
           }
+        }
+
+        val updateF =
+          FutureUtil
+            .sequentially(unclosed) { case (req, inv, onChain) =>
+              (inv, onChain) match {
+                case (None, None) => Future.successful(None)
+                case (Some(invDb), None) =>
+                  processInvoice(invDb, req).map(t =>
+                    Some((t._2, Some(t._1), None)))
+                case (None, Some(tx)) =>
+                  processTx(tx, req).map(t => Some((t._2, None, Some(t._1))))
+                case (Some(invDb), Some(tx)) =>
+                  processInvoice(invDb, req).flatMap { case (invDb, req) =>
+                    // if its was paid, continue on
+                    if (req.txIdOpt.isDefined) {
+                      Future.successful(Some((req, Some(invDb), None)))
+                    } else { // otherwise try to handle on-chain
+                      processTx(tx, req).map(t =>
+                        Some((t._2, None, Some(t._1))))
+                    }
+                  }
+              }
+            }
+            .map(_.flatten)
 
         val f = for {
           updates <- updateF
-          invoices = updates.map(_._1)
-          requests = updates.map(_._2)
+          requests = updates.map(_._1)
+          invoices = updates.flatMap(_._2)
+          onChain = updates.flatMap(_._3)
           action = for {
-            _ <- invoiceDAO.updateAllAction(invoices)
             _ <- opReturnDAO.updateAllAction(requests)
+            _ <- invoiceDAO.updateAllAction(invoices)
+            _ <- onChainDAO.updateAllAction(onChain)
           } yield ()
           _ <- invoiceDAO.safeDatabase.run(action)
           took = System.currentTimeMillis() - time
           _ = logger.info(
-            s"Processed ${updates.size} unhandled invoices, took $took ms")
-        } yield updates
+            s"Processed ${updates.size} unhandled requests, took $took ms")
+        } yield updates.size
 
-        f.failed.map(logger.error("Error processing unhandled invoices", _))
+        f.failed.map(logger.error("Error processing unhandled requests", _))
 
         f
-      } else Future.successful(Vector.empty)
+      } else Future.successful(0)
     }
   }
 
@@ -334,13 +433,45 @@ class InvoiceMonitor(
     for {
       db <- invoiceDAO.update(invoiceDb.copy(paid = true))
       res <-
-        onRequestPaid(requestDb, db.invoice.amount.get.toSatoshis, npubOpt)
+        onRequestPaid(requestDb,
+                      db.invoice.amount.get.toSatoshis,
+                      isOnChain = false,
+                      npubOpt)
+    } yield (db, res)
+  }
+
+  def onAddressPaid(
+      onchainDb: OnChainPaymentDb,
+      requestDb: OpReturnRequestDb,
+      amount: Satoshis,
+      txid: DoubleSha256DigestBE,
+      npubOpt: Option[SchnorrPublicKey]): Future[(OnChainPaymentDb,
+                                                  OpReturnRequestDb)] = {
+    val action = for {
+      db <- onChainDAO.updateAction(
+        onchainDb.copy(txid = Some(txid), amountPaid = Some(amount)))
+      invoiceDbOpt <- invoiceDAO
+        .findByOpReturnRequestIdAction(onchainDb.opReturnRequestId)
+    } yield (db, invoiceDbOpt)
+
+    for {
+      (db, invoiceDbOpt) <- onChainDAO.safeDatabase.run(action)
+
+      // cancel the invoice if it exists
+      cancelF = invoiceDbOpt
+        .map(d => lnd.cancelInvoice(d.rHash).recover(_ => ()))
+        .getOrElse(Future.unit)
+
+      res <-
+        onRequestPaid(requestDb, amount, isOnChain = true, npubOpt)
+      _ <- cancelF
     } yield (db, res)
   }
 
   def onRequestPaid(
       requestDb: OpReturnRequestDb,
       amount: Satoshis,
+      isOnChain: Boolean,
       npubOpt: Option[SchnorrPublicKey]): Future[OpReturnRequestDb] = {
     // just mark paid and skip for now if we have a mempool limit
     if (mempoolLimit) {
@@ -530,13 +661,13 @@ class InvoiceMonitor(
             lazy val action = for {
               profit <- opReturnDAO.totalProfitAction(None)
               chainFees <- opReturnDAO.totalChainFeesAction(None)
-              inQueue <- invoiceDAO.numWaitingAction(None)
+              inQueue <- opReturnDAO.numWaitingAction(None)
             } yield (profit, chainFees, inQueue)
 
             val accountingTelegramF = telegramHandlerOpt
               .map { handler =>
                 for {
-                  (profit, chainFees, inQueue) <- invoiceDAO.safeDatabase.run(
+                  (profit, chainFees, inQueue) <- opReturnDAO.safeDatabase.run(
                     action)
                   tweetOpt <- tweetF
                   nostrOpt <- nostrF
@@ -544,6 +675,7 @@ class InvoiceMonitor(
                     requestId = requestDb.id.get,
                     amount = amount,
                     requestDb = res,
+                    isOnChain = isOnChain,
                     tweetOpt = tweetOpt,
                     nostrOpt = nostrOpt,
                     message = message,
@@ -613,9 +745,9 @@ class InvoiceMonitor(
     }
   }
 
-  private def createInvoice(
+  private def getPaymentParams(
       message: ByteVector,
-      noTwitter: Boolean): Future[(LnInvoice, SatoshisPerVirtualByte)] = {
+      noTwitter: Boolean): Future[(CurrencyUnit, SatoshisPerVirtualByte)] = {
     require(
       message.length <= 90_000,
       "OP_Return message received was too long, must be less than 90,000 bytes")
@@ -629,7 +761,7 @@ class InvoiceMonitor(
     } yield (feeRate, height)
 
     data
-      .flatMap { params =>
+      .map { params =>
         val (rate, height) = params
         val baseSize = 125 // 125 base tx size
         val messageSize = message.length
@@ -662,14 +794,22 @@ class InvoiceMonitor(
           // multiply by 2 just in case
           (feeRate * 2 * (baseSize + messageSize)) +
             Satoshis(1337) + noTwitterFee + noStdFee
-        val expiry = 60 * 5 // 5 minutes
 
-        val hash = CryptoUtil.sha256(message)
-
-        lnd
-          .addInvoice(hash, sats.satoshis, expiry)
-          .map(t => (t.invoice, feeRate))
+        (sats, feeRate)
       }
+  }
+
+  private def createInvoice(
+      message: ByteVector,
+      noTwitter: Boolean): Future[(LnInvoice, SatoshisPerVirtualByte)] = {
+    getPaymentParams(message, noTwitter).flatMap { case (sats, feeRate) =>
+      val expiry = 60 * 5 // 5 minutes
+      val hash = CryptoUtil.sha256(message)
+
+      lnd
+        .addInvoice(hash, sats.satoshis, expiry)
+        .map(t => (t.invoice, feeRate))
+    }
   }
 
   def createInvoice(
@@ -712,6 +852,104 @@ class InvoiceMonitor(
         } yield (createdInv, createdReq)
 
         invoiceDAO.safeDatabase.run(action)
+      }
+  }
+
+  def createAddress(
+      message: ByteVector,
+      noTwitter: Boolean): Future[(OnChainPaymentDb, OpReturnRequestDb)] = {
+    val paramsF = for {
+      (amt, feeRate) <- getPaymentParams(message, noTwitter)
+      address <- lnd.getNewAddress
+    } yield (amt, feeRate, address)
+
+    paramsF
+      .flatMap { case (amt, feeRate, address) =>
+        val requestDb =
+          OpReturnRequestDb(
+            id = None,
+            noTwitter = noTwitter,
+            feeRate = feeRate,
+            closed = false,
+            nodeIdOpt = None,
+            telegramIdOpt = None,
+            nostrKey = None,
+            dvmEvent = None,
+            txOpt = None,
+            txIdOpt = None,
+            profitOpt = None,
+            chainFeeOpt = None,
+            time = TimeUtil.currentEpochSecond,
+            messageBytes = message,
+            vsize = None
+          )
+
+        val action = for {
+          createdReq <- opReturnDAO.createAction(requestDb)
+          invoiceDb = OnChainPaymentDb(
+            address = address,
+            opReturnRequestId = createdReq.id.get,
+            expectedAmount = amt,
+            amountPaid = None,
+            txid = None
+          )
+          createdOnChain <- onChainDAO.createAction(invoiceDb)
+        } yield (createdOnChain, createdReq)
+
+        opReturnDAO.safeDatabase.run(action)
+      }
+  }
+
+  def createUnified(message: ByteVector, noTwitter: Boolean): Future[
+    (InvoiceDb, OnChainPaymentDb, OpReturnRequestDb)] = {
+    val addrF = lnd.getNewAddress
+    val paramsF = for {
+      (invoice, feeRate) <- createInvoice(message, noTwitter)
+      address <- addrF
+      amt = invoice.amount.get.toSatoshis
+    } yield (amt, feeRate, address, invoice)
+
+    paramsF
+      .flatMap { case (amt, feeRate, address, invoice) =>
+        val requestDb =
+          OpReturnRequestDb(
+            id = None,
+            noTwitter = noTwitter,
+            feeRate = feeRate,
+            closed = false,
+            nodeIdOpt = None,
+            telegramIdOpt = None,
+            nostrKey = None,
+            dvmEvent = None,
+            txOpt = None,
+            txIdOpt = None,
+            profitOpt = None,
+            chainFeeOpt = None,
+            time = TimeUtil.currentEpochSecond,
+            messageBytes = message,
+            vsize = None
+          )
+
+        val action = for {
+          createdReq <- opReturnDAO.createAction(requestDb)
+          onchainDb = OnChainPaymentDb(
+            address = address,
+            opReturnRequestId = createdReq.id.get,
+            expectedAmount = amt,
+            amountPaid = None,
+            txid = None
+          )
+          createdOnChain <- onChainDAO.createAction(onchainDb)
+          invoiceDb = InvoiceDb(
+            rHash = invoice.lnTags.paymentHash.hash,
+            opReturnRequestId = createdReq.id.get,
+            invoice = invoice,
+            paid = false
+          )
+          createdInv <- invoiceDAO.createAction(invoiceDb)
+        } yield (createdInv, createdOnChain, createdReq)
+
+        opReturnDAO.safeDatabase.run(action)
       }
   }
 
@@ -841,15 +1079,17 @@ class InvoiceMonitor(
     val action = for {
       num <- opReturnDAO.numCompletedAction(afterTimeOpt)
       nonStd <- opReturnDAO.numNonStdCompletedAction(afterTimeOpt)
+      numOnChain <- opReturnDAO.numOnChainCompletedAction(afterTimeOpt)
       chainFees <- opReturnDAO.totalChainFeesAction(afterTimeOpt)
       profit <- opReturnDAO.totalProfitAction(afterTimeOpt)
       vbytes <- opReturnDAO.totalChainSizeAction(afterTimeOpt)
       nonStdVbytes <- opReturnDAO.totalNonStdChainSizeAction(afterTimeOpt)
       nip5s <- nip5DAO.getNumCompletedAction(afterTimeOpt)
       zapped <- zapDAO.totalZappedAction(afterTimeOpt)
-      waitingAction <- invoiceDAO.numWaitingAction(afterTimeOpt)
+      waitingAction <- opReturnDAO.numWaitingAction(afterTimeOpt)
     } yield Report(num,
                    nonStd,
+                   numOnChain,
                    chainFees,
                    profit,
                    vbytes,
@@ -858,13 +1098,14 @@ class InvoiceMonitor(
                    zapped,
                    waitingAction)
 
-    invoiceDAO.safeDatabase.run(action)
+    opReturnDAO.safeDatabase.run(action)
   }
 }
 
 case class Report(
     num: Int,
     nonStd: Int,
+    numOnChain: Int,
     chainFees: CurrencyUnit,
     profit: CurrencyUnit,
     vbytes: Long,

@@ -71,6 +71,13 @@ case class OpReturnRequestDAO()(implicit
   override val table: TableQuery[OpReturnRequestTable] =
     TableQuery[OpReturnRequestTable]
 
+  private lazy val invoiceTableQuery: TableQuery[InvoiceDAO#InvoiceTable] =
+    InvoiceDAO().table
+
+  private lazy val onChainPaymentTable: TableQuery[
+    OnChainPaymentDAO#OnChainPaymentTable] =
+    OnChainPaymentDAO().table
+
   def findByTxId(
       txId: DoubleSha256DigestBE): Future[Option[OpReturnRequestDb]] = {
     val query = table.filter(_.txIdOpt === txId)
@@ -110,6 +117,22 @@ case class OpReturnRequestDAO()(implicit
           .filter(_.txIdOpt.isDefined)
           .size
           .result
+    }
+  }
+
+  def numOnChainCompletedAction(
+      afterTimeOpt: Option[Long]): DBIOAction[Int, NoStream, Effect.Read] = {
+    val baseQuery =
+      table
+        .filter(_.txIdOpt.isDefined)
+        .join(onChainPaymentTable)
+        .on(_.id === _.opReturnRequestId)
+        .filter(_._2.txid.isDefined)
+
+    afterTimeOpt match {
+      case Some(after) =>
+        baseQuery.filter(_._1.time > after).size.result
+      case None => baseQuery.size.result
     }
   }
 
@@ -259,9 +282,53 @@ case class OpReturnRequestDAO()(implicit
     }
   }
 
-  def findUnclosed(): Future[Vector[OpReturnRequestDb]] = {
-    val query = table.filterNot(_.closed)
-    safeDatabase.runVec(query.result)
+  def numWaitingAction(
+      afterTimeOpt: Option[Long]): DBIOAction[Int, NoStream, Effect.Read] = {
+    val baseQuery = table
+      .filter(_.txIdOpt.isDefined)
+      .joinLeft(invoiceTableQuery)
+      .on(_.id === _.opReturnRequestId)
+      .joinLeft(onChainPaymentTable)
+      .on(_._1.id === _.opReturnRequestId)
+      // Only count if invoice is paid or onchain txid is set
+      .filter(row =>
+        (row._1._2.map(_.paid === true).getOrElse(false)) ||
+          (row._2.map(_.txid.isDefined).getOrElse(false)))
+
+    val timedQuery = afterTimeOpt match {
+      case None => baseQuery
+      case Some(afterTime) =>
+        baseQuery.filter(_._1._1.time > afterTime)
+    }
+
+    timedQuery.length.result
+  }
+
+  def findUnclosed(
+      limit: Option[Int]): Future[Vector[(OpReturnRequestDb,
+                                          Option[InvoiceDb],
+                                          Option[OnChainPaymentDb])]] = {
+    val base = table
+      .filterNot(_.closed)
+      .sortBy(_.time)
+      .joinLeft(invoiceTableQuery)
+      .on(_.id === _.opReturnRequestId)
+      .joinLeft(onChainPaymentTable)
+      .on(_._1.id === _.opReturnRequestId)
+
+    val query = limit match {
+      case Some(l) => base.take(l)
+      case None    => base
+    }
+
+    safeDatabase
+      .runVec(query.result)
+      .map(_.flatMap { case ((req, inv), onChain) =>
+        (inv, onChain) match {
+          case (None, None) => None
+          case _            => Some((req, inv, onChain))
+        }
+      })
   }
 
   class OpReturnRequestTable(tag: Tag)

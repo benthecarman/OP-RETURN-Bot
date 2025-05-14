@@ -7,7 +7,7 @@ import com.github.scribejava.core.model.OAuth1AccessToken
 import com.github.scribejava.core.oauth.OAuth10aService
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
-import models.{InvoiceDAO, Nip5DAO, OpReturnRequestDAO, ZapDAO}
+import models._
 import org.bitcoins.commons.config._
 import org.bitcoins.commons.util.NativeProcessFactory
 import org.bitcoins.core.hd.HDPurposes

@@ -43,10 +43,16 @@ case class InvoiceDAO()(implicit
       ts: Vector[InvoiceDb]): Query[InvoiceTable, InvoiceDb, Seq] =
     findByPrimaryKeys(ts.map(_.rHash))
 
+  def findByOpReturnRequestIdAction(
+      opReturnRequestId: Long): DBIOAction[Option[InvoiceDb],
+                                           NoStream,
+                                           Effect.Read] = {
+    table.filter(_.opReturnRequestId === opReturnRequestId).result.headOption
+  }
+
   def findByOpReturnRequestId(
       opReturnRequestId: Long): Future[Option[InvoiceDb]] = {
-    val query = table.filter(_.opReturnRequestId === opReturnRequestId)
-    safeDatabase.run(query.result).map(_.headOption)
+    safeDatabase.run(findByOpReturnRequestIdAction(opReturnRequestId))
   }
 
   def findOpReturnRequestByRHashAction(
@@ -64,24 +70,6 @@ case class InvoiceDAO()(implicit
   def findOpReturnRequestByRHash(
       rHash: Sha256Digest): Future[Option[(InvoiceDb, OpReturnRequestDb)]] = {
     safeDatabase.run(findOpReturnRequestByRHashAction(rHash))
-  }
-
-  def numWaitingAction(
-      afterTimeOpt: Option[Long]): DBIOAction[Int, NoStream, Effect.Read] = {
-    // todo this should be in the OpReturnRequestDAO
-    val baseQuery = table
-      .filter(_.paid === true)
-      .join(opReturnRequestTableQuery)
-      .on(_.opReturnRequestId === _.id)
-      .filter(_._2.txIdOpt.isEmpty)
-
-    val timedQuery = afterTimeOpt match {
-      case None => baseQuery
-      case Some(afterTime) =>
-        baseQuery.filter(_._2.time > afterTime)
-    }
-
-    timedQuery.length.result
   }
 
   def findUnclosed(): Future[Vector[(InvoiceDb, OpReturnRequestDb)]] = {
