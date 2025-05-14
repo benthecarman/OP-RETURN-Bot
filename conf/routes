@@ -18,6 +18,7 @@ GET         /qr                              controllers.Controller.qrCode(strin
 
 # API
 POST        /api/create                      controllers.Controller.create
+POST        /api/unified                     controllers.Controller.createUnified
 GET         /api/status/:rHash               controllers.Controller.invoiceStatus(rHash)
 GET         /api/view/:txId                  controllers.Controller.viewMessage(txId)
 GET         /api/publish/:txHex              controllers.Controller.publishTransaction(txHex)

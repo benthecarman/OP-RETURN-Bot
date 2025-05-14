@@ -421,9 +421,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                             views.html.showInvoice(requestDb.getMessage(),
                                                    invoiceDb.invoice))
                         case Some(onChain) =>
-                          val btc = Bitcoins(onChain.expectedAmount.satoshis)
-                          val unified =
-                            s"bitcoin:${onChain.address}?amount=${btc.decimalString}&lightning=${invoiceDb.invoice}".toUpperCase
+                          val unified = createUnifiedAddr(onChain, invoiceDb)
                           Ok(
                             views.html.showUnified(requestDb.getMessage(),
                                                    invoiceDb.rHash.hex,
@@ -434,6 +432,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             }
       }
     }
+
+  private def createUnifiedAddr(
+      onChainDb: OnChainPaymentDb,
+      invoiceDb: InvoiceDb): String = {
+    val btc = Bitcoins(onChainDb.expectedAmount.satoshis)
+    s"bitcoin:${onChainDb.address}?amount=${btc.decimalString}&lightning=${invoiceDb.invoice}".toUpperCase
+  }
 
   def success(rHashStr: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
@@ -518,6 +523,40 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             dvmEvent = None)
         } yield {
           Ok(invoiceDb.invoice.toString()).withHeaders(
+            "Access-Control-Allow-Origin" -> "*",
+            "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+            "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+            "Access-Control-Allow-Credentials" -> "true"
+          )
+        }
+      }
+
+      opReturnRequestForm.bindFromRequest().fold(failure, success)
+    }
+  }
+
+  def createUnified: Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      def failure(badForm: Form[OpReturnRequest]): Future[Result] = {
+        Future.successful(BadRequest(badForm.errorsAsJson))
+      }
+
+      def success(input: OpReturnRequest): Future[Result] = {
+        for {
+          (invoiceDb, onChainDb, _) <- invoiceMonitor.createUnified(
+            message = ByteVector(input.message.getBytes("UTF-8")),
+            noTwitter = input.noTwitter)
+        } yield {
+          val unified = createUnifiedAddr(onChainDb, invoiceDb)
+          val json = Json.obj(
+            "address" -> Json.toJson(onChainDb.address.toString()),
+            "invoice" -> Json.toJson(invoiceDb.invoice.toString()),
+            "amountBtc" -> Json.toJson(
+              Bitcoins(onChainDb.expectedAmount.satoshis).decimalString),
+            "rHash" -> Json.toJson(invoiceDb.rHash.hex),
+            "paymentString" -> Json.toJson(unified)
+          )
+          Ok(json).withHeaders(
             "Access-Control-Allow-Origin" -> "*",
             "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
             "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
