@@ -1,6 +1,8 @@
 @import org.bitcoins.core.protocol.ln.LnInvoice
 @import org.bitcoins.crypto.CryptoUtil
 @import org.bitcoins.core.protocol.BitcoinAddress
+@import java.net.URLEncoder
+@import java.nio.charset.StandardCharsets
 @(message: String, rHash: String, unified: String)(implicit request: MessagesRequestHeader)
 
     @main("Invoice") {
@@ -15,7 +17,7 @@
         <h3>Message: @message</h3>
         <h4>SHA256: @{CryptoUtil.sha256(message).hex}</h4>
 
-        <img id='barcode' src="qr?string=@{unified}&width=300&height=300" alt="" title="invoice" width="300" height="300" />
+        <img id='barcode' src="qr?string=@{URLEncoder.encode(unified, StandardCharsets.UTF_8.toString)}&width=300&height=300" alt="" title="invoice" width="300" height="300" />
         <br>
         <code>@unified</code>
         <br>
