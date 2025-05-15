@@ -73,7 +73,7 @@ class InvoiceMonitor(
       .mapAsync(1) { _ =>
         if (mempoolLimit) {
           // process some unhandled invoices, lifting the limit
-          processUnhandledRequests(Some(100), liftMempoolLimit = true)
+          processUnhandledRequests(Some(500), liftMempoolLimit = true)
 
           logger.info("Mempool limit lifted, resuming invoices")
           telegramHandlerOpt
