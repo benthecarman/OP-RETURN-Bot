@@ -502,14 +502,18 @@ class InvoiceMonitor(
       satPerKw = feeRate.toSatoshisPerKW.toLong,
       outputs = Vector(txOut),
       label = s"OP_RETURN Bot",
-      spendUnconfirmed = true)
+      spendUnconfirmed = false)
 
     val heightF = lnd.getInfo.map(_.blockHeight)
 
     val createTxF = for {
-
       transaction <- lnd
         .sendOutputs(request)
+        .recoverWith { e =>
+          // if it fails with spending only confirmed, try again with unconfirmed
+          logger.warn(s"Error sending outputs: $e, trying unconfirmed")
+          lnd.sendOutputs(request.copy(spendUnconfirmed = true))
+        }
         .recover(e => {
           throw new RuntimeException(s"SendOutputs error: $e")
         })
