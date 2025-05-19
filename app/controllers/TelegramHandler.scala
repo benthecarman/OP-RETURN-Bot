@@ -435,7 +435,7 @@ class TelegramHandler(controller: Controller)(implicit
       chainFees <- opReturnDAO.totalChainFeesAction(afterTimeOpt)
       vbytes <- opReturnDAO.totalChainSizeAction(afterTimeOpt)
       nonStdVbytes <- opReturnDAO.totalNonStdChainSizeAction(afterTimeOpt)
-      waitingAction <- opReturnDAO.numWaitingAction(afterTimeOpt)
+      waitingAction <- opReturnDAO.numWaitingAction()
     } yield (num, nonStd, chainFees, vbytes, nonStdVbytes, waitingAction)
 
     invoiceDAO.safeDatabase.run(action).map {

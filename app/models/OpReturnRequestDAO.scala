@@ -282,10 +282,9 @@ case class OpReturnRequestDAO()(implicit
     }
   }
 
-  def numWaitingAction(
-      afterTimeOpt: Option[Long]): DBIOAction[Int, NoStream, Effect.Read] = {
+  def numWaitingAction(): DBIOAction[Int, NoStream, Effect.Read] = {
     val baseQuery = table
-      .filter(_.txIdOpt.isDefined)
+      .filter(_.txIdOpt.isEmpty)
       .joinLeft(invoiceTableQuery)
       .on(_.id === _.opReturnRequestId)
       .joinLeft(onChainPaymentTable)
@@ -295,13 +294,7 @@ case class OpReturnRequestDAO()(implicit
         (row._1._2.map(_.paid === true).getOrElse(false)) ||
           (row._2.map(_.txid.isDefined).getOrElse(false)))
 
-    val timedQuery = afterTimeOpt match {
-      case None => baseQuery
-      case Some(afterTime) =>
-        baseQuery.filter(_._1._1.time > afterTime)
-    }
-
-    timedQuery.length.result
+    baseQuery.length.result
   }
 
   def findUnclosed(

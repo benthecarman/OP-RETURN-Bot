@@ -107,6 +107,7 @@ class InvoiceMonitorTest extends DualLndFixture {
 
       assert(report.num == 1)
       assert(report.numOnChain == 0)
+      assert(report.waitingAction == 0)
       assert(report.profit > CurrencyUnits.zero)
       assert(report.chainFees > CurrencyUnits.zero)
       assert(report.vbytes > 0)
@@ -176,6 +177,7 @@ class InvoiceMonitorTest extends DualLndFixture {
 
       assert(report.num == 1)
       assert(report.numOnChain == 1)
+      assert(report.waitingAction == 0)
       assert(report.profit > CurrencyUnits.zero)
       assert(report.chainFees > CurrencyUnits.zero)
       assert(report.vbytes > 0)
@@ -248,6 +250,7 @@ class InvoiceMonitorTest extends DualLndFixture {
 
       assert(report.num == 1)
       assert(report.numOnChain == 1)
+      assert(report.waitingAction == 0)
       assert(report.profit > CurrencyUnits.zero)
       assert(report.chainFees > CurrencyUnits.zero)
       assert(report.vbytes > 0)
@@ -319,6 +322,7 @@ class InvoiceMonitorTest extends DualLndFixture {
 
       assert(report.num == 1)
       assert(report.numOnChain == 1)
+      assert(report.waitingAction == 0)
       assert(report.profit > CurrencyUnits.zero)
       assert(report.chainFees > CurrencyUnits.zero)
       assert(report.vbytes > 0)
@@ -379,6 +383,7 @@ class InvoiceMonitorTest extends DualLndFixture {
 
       assert(report.num == 1)
       assert(report.numOnChain == 0)
+      assert(report.waitingAction == 0)
       assert(report.profit > CurrencyUnits.zero)
       assert(report.chainFees > CurrencyUnits.zero)
       assert(report.vbytes > 0)

@@ -665,7 +665,7 @@ class InvoiceMonitor(
             lazy val action = for {
               profit <- opReturnDAO.totalProfitAction(None)
               chainFees <- opReturnDAO.totalChainFeesAction(None)
-              inQueue <- opReturnDAO.numWaitingAction(None)
+              inQueue <- opReturnDAO.numWaitingAction()
             } yield (profit, chainFees, inQueue)
 
             val accountingTelegramF = telegramHandlerOpt
@@ -1090,7 +1090,7 @@ class InvoiceMonitor(
       nonStdVbytes <- opReturnDAO.totalNonStdChainSizeAction(afterTimeOpt)
       nip5s <- nip5DAO.getNumCompletedAction(afterTimeOpt)
       zapped <- zapDAO.totalZappedAction(afterTimeOpt)
-      waitingAction <- opReturnDAO.numWaitingAction(afterTimeOpt)
+      waitingAction <- opReturnDAO.numWaitingAction()
     } yield Report(num,
                    nonStd,
                    numOnChain,
