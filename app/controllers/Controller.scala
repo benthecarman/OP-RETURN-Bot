@@ -92,11 +92,38 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                        Some(telegramHandler),
                        recentTransactions)
 
+  if (config.sendingWalletName == config.receivingWalletName) {
+    throw new RuntimeException(
+      "Sending and receiving wallets must be different")
+  }
+
   startF.map { _ =>
     setURI()
+
+    // Load or create bitcoind wallets
+    for {
+      wallets <- invoiceMonitor.bitcoind.listWallets
+      _ <-
+        if (wallets.contains(config.sendingWalletName)) {
+          invoiceMonitor.bitcoind.loadWallet(config.sendingWalletName)
+        } else {
+          invoiceMonitor.bitcoind.createWallet(config.sendingWalletName,
+                                               avoidReuse = true,
+                                               descriptors = true)
+        }
+
+      _ <-
+        if (wallets.contains(config.receivingWalletName)) {
+          invoiceMonitor.bitcoind.loadWallet(config.receivingWalletName)
+        } else {
+          invoiceMonitor.bitcoind.createWallet(config.receivingWalletName,
+                                               avoidReuse = true,
+                                               descriptors = true)
+        }
+    } yield ()
+
     telegramHandler.start()
     val _ = invoiceMonitor.startSubscription()
-    val _ = invoiceMonitor.startTxSubscription()
     val _ = invoiceMonitor.startBlockSubscription()
     invoiceMonitor.setNostrMetadata()
     invoiceMonitor.listenForDMs()
@@ -634,4 +661,41 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       formValidationResult.fold(errorFunction, successFunction)
     }
   }
+
+  def walletNotify: Action[AnyContent] = {
+    Action.async { implicit request: MessagesRequest[AnyContent] =>
+      request.body.asJson match {
+        case Some(json) =>
+          implicit val reads: Reads[WalletNotifyEvent] =
+            Json.reads[WalletNotifyEvent]
+
+          json.asOpt[WalletNotifyEvent] match {
+            case None =>
+              Future.successful(BadRequest("Failed to parse JSON"))
+            case Some(event) =>
+              if (event.key == sys.env.getOrElse("ORB_ADMIN_KEY", "")) {
+                logger.info(s"Received wallet notify event: ${event.txid}")
+
+                val txId = DoubleSha256DigestBE(event.txid)
+
+                val f = for {
+                  tx <- config.bitcoindClient.getRawTransactionRaw(txId, None)
+                  _ <- invoiceMonitor.processTransaction(tx.txIdBE, tx.outputs)
+                } yield logger.info("Successfully processed transaction")
+
+                f.failed.map(e =>
+                  logger.error(s"Failed to process transaction: $e"))
+
+                Future.successful(Ok("OK"))
+              } else {
+                Future.successful(Unauthorized("Invalid key"))
+              }
+          }
+        case None =>
+          Future.successful(BadRequest("No JSON body found"))
+      }
+    }
+  }
 }
+
+case class WalletNotifyEvent(txid: String, key: String)

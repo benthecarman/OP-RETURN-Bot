@@ -16,6 +16,9 @@ GET         /.well-known/lnurlp/*user        controllers.Controller.getLnurlPay(
 GET         /.well-known/nostr.json          controllers.Controller.nip5(name: Option[String])
 GET         /qr                              controllers.Controller.qrCode(string, width, height)
 
+# Admin
+POST        /admin/walletnotify              controllers.Controller.walletNotify
+
 # API
 POST        /api/create                      controllers.Controller.create
 POST        /api/unified                     controllers.Controller.createUnified

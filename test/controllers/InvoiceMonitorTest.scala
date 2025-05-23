@@ -1,24 +1,110 @@
 package controllers
 
+import com.typesafe.config.{Config, ConfigFactory}
 import config.OpReturnBotAppConfig
 import lnrpc.Invoice.InvoiceState.CANCELED
 import org.bitcoins.core.currency.{Bitcoins, CurrencyUnits, Satoshis}
 import org.bitcoins.core.protocol.transaction.TransactionOutput
 import org.bitcoins.core.script.ScriptType
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
+import org.bitcoins.lnd.rpc.LndRpcClient
+import org.bitcoins.rpc.client.common.BitcoindVersion
+import org.bitcoins.rpc.config.{BitcoindConfig, BitcoindInstanceLocal}
+import org.bitcoins.rpc.util.RpcUtil
 import org.bitcoins.testkit.BitcoinSTestAppConfig.tmpDir
 import org.bitcoins.testkit.async.TestAsyncUtil
-import org.bitcoins.testkit.fixtures.DualLndFixture
+import org.bitcoins.testkit.fixtures.BitcoinSFixture
+import org.bitcoins.testkit.lnd.LndRpcTestUtil
+import org.bitcoins.testkit.rpc.BitcoindRpcTestUtil.{getBinary, writtenConfig}
+import org.scalatest.FutureOutcome
 import scodec.bits.ByteVector
 
+import java.io.File
+import java.nio.file.{Files, StandardOpenOption}
+import java.net.URI
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 
-class InvoiceMonitorTest extends DualLndFixture {
+class InvoiceMonitorTest extends BitcoinSFixture {
+
+  override type FixtureParam =
+    (OpReturnBitcoindClient, LndRpcClient, LndRpcClient)
+
+  final val sendingWalletName = "sending"
+  final val receivingWalletName = "receiving"
+  final val miningWalletName = "mining"
+
+  override def withFixture(test: OneArgAsyncTest): FutureOutcome = {
+    makeDependentFixture[FixtureParam](
+      () => {
+        val uri = new URI("http://localhost:" + RpcUtil.randomPort)
+        val rpcUri = new URI("http://localhost:" + RpcUtil.randomPort)
+        val configFile =
+          writtenConfig(uri,
+                        rpcUri,
+                        RpcUtil.zmqConfig,
+                        pruneMode = false,
+                        blockFilterIndex = true)
+
+        val entry = s"\ndatacarriersize=1000000\n"
+
+        Files.write(
+          configFile.toAbsolutePath,
+          entry.getBytes,
+          StandardOpenOption.APPEND
+        )
+
+        val conf = BitcoindConfig(configFile)
+        val binary: File = getBinary(BitcoindVersion.newest)
+
+        val instance = BitcoindInstanceLocal.fromConfig(conf, binary)
+        val bitcoind = new OpReturnBitcoindClient(instance)
+
+        for {
+          _ <- bitcoind.start()
+          _ <- bitcoind.createWallet(miningWalletName,
+                                     avoidReuse = true,
+                                     descriptors = true)
+          address <- bitcoind.getNewAddress
+          _ <- bitcoind.generateToAddress(blocks = 101, address)
+          (lndA, lndB) <- LndRpcTestUtil.createNodePair(bitcoind)
+
+          _ <- bitcoind.createWallet(sendingWalletName,
+                                     avoidReuse = true,
+                                     descriptors = true)
+
+          addr <- bitcoind.getNewAddress(Some(sendingWalletName))
+          _ <- bitcoind.sendToAddress(addr,
+                                      Bitcoins(10),
+                                      walletNameOpt = Some(miningWalletName))
+
+          _ <- bitcoind.createWallet(receivingWalletName,
+                                     avoidReuse = true,
+                                     descriptors = true)
+          _ <- bitcoind.generateToAddress(blocks = 1, address)
+        } yield (bitcoind, lndA, lndB)
+      },
+      { param =>
+        val (_, lndA, lndB) = param
+        for {
+          _ <- lndA.stop()
+          _ <- lndB.stop()
+        } yield ()
+      }
+    )(test)
+  }
+
+  val walletNameConfig: Config = {
+    ConfigFactory.parseString(
+      s"""
+         |bitcoin-s.bitcoind.receivingWalletName=$receivingWalletName
+         |bitcoin-s.bitcoind.sendingWalletName=$sendingWalletName
+         |""".stripMargin)
+  }
 
   implicit val config: OpReturnBotAppConfig =
-    OpReturnBotAppConfig(tmpDir(), Vector.empty)
+    OpReturnBotAppConfig(tmpDir(), Vector(walletNameConfig))
 
   before {
     val startF = config.start()
@@ -32,8 +118,7 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process an invoice" in { param =>
-    val (b, lndA, _) = param
-    val bitcoind = new OpReturnBitcoindClient(b.instance)
+    val (bitcoind, lndA, _) = param
 
     val monitor =
       new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
@@ -49,11 +134,11 @@ class InvoiceMonitorTest extends DualLndFixture {
         nostrKey = None,
         dvmEvent = None)
 
-      startBal <- bitcoind.getBalance
+      startBal <- bitcoind.getBalance(sendingWalletName)
 
       (invoiceDb, requestDb) <- monitor.onInvoicePaid(invDb, reqDb, None)
 
-      bal <- bitcoind.getBalance
+      bal <- bitcoind.getBalance(sendingWalletName)
     } yield {
       assert(invoiceDb.invoice == invDb.invoice)
       assert(invoiceDb.opReturnRequestId == requestDb.id.get)
@@ -62,14 +147,63 @@ class InvoiceMonitorTest extends DualLndFixture {
       assert(requestDb.closed)
       assert(requestDb.txIdOpt.isDefined)
       assert(requestDb.txOpt.isDefined)
-      assert(requestDb.chainFeeOpt.isDefined)
-      assert(startBal - bal == requestDb.chainFeeOpt.get)
+      assert(requestDb.chainFeeOpt.exists(_ > Satoshis.zero))
+      assert(bal.satoshis == startBal - requestDb.chainFeeOpt.get)
+    }
+  }
+
+  it must "process a non-standard invoice" in { param =>
+    val (bitcoind, lndA, _) = param
+
+    val monitor =
+      new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
+
+    monitor.startSubscription()
+
+    val message = "hello world" + "_" * 80
+    assert(message.length > 80)
+
+    for {
+      mempool <- bitcoind.getRawMemPool
+      _ = assert(mempool.isEmpty)
+
+      (invDb, reqDb) <- monitor.createInvoice(
+        message = ByteVector(message.getBytes("UTF-8")),
+        noTwitter = true,
+        nodeIdOpt = None,
+        telegramId = None,
+        nostrKey = None,
+        dvmEvent = None)
+
+      startBal <- bitcoind.getBalance(sendingWalletName)
+
+      (invoiceDb, requestDb) <- monitor.onInvoicePaid(invDb, reqDb, None)
+
+      bal <- bitcoind.getBalance(sendingWalletName)
+      report <- monitor.createReport(None)
+
+      hash <- bitcoind.getRawMemPool.map(_.head)
+      tx <- bitcoind.getRawTransactionRaw(hash)
+    } yield {
+      assert(invoiceDb.invoice == invDb.invoice)
+      assert(invoiceDb.opReturnRequestId == requestDb.id.get)
+      assert(invoiceDb.paid)
+      assert(requestDb.noTwitter)
+      assert(requestDb.closed)
+      assert(requestDb.txIdOpt.contains(hash))
+      assert(requestDb.txOpt.contains(tx))
+      assert(requestDb.chainFeeOpt.exists(_ > Satoshis.zero))
+      assert(bal.satoshis == startBal - requestDb.chainFeeOpt.get)
+
+      assert(report.num == 1)
+      assert(report.nonStd == 1)
+      assert(report.nonStdVbytes == report.vbytes)
+      assert(report.nonStdVbytes == requestDb.txOpt.get.vsize)
     }
   }
 
   it must "process a paid invoice" in { param =>
-    val (b, lndA, lndB) = param
-    val bitcoind = new OpReturnBitcoindClient(b.instance)
+    val (bitcoind, lndA, lndB) = param
 
     val monitor =
       new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
@@ -129,9 +263,8 @@ class InvoiceMonitorTest extends DualLndFixture {
     }
   }
 
-  it must "process a paid address" in { param =>
-    val (b, lndA, lndB) = param
-    val bitcoind = new OpReturnBitcoindClient(b.instance)
+  it must "process a single paid address" in { param =>
+    val (bitcoind, lndA, lndB) = param
 
     val monitor =
       new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
@@ -142,7 +275,7 @@ class InvoiceMonitorTest extends DualLndFixture {
       mempool <- bitcoind.getRawMemPool
       _ = assert(mempool.isEmpty)
 
-      startBal <- bitcoind.getBalance
+      startBal <- bitcoind.getBalance(sendingWalletName)
 
       (onchainDb, reqDb) <- monitor.createAddress(
         message = ByteVector("hello world".getBytes("UTF-8")),
@@ -159,8 +292,12 @@ class InvoiceMonitorTest extends DualLndFixture {
 
       paymentTxId <- bitcoind.getRawMemPool.map(_.head)
 
-      // mine a block to trigger the op_return
-      _ <- bitcoind.generate(1)
+      // confirm the transaction
+      mineAddr <- bitcoind.getNewAddress(Some(miningWalletName))
+      _ <- bitcoind.generateToAddress(1, mineAddr)
+      // simulate walletnotify call
+      paymentTx <- bitcoind.getRawTransactionRaw(paymentTxId)
+      _ <- monitor.processTransaction(paymentTxId, paymentTx.outputs)
 
       _ <- TestAsyncUtil.awaitConditionF(() =>
         monitor.opReturnDAO.read(reqDb.id.get).map(_.exists(_.closed)))
@@ -172,9 +309,10 @@ class InvoiceMonitorTest extends DualLndFixture {
       hash <- bitcoind.getRawMemPool.map(_.head)
       tx <- bitcoind.getRawTransactionRaw(hash)
 
-      _ <- bitcoind.generate(1)
+      _ <- bitcoind.generateToAddress(1, mineAddr)
 
-      bal <- bitcoind.getBalance
+      bal <- bitcoind.getBalance(sendingWalletName)
+      recvBal <- bitcoind.getBalance(receivingWalletName)
     } yield {
       assert(tx.outputs.exists(_.value == Satoshis.zero))
       assert(
@@ -187,12 +325,9 @@ class InvoiceMonitorTest extends DualLndFixture {
           assert(reqDb.closed)
           assert(reqDb.txIdOpt.contains(hash))
           assert(reqDb.txOpt.contains(tx))
-          assert(reqDb.chainFeeOpt.isDefined)
-
-          // expected balance is our starting balance minus the chain fee,
-          // plus the 100 bitcoins maturing from mining blocks
-          val expectedBal = startBal + Bitcoins(100) - reqDb.chainFeeOpt.get
-          assert(bal.satoshis == expectedBal)
+          assert(reqDb.chainFeeOpt.exists(_ > Satoshis.zero))
+          assert(bal.satoshis == startBal - reqDb.chainFeeOpt.get)
+          assert(recvBal.satoshis == onchainDb.expectedAmount)
         case None => fail("invoice not found")
       }
 
@@ -218,8 +353,7 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process a paid address from unified" in { param =>
-    val (b, lndA, _) = param
-    val bitcoind = new OpReturnBitcoindClient(b.instance)
+    val (bitcoind, lndA, lndB) = param
 
     val monitor =
       new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
@@ -235,14 +369,23 @@ class InvoiceMonitorTest extends DualLndFixture {
         message = ByteVector("hello world".getBytes("UTF-8")),
         noTwitter = true)
 
-      _ <- bitcoind.sendToAddress(onchainDb.address, onchainDb.expectedAmount)
+      _ <- lndB.sendOutputs(
+        Vector(
+          TransactionOutput(onchainDb.expectedAmount,
+                            onchainDb.address.scriptPubKey)),
+        SatoshisPerVirtualByte.fromLong(1),
+        spendUnconfirmed = false)
       _ <- TestAsyncUtil.awaitConditionF(() =>
         bitcoind.getRawMemPool.map(_.size == 1))
 
       paymentTxId <- bitcoind.getRawMemPool.map(_.head)
 
       // mine a block to trigger the op_return
-      _ <- bitcoind.generate(1)
+      mineAddr <- bitcoind.getNewAddress(Some(miningWalletName))
+      _ <- bitcoind.generateToAddress(1, mineAddr)
+      // simulate walletnotify call
+      paymentTx <- bitcoind.getRawTransactionRaw(paymentTxId)
+      _ <- monitor.processTransaction(paymentTxId, paymentTx.outputs)
 
       _ <- TestAsyncUtil.awaitConditionF(() =>
         monitor.opReturnDAO.read(reqDb.id.get).map(_.exists(_.closed)))
@@ -295,8 +438,7 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process an unhandled address" in { param =>
-    val (b, lndA, _) = param
-    val bitcoind = new OpReturnBitcoindClient(b.instance)
+    val (bitcoind, lndA, lndB) = param
 
     val monitor =
       new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
@@ -309,20 +451,34 @@ class InvoiceMonitorTest extends DualLndFixture {
         message = ByteVector("hello world".getBytes("UTF-8")),
         noTwitter = true)
 
-      _ <- bitcoind.sendToAddress(onchainDb.address, onchainDb.expectedAmount)
+      _ <- lndB.sendOutputs(
+        Vector(
+          TransactionOutput(onchainDb.expectedAmount,
+                            onchainDb.address.scriptPubKey)),
+        SatoshisPerVirtualByte.fromLong(1),
+        spendUnconfirmed = false)
       _ <- TestAsyncUtil.awaitConditionF(() =>
         bitcoind.getRawMemPool.map(_.size == 1))
 
       paymentTxId <- bitcoind.getRawMemPool.map(_.head)
 
       // mine a block to trigger the op_return
-      _ <- bitcoind.generate(1)
+      mineAddr <- bitcoind.getNewAddress(Some(miningWalletName))
+      _ <- bitcoind.generateToAddress(1, mineAddr)
 
       num <- monitor.processUnhandledRequests(None, liftMempoolLimit = false)
       _ = assert(num == 1)
 
       findOpt <- monitor.opReturnDAO.read(reqDb.id.get)
       onchainOpt <- monitor.onChainDAO.read(onchainDb.address)
+      _ = assert(findOpt.exists(_.closed))
+      _ = assert(
+        onchainOpt.exists(_.amountPaid.contains(onchainDb.expectedAmount)))
+
+      _ <- TestAsyncUtil.awaitConditionF(() =>
+        bitcoind.getRawMemPool.map(_.nonEmpty))
+
+      findOpt <- monitor.opReturnDAO.read(reqDb.id.get)
       report <- monitor.createReport(None)
 
       hash <- bitcoind.getRawMemPool.map(_.head)
@@ -369,8 +525,7 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process a unhandled invoice" in { param =>
-    val (b, lndA, lndB) = param
-    val bitcoind = new OpReturnBitcoindClient(b.instance)
+    val (bitcoind, lndA, lndB) = param
 
     val monitor =
       new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
@@ -422,7 +577,7 @@ class InvoiceMonitorTest extends DualLndFixture {
       assert(report.waitingAction == 0)
       assert(report.profit > CurrencyUnits.zero)
       assert(report.chainFees > CurrencyUnits.zero)
-      assert(report.vbytes > 0)
+      assert(report.vbytes == tx.vsize)
 
       assert(report.nonStd == 0)
       assert(report.nonStdVbytes == 0)

@@ -156,8 +156,16 @@ case class OpReturnBotAppConfig(
                            ))
   }
 
+  lazy val receivingWalletName: String = {
+    config.getString(s"bitcoin-s.bitcoind.receivingWalletName")
+  }
+
+  lazy val sendingWalletName: String = {
+    config.getString(s"bitcoin-s.bitcoind.sendingWalletName")
+  }
+
   lazy val bitcoindClient: OpReturnBitcoindClient =
-    new OpReturnBitcoindClient(bitcoindInstance)
+    new OpReturnBitcoindClient(bitcoindInstance)(system, this)
 
   lazy val telegramCreds: String =
     config.getStringOrElse(s"bitcoin-s.$moduleName.telegramCreds", "")
