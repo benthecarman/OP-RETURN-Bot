@@ -4,7 +4,7 @@ import config.OpReturnBotAppConfig
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.crypto._
 import org.bitcoins.db.{CRUD, DbCommonsColumnMappers, SlickUtil}
-import slick.lifted.{ForeignKeyQuery, ProvenShape}
+import slick.lifted.ProvenShape
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -50,11 +50,6 @@ case class InvoiceDAO()(implicit
     table.filter(_.opReturnRequestId === opReturnRequestId).result.headOption
   }
 
-  def findByOpReturnRequestId(
-      opReturnRequestId: Long): Future[Option[InvoiceDb]] = {
-    safeDatabase.run(findByOpReturnRequestIdAction(opReturnRequestId))
-  }
-
   def findOpReturnRequestByRHashAction(
       rHash: Sha256Digest): DBIOAction[Option[(InvoiceDb, OpReturnRequestDb)],
                                        NoStream,
@@ -92,13 +87,5 @@ case class InvoiceDAO()(implicit
     def * : ProvenShape[InvoiceDb] =
       (rHash, opReturnRequestId, invoice, paid).<>(InvoiceDb.tupled,
                                                    InvoiceDb.unapply)
-
-    def opReturnRequestFk: ForeignKeyQuery[
-      OpReturnRequestDAO#OpReturnRequestTable,
-      OpReturnRequestDb] = {
-      foreignKey("payment_op_return_request_fk",
-                 opReturnRequestId,
-                 opReturnRequestTableQuery)(_.id)
-    }
   }
 }

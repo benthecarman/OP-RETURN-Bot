@@ -1,7 +1,6 @@
 package controllers
 
 import org.bitcoins.core.protocol.ln.LnInvoice
-import org.bitcoins.crypto.SchnorrPublicKey
 import org.scalastr.core.NostrPublicKey
 
 object Forms {

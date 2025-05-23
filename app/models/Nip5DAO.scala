@@ -3,7 +3,7 @@ package models
 import config.OpReturnBotAppConfig
 import org.bitcoins.crypto._
 import org.bitcoins.db.{CRUD, DbCommonsColumnMappers, SlickUtil}
-import slick.lifted.{ForeignKeyQuery, ProvenShape}
+import slick.lifted.ProvenShape
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -90,9 +90,5 @@ case class Nip5DAO()(implicit
 
     def * : ProvenShape[Nip5Db] =
       (opReturnRequestId, name, publicKey).<>(Nip5Db.tupled, Nip5Db.unapply)
-
-    def fk: ForeignKeyQuery[_, OpReturnRequestDb] = {
-      foreignKey("nip5_fk", opReturnRequestId, opReturnRequestTable)(_.id)
-    }
   }
 }

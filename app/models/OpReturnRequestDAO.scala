@@ -37,7 +37,7 @@ case class OpReturnRequestDb(
 
   override def copyWithId(id: Long): OpReturnRequestDb = copy(Some(id))
 
-  def getMessage(): String = {
+  def getMessage: String = {
     Try(
       new String(messageBytes.toArray)
     ).getOrElse("Message is not a string")
@@ -291,8 +291,8 @@ case class OpReturnRequestDAO()(implicit
       .on(_._1.id === _.opReturnRequestId)
       // Only count if invoice is paid or onchain txid is set
       .filter(row =>
-        (row._1._2.map(_.paid === true).getOrElse(false)) ||
-          (row._2.map(_.txid.isDefined).getOrElse(false)))
+        row._1._2.map(_.paid === true).getOrElse(false) ||
+          row._2.map(_.txid.isDefined).getOrElse(false))
 
     baseQuery.length.result
   }

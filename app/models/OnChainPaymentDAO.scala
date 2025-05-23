@@ -5,7 +5,7 @@ import org.bitcoins.core.currency.CurrencyUnit
 import org.bitcoins.core.protocol.BitcoinAddress
 import org.bitcoins.crypto.DoubleSha256DigestBE
 import org.bitcoins.db.{CRUD, DbCommonsColumnMappers, SlickUtil}
-import slick.lifted.{ForeignKeyQuery, ProvenShape}
+import slick.lifted.ProvenShape
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -58,11 +58,6 @@ case class OnChainPaymentDAO()(implicit
     table.filter(_.opReturnRequestId === opReturnRequestId).result.headOption
   }
 
-  def findByOpReturnRequestId(
-      opReturnRequestId: Long): Future[Option[OnChainPaymentDb]] = {
-    safeDatabase.run(findByOpReturnRequestIdAction(opReturnRequestId))
-  }
-
   def findOpReturnRequestByAddressAction(
       address: BitcoinAddress): DBIOAction[Option[(OnChainPaymentDb,
                                                    OpReturnRequestDb)],
@@ -98,13 +93,5 @@ case class OnChainPaymentDAO()(implicit
       (address, opReturnRequestId, expectedAmount, amountPaid, txid).<>(
         OnChainPaymentDb.tupled,
         OnChainPaymentDb.unapply)
-
-    def opReturnRequestFk: ForeignKeyQuery[
-      OpReturnRequestDAO#OpReturnRequestTable,
-      OpReturnRequestDb] = {
-      foreignKey("on_chain_payment_op_return_request_fk",
-                 opReturnRequestId,
-                 opReturnRequestTableQuery)(_.id)
-    }
   }
 }

@@ -205,7 +205,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
-  def lnurlPay(meta: String, user: Option[String]): Action[AnyContent] = {
+  def lnurlPay(meta: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       request.getQueryString("amount") match {
         case Some(amountStr) =>
@@ -314,7 +314,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
         case None =>
           BadRequest("Tx does not originate from OP_RETURN Bot")
         case Some(db) =>
-          Ok(db.getMessage())
+          Ok(db.getMessage)
       }
 
       res.map(
@@ -418,12 +418,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                       onChainOpt match {
                         case None =>
                           Ok(
-                            views.html.showInvoice(requestDb.getMessage(),
+                            views.html.showInvoice(requestDb.getMessage,
                                                    invoiceDb.invoice))
                         case Some(onChain) =>
                           val unified = createUnifiedAddr(onChain, invoiceDb)
                           Ok(
-                            views.html.showUnified(requestDb.getMessage(),
+                            views.html.showUnified(requestDb.getMessage,
                                                    invoiceDb.rHash.hex,
                                                    unified))
                       }

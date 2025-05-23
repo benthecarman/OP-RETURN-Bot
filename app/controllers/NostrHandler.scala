@@ -345,21 +345,6 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
     sendNostrEvents(Vector(result), config.allRelays).map(_.headOption)
   }
 
-  private def sendingClients(relays: Vector[String]): Vector[NostrClient] = {
-    relays.map { relay =>
-      new NostrClient(relay, None) {
-
-        override def processEvent(
-            subscriptionId: String,
-            event: NostrEvent): Future[Unit] = {
-          Future.unit
-        }
-
-        override def processNotice(notice: String): Future[Unit] = Future.unit
-      }
-    }
-  }
-
   private val http = Http()
 
   def sendNostrEvents(

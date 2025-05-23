@@ -8,7 +8,6 @@ import akka.http.scaladsl.model.{
   HttpMethods,
   HttpRequest
 }
-import play.api.libs.json.{Json, Reads}
 
 import scala.concurrent._
 
@@ -30,12 +29,6 @@ class SlipStreamClient()(implicit val system: ActorSystem) {
     // send request
     http.singleRequest(request).map(_ => ())
   }
-}
-
-case class TxResponse(tx_success: Option[String], tx_error: Option[String])
-
-object TxResponse {
-  implicit val TxResponseReads: Reads[TxResponse] = Json.reads[TxResponse]
 }
 
 private object SlipStreamClient {

@@ -13,7 +13,6 @@ import config.OpReturnBotAppConfig
 import models._
 import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency._
-import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.util.{StartStopAsync, TimeUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.Sha256Digest

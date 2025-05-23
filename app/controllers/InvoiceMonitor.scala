@@ -479,7 +479,7 @@ class InvoiceMonitor(
       return Future.successful(requestDb)
     }
 
-    val message = requestDb.getMessage()
+    val message = requestDb.getMessage
     val feeRate = requestDb.feeRate
     val noTwitter = requestDb.noTwitter
 
