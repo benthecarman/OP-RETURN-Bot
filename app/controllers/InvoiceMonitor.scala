@@ -25,10 +25,12 @@ import org.bitcoins.core.protocol.ln.LnTag._
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.node.NodeId
-import org.bitcoins.core.protocol.script.ScriptPubKey
+import org.bitcoins.core.protocol.script.{ScriptPubKey, ScriptSignature}
 import org.bitcoins.core.protocol.transaction.{
   BaseTransaction,
   Transaction,
+  TransactionConstants,
+  TransactionInput,
   TransactionOutPoint,
   TransactionOutput
 }
@@ -61,14 +63,16 @@ class OpReturnBitcoindClient(override val instance: BitcoindInstance)(implicit
     config: OpReturnBotAppConfig)
     extends BitcoindV24RpcClient(instance) {
 
+  private def createSpk(messageBytes: ByteVector) = {
+    val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
+      messageBytes) :+ ScriptConstant.fromBytes(messageBytes)
+    ScriptPubKey(asm.toVector)
+  }
+
   def createOpReturn(
       messageBytes: ByteVector,
       feeRate: SatoshisPerVirtualByte): Future[Transaction] = {
-    val spk = {
-      val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
-        messageBytes) :+ ScriptConstant.fromBytes(messageBytes)
-      ScriptPubKey(asm.toVector)
-    }
+    val spk = createSpk(messageBytes)
 
     val baseTx: Transaction = BaseTransaction(
       version = Int32.two,
@@ -82,6 +86,7 @@ class OpReturnBitcoindClient(override val instance: BitcoindInstance)(implicit
       "changePosition" -> 0,
       "includeWatching" -> false,
       "lockUnspents" -> true,
+      "replaceable" -> false,
       "fee_rate" -> feeRate.toLong
     )
 
@@ -94,6 +99,62 @@ class OpReturnBitcoindClient(override val instance: BitcoindInstance)(implicit
       signed <- this.signRawTransactionWithWallet(
         fundedTx.hex,
         Some(config.sendingWalletName))
+      _ =
+        if (signed.complete) {
+          logger.info("Transaction signed successfully")
+        } else {
+          logger.error(s"Transaction not signed successfully {signed.hex}")
+          throw new RuntimeException("Transaction not signed successfully")
+        }
+
+      transaction = signed.hex
+      _ <- this.sendRawTransaction(transaction, 0)
+    } yield transaction
+  }
+
+  def createOpReturnFromOutPoint(
+      messageBytes: ByteVector,
+      feeRate: SatoshisPerVirtualByte,
+      outpoint: TransactionOutPoint): Future[Transaction] = {
+    val spk = createSpk(messageBytes)
+
+    val baseTx: Transaction = BaseTransaction(
+      version = Int32.two,
+      inputs = Seq(
+        TransactionInput(outpoint,
+                         ScriptSignature.empty,
+                         TransactionConstants.disableRBFSequence)),
+      outputs = Seq(TransactionOutput(Satoshis.zero, spk)),
+      lockTime = UInt32(106)
+    )
+
+    val fundOpt = Json.obj(
+      "add_inputs" -> true, // if we can consolidate, do it
+      "include_unsafe" -> false,
+      "changePosition" -> 0,
+      "includeWatching" -> false,
+      "lockUnspents" -> true,
+      "replaceable" -> false,
+      "fee_rate" -> feeRate.toLong
+    )
+
+    for {
+      fundedTx <- this
+        .bitcoindCall[FundRawTransactionResult](
+          "fundrawtransaction",
+          List(JsString(baseTx.hex), fundOpt),
+          uriExtensionOpt = Some(walletExtension(config.receivingWalletName)))
+        .map(_.hex)
+
+      // make sure it added a change output
+      _ = if (fundedTx.outputs.length != 2) {
+        throw new RuntimeException(
+          s"Expected 2 outputs, got ${fundedTx.outputs.length}")
+      }
+
+      signed <- this.signRawTransactionWithWallet(
+        fundedTx,
+        Some(config.receivingWalletName))
       _ =
         if (signed.complete) {
           logger.info("Transaction signed successfully")
@@ -177,14 +238,14 @@ class InvoiceMonitor(
       txId: DoubleSha256DigestBE,
       outputs: Seq[TransactionOutput]): Future[Unit] = {
     FutureUtil
-      .sequentially(outputs) { output =>
+      .sequentially(outputs.zipWithIndex) { case (output, idx) =>
         BitcoinAddress.fromScriptPubKeyOpt(output.scriptPubKey,
                                            config.network) match {
           case None => Future.unit
           case Some(address) =>
             val action = for {
               opt <- onChainDAO.findOpReturnRequestByAddressAction(address)
-              res <- opt match {
+              res <- opt.filter(_._2.txIdOpt.isEmpty) match {
                 case None => DBIOAction.successful(None)
                 case Some((op, req)) =>
                   nip5DAO
@@ -204,7 +265,8 @@ class InvoiceMonitor(
                     onAddressPaid(onchainDb = onchainDb,
                                   requestDb = requestDb,
                                   amount = output.value.satoshis,
-                                  txid = txId,
+                                  outpoint =
+                                    TransactionOutPoint(txId, UInt32(idx)),
                                   npubOpt = npubOpt).map(_ => ())
                   } else {
                     logger.warn(
@@ -222,10 +284,7 @@ class InvoiceMonitor(
       .subscribeTransactions()
       .mapAsync(1) { txDetails =>
         if (txDetails.numConfirmations > 0) {
-          val outputs = txDetails.outputDetails
-            .filter(_.isOurAddress)
-            .map(t => TransactionOutput(t.amount, t.spk))
-          processTransaction(txDetails.txId, outputs)
+          processTransaction(txDetails.txId, txDetails.tx.outputs)
         } else {
           Future.unit
         }
@@ -387,16 +446,18 @@ class InvoiceMonitor(
                 case Some(txDetails) =>
                   val amtPaid = txDetails.amount
                   if (
-                    txDetails.confirmations.getOrElse(0) > 0 &&
                     amtPaid >= onChainDb.expectedAmount &&
-                    txDetails.txid.isDefined
+                    txDetails.txid.isDefined && txDetails.vout.isDefined
                   ) {
                     nip5DAO.read(onChainDb.opReturnRequestId).flatMap {
                       nip5Opt =>
+                        val outpoint =
+                          TransactionOutPoint(txDetails.txid.get,
+                                              UInt32(txDetails.vout.get))
                         onAddressPaid(onChainDb,
                                       requestDb,
                                       amtPaid.satoshis,
-                                      txDetails.txid.get,
+                                      outpoint,
                                       nip5Opt.map(_.publicKey))
                     }
                   } else {
@@ -545,7 +606,7 @@ class InvoiceMonitor(
       res <-
         onRequestPaid(requestDb,
                       db.invoice.amount.get.toSatoshis,
-                      isOnChain = false,
+                      outpoint = None,
                       npubOpt)
     } yield (db, res)
   }
@@ -554,12 +615,12 @@ class InvoiceMonitor(
       onchainDb: OnChainPaymentDb,
       requestDb: OpReturnRequestDb,
       amount: Satoshis,
-      txid: DoubleSha256DigestBE,
+      outpoint: TransactionOutPoint,
       npubOpt: Option[SchnorrPublicKey]): Future[(OnChainPaymentDb,
                                                   OpReturnRequestDb)] = {
     val action = for {
       db <- onChainDAO.updateAction(
-        onchainDb.copy(txid = Some(txid), amountPaid = Some(amount)))
+        onchainDb.copy(txid = Some(outpoint.txIdBE), amountPaid = Some(amount)))
       invoiceDbOpt <- invoiceDAO
         .findByOpReturnRequestIdAction(onchainDb.opReturnRequestId)
     } yield (db, invoiceDbOpt)
@@ -573,7 +634,7 @@ class InvoiceMonitor(
         .getOrElse(Future.unit)
 
       res <-
-        onRequestPaid(requestDb, amount, isOnChain = true, npubOpt)
+        onRequestPaid(requestDb, amount, outpoint = Some(outpoint), npubOpt)
       _ <- cancelF
     } yield (db, res)
   }
@@ -581,7 +642,7 @@ class InvoiceMonitor(
   def onRequestPaid(
       requestDb: OpReturnRequestDb,
       amount: Satoshis,
-      isOnChain: Boolean,
+      outpoint: Option[TransactionOutPoint],
       npubOpt: Option[SchnorrPublicKey]): Future[OpReturnRequestDb] = {
     // just mark paid and skip for now if we have a mempool limit
     if (mempoolLimit) {
@@ -596,7 +657,16 @@ class InvoiceMonitor(
     logger.info(s"Received $amount!")
 
     val createTxF = for {
-      transaction <- bitcoind.createOpReturn(requestDb.messageBytes, feeRate)
+      transaction <- outpoint match {
+        case Some(outpoint) =>
+          logger.info(
+            s"Creating tx with outpoint: ${outpoint.toHumanReadableString}")
+          bitcoind.createOpReturnFromOutPoint(requestDb.messageBytes,
+                                              feeRate,
+                                              outpoint)
+        case None => bitcoind.createOpReturn(requestDb.messageBytes, feeRate)
+      }
+
       txId = transaction.txIdBE
 
       // broadcast to esplora in bg, only if standard
@@ -609,9 +679,13 @@ class InvoiceMonitor(
         slipStreamClient.publishTx(broadcast)
       }
 
+      walletName =
+        if (outpoint.isDefined) config.receivingWalletName
+        else config.sendingWalletName
+
       getTxStart = System.currentTimeMillis()
       txDetailsOpt <- bitcoind
-        .getTransaction(txId, walletNameOpt = Some(config.sendingWalletName))
+        .getTransaction(txId, walletNameOpt = Some(walletName))
         .map(Some(_))
         .recover(_ => None)
       getTxEnd = System.currentTimeMillis()
@@ -748,7 +822,7 @@ class InvoiceMonitor(
                     requestId = requestDb.id.get,
                     amount = amount,
                     requestDb = res,
-                    isOnChain = isOnChain,
+                    isOnChain = outpoint.isDefined,
                     tweetOpt = tweetOpt,
                     nostrOpt = nostrOpt,
                     message = message,
@@ -1114,15 +1188,18 @@ class InvoiceMonitor(
   def listUtxoAncestorTxIds(): Future[
     Map[TransactionOutPoint, Vector[DoubleSha256DigestBE]]] = {
     for {
-      utxos <- lnd.listUnspent
+      utxos <- bitcoind.listUnspent(config.receivingWalletName)
+      utxos2 <- bitcoind.listUnspent(config.sendingWalletName)
+      allUtxos = utxos ++ utxos2
       ancestors <- Future
-        .sequence(utxos.filter(t => t.outPointOpt.isDefined).map { utxo =>
+        .sequence(allUtxos.map { utxo =>
+          val outpoint = TransactionOutPoint(utxo.txid, UInt32(utxo.vout))
           if (utxo.confirmations > 0) {
-            Future.successful((utxo.outPointOpt.get, Vector.empty))
+            Future.successful((outpoint, Vector.empty))
           } else {
             bitcoind
-              .getMemPoolAncestors(utxo.outPointOpt.get.txId)
-              .map(t => (utxo.outPointOpt.get, t))
+              .getMemPoolAncestors(utxo.txid)
+              .map(t => (outpoint, t))
           }
         })
         .map(_.toMap)

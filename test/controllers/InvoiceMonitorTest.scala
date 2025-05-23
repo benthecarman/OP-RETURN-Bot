@@ -4,7 +4,10 @@ import com.typesafe.config.{Config, ConfigFactory}
 import config.OpReturnBotAppConfig
 import lnrpc.Invoice.InvoiceState.CANCELED
 import org.bitcoins.core.currency.{Bitcoins, CurrencyUnits, Satoshis}
-import org.bitcoins.core.protocol.transaction.TransactionOutput
+import org.bitcoins.core.protocol.transaction.{
+  TransactionConstants,
+  TransactionOutput
+}
 import org.bitcoins.core.script.ScriptType
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.lnd.rpc.LndRpcClient
@@ -82,6 +85,12 @@ class InvoiceMonitorTest extends BitcoinSFixture {
           _ <- bitcoind.createWallet(receivingWalletName,
                                      avoidReuse = true,
                                      descriptors = true)
+
+          addr <- bitcoind.getNewAddress(Some(receivingWalletName))
+          _ <- bitcoind.sendToAddress(addr,
+                                      Bitcoins(10),
+                                      walletNameOpt = Some(miningWalletName))
+
           _ <- bitcoind.generateToAddress(blocks = 1, address)
         } yield (bitcoind, lndA, lndB)
       },
@@ -239,6 +248,8 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       assert(tx.outputs.exists(_.value == Satoshis.zero))
       assert(
         tx.outputs.exists(_.scriptPubKey.scriptType == ScriptType.NONSTANDARD))
+      assert(tx.inputs.length == 1)
+      assert(tx.inputs.head.sequence == TransactionConstants.disableRBFSequence)
 
       findOpt match {
         case Some(reqDb) =>
@@ -276,6 +287,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       _ = assert(mempool.isEmpty)
 
       startBal <- bitcoind.getBalance(sendingWalletName)
+      startRecvBal <- bitcoind.getBalance(receivingWalletName)
 
       (onchainDb, reqDb) <- monitor.createAddress(
         message = ByteVector("hello world".getBytes("UTF-8")),
@@ -292,9 +304,6 @@ class InvoiceMonitorTest extends BitcoinSFixture {
 
       paymentTxId <- bitcoind.getRawMemPool.map(_.head)
 
-      // confirm the transaction
-      mineAddr <- bitcoind.getNewAddress(Some(miningWalletName))
-      _ <- bitcoind.generateToAddress(1, mineAddr)
       // simulate walletnotify call
       paymentTx <- bitcoind.getRawTransactionRaw(paymentTxId)
       _ <- monitor.processTransaction(paymentTxId, paymentTx.outputs)
@@ -306,9 +315,10 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       onchainOpt <- monitor.onChainDAO.read(onchainDb.address)
       report <- monitor.createReport(None)
 
-      hash <- bitcoind.getRawMemPool.map(_.head)
+      hash <- bitcoind.getRawMemPool.map(_.last)
       tx <- bitcoind.getRawTransactionRaw(hash)
 
+      mineAddr <- bitcoind.getNewAddress(Some(miningWalletName))
       _ <- bitcoind.generateToAddress(1, mineAddr)
 
       bal <- bitcoind.getBalance(sendingWalletName)
@@ -317,6 +327,9 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       assert(tx.outputs.exists(_.value == Satoshis.zero))
       assert(
         tx.outputs.exists(_.scriptPubKey.scriptType == ScriptType.NONSTANDARD))
+      assert(tx.inputs.length == 1)
+      assert(tx.inputs.head.sequence == TransactionConstants.disableRBFSequence)
+      assert(tx.inputs.head.previousOutput.txIdBE == paymentTxId)
 
       findOpt match {
         case Some(reqDb) =>
@@ -326,8 +339,11 @@ class InvoiceMonitorTest extends BitcoinSFixture {
           assert(reqDb.txIdOpt.contains(hash))
           assert(reqDb.txOpt.contains(tx))
           assert(reqDb.chainFeeOpt.exists(_ > Satoshis.zero))
-          assert(bal.satoshis == startBal - reqDb.chainFeeOpt.get)
-          assert(recvBal.satoshis == onchainDb.expectedAmount)
+          // for on-chain we don't spend from sending wallet
+          assert(bal.satoshis == startBal)
+          // for on-chain we do spend from receiving wallet
+          assert(
+            recvBal.satoshis == startRecvBal + onchainDb.expectedAmount - reqDb.chainFeeOpt.get)
         case None => fail("invoice not found")
       }
 
