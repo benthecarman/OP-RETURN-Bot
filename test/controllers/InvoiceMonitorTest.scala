@@ -259,7 +259,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
           assert(reqDb.txIdOpt.contains(hash))
           assert(reqDb.txOpt.contains(tx))
           assert(reqDb.chainFeeOpt.isDefined)
-        case None => fail("invoice not found")
+        case None => fail("request not found")
       }
 
       assert(report.num == 1)
@@ -344,7 +344,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
           // for on-chain we do spend from receiving wallet
           assert(
             recvBal.satoshis == startRecvBal + onchainDb.expectedAmount - reqDb.chainFeeOpt.get)
-        case None => fail("invoice not found")
+        case None => fail("request not found")
       }
 
       onchainOpt match {
@@ -427,7 +427,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
           assert(reqDb.txIdOpt.contains(hash))
           assert(reqDb.txOpt.contains(tx))
           assert(reqDb.chainFeeOpt.isDefined)
-        case None => fail("invoice not found")
+        case None => fail("request not found")
       }
 
       onchainOpt match {
@@ -514,7 +514,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
           assert(reqDb.txIdOpt.contains(hash))
           assert(reqDb.txOpt.contains(tx))
           assert(reqDb.chainFeeOpt.isDefined)
-        case None => fail("invoice not found")
+        case None => fail("request not found")
       }
 
       onchainOpt match {
@@ -585,7 +585,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
           assert(reqDb.txIdOpt.contains(hash))
           assert(reqDb.txOpt.contains(tx))
           assert(reqDb.chainFeeOpt.isDefined)
-        case None => fail("invoice not found")
+        case None => fail("request not found")
       }
 
       assert(report.num == 1)
