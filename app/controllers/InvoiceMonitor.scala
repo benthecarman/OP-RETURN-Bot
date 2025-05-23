@@ -96,12 +96,23 @@ class InvoiceMonitor(
         if (txDetails.numConfirmations > 0) {
           FutureUtil.sequentially(
             txDetails.outputDetails.filter(_.isOurAddress)) { outputDetails =>
-            // todo get npub for nip05
-            onChainDAO
-              .findOpReturnRequestByAddress(outputDetails.addressOpt.get)
+            val action = for {
+              opt <- onChainDAO.findOpReturnRequestByAddressAction(
+                outputDetails.addressOpt.get)
+              res <- opt match {
+                case None => DBIOAction.successful(None)
+                case Some((op, req)) =>
+                  nip5DAO
+                    .findByPrimaryKeyAction(req.id.get)
+                    .map(n => Some((op, req, n.map(_.publicKey))))
+              }
+            } yield res
+
+            onChainDAO.safeDatabase
+              .run(action)
               .flatMap {
                 case None => Future.unit
-                case Some((onchainDb, requestDb)) =>
+                case Some((onchainDb, requestDb, npubOpt)) =>
                   if (
                     onchainDb.expectedAmount <= outputDetails.amount && onchainDb.txid.isEmpty && requestDb.txIdOpt.isEmpty
                   ) {
@@ -109,7 +120,7 @@ class InvoiceMonitor(
                                   requestDb = requestDb,
                                   amount = outputDetails.amount.satoshis,
                                   txid = txDetails.txId,
-                                  npubOpt = None).map(_ => ())
+                                  npubOpt = npubOpt).map(_ => ())
                   } else {
                     logger.warn(
                       s"Received ${outputDetails.amount} for address ${outputDetails.addressOpt.get}, expected ${onchainDb.expectedAmount}")
@@ -964,17 +975,25 @@ class InvoiceMonitor(
                                   "OP_RETURN bot",
                                   "OP_RETURN Bot") ++ config.bannedWords
 
-  def createNip5Invoice(
-      name: String,
-      publicKey: NostrPublicKey): Future[(InvoiceDb, OpReturnRequestDb)] = {
+  def createNip5Unified(name: String, publicKey: NostrPublicKey): Future[
+    (InvoiceDb, OnChainPaymentDb, OpReturnRequestDb)] = {
     if (takenNames.contains(name)) {
       Future.failed(
         new IllegalArgumentException(s"Cannot create invoice for NIP-05 $name"))
     } else {
       val message = s"nip5:$name:${publicKey.hex}"
 
-      createInvoice(ByteVector(message.getBytes("UTF-8")), noTwitter = false)
-        .flatMap { case (invoice, feeRate) =>
+      val addrF = lnd.getNewAddress
+      val paramsF = for {
+        (invoice, feeRate) <- createInvoice(
+          ByteVector(message.getBytes("UTF-8")),
+          noTwitter = false)
+        address <- addrF
+        amt = invoice.amount.get.toSatoshis
+      } yield (amt, feeRate, address, invoice)
+
+      paramsF
+        .flatMap { case (amt, feeRate, address, invoice) =>
           val requestDb =
             OpReturnRequestDb(
               id = None,
@@ -1002,6 +1021,14 @@ class InvoiceMonitor(
             case None =>
               for {
                 createdReq <- opReturnDAO.createAction(requestDb)
+                onchainDb = OnChainPaymentDb(
+                  address = address,
+                  opReturnRequestId = createdReq.id.get,
+                  expectedAmount = amt,
+                  amountPaid = None,
+                  txid = None
+                )
+                createdOnChain <- onChainDAO.createAction(onchainDb)
                 invoiceDb = InvoiceDb(
                   rHash = invoice.lnTags.paymentHash.hash,
                   opReturnRequestId = createdReq.id.get,
@@ -1011,7 +1038,7 @@ class InvoiceMonitor(
                 createdInv <- invoiceDAO.createAction(invoiceDb)
                 _ <- nip5DAO.createAction(
                   Nip5Db(invoiceDb.opReturnRequestId, name, publicKey.key))
-              } yield (createdInv, createdReq)
+              } yield (createdInv, createdOnChain, createdReq)
           }
 
           invoiceDAO.safeDatabase.run(action)

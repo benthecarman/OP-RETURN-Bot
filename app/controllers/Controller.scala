@@ -621,8 +621,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val successFunction: Nip5Request => Future[Result] = {
         data: Nip5Request =>
           invoiceMonitor
-            .createNip5Invoice(data.name, data.publicKey)
-            .map { case (invoiceDb, _) =>
+            .createNip5Unified(data.name, data.publicKey)
+            .map { case (invoiceDb, _, _) =>
               Redirect(routes.Controller.invoice(invoiceDb.rHash.hex))
             }
       }
