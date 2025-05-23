@@ -684,7 +684,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
                 Future.successful(Ok("OK"))
               } else {
-                Future.successful(Unauthorized("Invalid key"))
+                Future.successful(Unauthorized(s"Invalid key ${event.key}"))
               }
           }
         case None =>
