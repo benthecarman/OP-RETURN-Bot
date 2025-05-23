@@ -285,7 +285,7 @@ class TelegramHandler(controller: Controller)(implicit
 
     val nonStd =
       if (message.getBytes.length > 80)
-        s"Non-standard output! ${printSize(message.getBytes.length)}"
+        s"Non-standard output! ${printSize(message.getBytes.length)}\n"
       else ""
 
     val tweetLine = tweetOpt match {
@@ -309,7 +309,6 @@ class TelegramHandler(controller: Controller)(implicit
          |tweet: $tweetLine
          |nostr: $nostrLine
          |$nonStd
-         |
          |fee rate: $feeRate
          |invoice amount: ${printAmount(amount)}
          |tx fee: ${printAmount(chainFee)}
