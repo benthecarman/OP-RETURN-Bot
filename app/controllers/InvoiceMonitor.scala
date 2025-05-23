@@ -241,7 +241,7 @@ class InvoiceMonitor(
       .sequentially(outputs.zipWithIndex) { case (output, idx) =>
         BitcoinAddress.fromScriptPubKeyOpt(output.scriptPubKey,
                                            config.network) match {
-          case None => Future.unit
+          case None => Future.successful(false)
           case Some(address) =>
             val action = for {
               opt <- onChainDAO.findOpReturnRequestByAddressAction(address)
@@ -257,7 +257,7 @@ class InvoiceMonitor(
             onChainDAO.safeDatabase
               .run(action)
               .flatMap {
-                case None => Future.unit
+                case None => Future.successful(false)
                 case Some((onchainDb, requestDb, npubOpt)) =>
                   if (
                     onchainDb.expectedAmount <= output.value && onchainDb.txid.isEmpty && requestDb.txIdOpt.isEmpty
@@ -267,16 +267,16 @@ class InvoiceMonitor(
                                   amount = output.value.satoshis,
                                   outpoint =
                                     TransactionOutPoint(txId, UInt32(idx)),
-                                  npubOpt = npubOpt).map(_ => ())
+                                  npubOpt = npubOpt).map(_ => true)
                   } else {
                     logger.warn(
                       s"Received ${output.value} for address $address, expected ${onchainDb.expectedAmount}")
-                    Future.unit
+                    Future.successful(false)
                   }
               }
         }
       }
-      .map(_ => ())
+      .map(vec => logger.info(s"Processed tx ${txId.hex}, ${vec.count(t => t)} paid!"))
   }
 
   def startTxSubscription(): Future[Done] = {
