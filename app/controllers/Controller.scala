@@ -87,7 +87,10 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   private val telegramHandler = new TelegramHandler(this)
 
   lazy val invoiceMonitor =
-    new InvoiceMonitor(lnd, Some(telegramHandler), recentTransactions)
+    new InvoiceMonitor(lnd,
+                       config.bitcoindClient,
+                       Some(telegramHandler),
+                       recentTransactions)
 
   startF.map { _ =>
     setURI()

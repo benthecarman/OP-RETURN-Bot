@@ -8,6 +8,9 @@ import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import lnrpc.Invoice
 import models._
+import org.bitcoins.commons.serializers.JsonSerializers.fundRawTransactionResultReads
+import org.bitcoins.commons.jsonmodels.bitcoind.FundRawTransactionResult
+import org.bitcoins.commons.jsonmodels.bitcoind.RpcOpts.AddressType
 import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency.{CurrencyUnit, Satoshis}
 import org.bitcoins.core.number._
@@ -16,7 +19,12 @@ import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.node.NodeId
 import org.bitcoins.core.protocol.script.ScriptPubKey
-import org.bitcoins.core.protocol.transaction.TransactionOutPoint
+import org.bitcoins.core.protocol.transaction.{
+  BaseTransaction,
+  Transaction,
+  TransactionOutPoint,
+  TransactionOutput
+}
 import org.bitcoins.core.script.constant.ScriptConstant
 import org.bitcoins.core.script.control.OP_RETURN
 import org.bitcoins.core.util.{BitcoinScriptUtil, FutureUtil, TimeUtil}
@@ -26,19 +34,68 @@ import org.bitcoins.esplora.{EsploraClient, MempoolSpaceEsploraSite}
 import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
 import org.bitcoins.feeprovider._
 import org.bitcoins.lnd.rpc.{LndRpcClient, LndUtils}
+import org.bitcoins.rpc.client.v24.BitcoindV24RpcClient
+import org.bitcoins.rpc.config.BitcoindInstance
 import org.scalastr.core._
 import play.api.libs.json._
 import scodec.bits._
-import signrpc.TxOut
 import slick.dbio.{DBIO, DBIOAction}
-import walletrpc.SendOutputsRequest
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 import scala.util.Try
 
+class OpReturnBitcoindClient(override val instance: BitcoindInstance)(implicit
+    actorSystem: ActorSystem)
+    extends BitcoindV24RpcClient(instance) {
+
+  def createOpReturn(
+      messageBytes: ByteVector,
+      feeRate: SatoshisPerVirtualByte): Future[Transaction] = {
+    val spk = {
+      val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
+        messageBytes) :+ ScriptConstant.fromBytes(messageBytes)
+      ScriptPubKey(asm.toVector)
+    }
+
+    val baseTx: Transaction = BaseTransaction(
+      version = Int32.two,
+      inputs = Seq.empty,
+      outputs = Seq(TransactionOutput(Satoshis.zero, spk)),
+      lockTime = UInt32(106)
+    )
+
+    val fundOpt = Json.obj(
+      "include_unsafe" -> true,
+      "changePosition" -> 0,
+      "includeWatching" -> false,
+      "lockUnspents" -> true,
+      "fee_rate" -> feeRate.toLong
+    )
+
+    for {
+      fundedTx <- this
+        .bitcoindCall[FundRawTransactionResult](
+          "fundrawtransaction",
+          List(JsString(baseTx.hex), fundOpt))
+      signed <- this.signRawTransactionWithWallet(fundedTx.hex)
+      _ =
+        if (signed.complete) {
+          logger.info("Transaction signed successfully")
+        } else {
+          logger.error(s"Transaction not signed successfully {signed.hex}")
+          throw new RuntimeException("Transaction not signed successfully")
+        }
+
+      transaction = signed.hex
+      _ <- this.sendRawTransaction(transaction, 0)
+    } yield transaction
+  }
+}
+
 class InvoiceMonitor(
     val lnd: LndRpcClient,
+    val bitcoind: OpReturnBitcoindClient,
     telegramHandlerOpt: Option[TelegramHandler],
     recentTransactions: ArrayBuffer[DoubleSha256DigestBE])(implicit
     val system: ActorSystem,
@@ -496,52 +553,10 @@ class InvoiceMonitor(
 
     logger.info(s"Received $amount!")
 
-    val spk = {
-      val messageBytes = requestDb.messageBytes
-
-      val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
-        messageBytes) :+ ScriptConstant.fromBytes(messageBytes)
-
-      ScriptPubKey(asm.toVector)
-    }
-
-    logger.info(s"SPK: $spk")
-
-    val txOut = TxOut(0, spk.asmBytes)
-
-    val request: SendOutputsRequest = SendOutputsRequest(
-      satPerKw = feeRate.toSatoshisPerKW.toLong,
-      outputs = Vector(txOut),
-      label = s"OP_RETURN Bot",
-      spendUnconfirmed = false)
-
-    val heightF = lnd.getInfo.map(_.blockHeight)
-
     val createTxF = for {
-      transaction <- lnd
-        .sendOutputs(request)
-        .recoverWith { e =>
-          // if it fails with spending only confirmed, try again with unconfirmed
-          logger.warn(s"Error sending outputs: $e, trying unconfirmed")
-          lnd.sendOutputs(request.copy(spendUnconfirmed = true))
-        }
-        .recover(e => {
-          throw new RuntimeException(s"SendOutputs error: $e")
-        })
-      _ = logger.info(s"Created tx: ${transaction.hex}")
+      transaction <- bitcoind.createOpReturn(requestDb.messageBytes, feeRate)
       txId = transaction.txIdBE
 
-      errorOpt <- lnd.publishTransaction(transaction)
-
-      _ = errorOpt match {
-        case Some(error) =>
-          logger.error(
-            s"Error when broadcasting transaction ${txId.hex}, $error")
-          throw new RuntimeException(
-            s"Error when broadcasting transaction ${txId.hex}, $error")
-        case None =>
-          logger.info(s"Successfully created tx: ${txId.hex}")
-      }
       // broadcast to esplora in bg, only if standard
       _ = if (requestDb.messageBytes.length <= 80) {
         esplora.broadcastTransaction(transaction).recover(_ => txId)
@@ -552,11 +567,10 @@ class InvoiceMonitor(
         slipStreamClient.publishTx(broadcast)
       }
 
-      height <- heightF
       getTxStart = System.currentTimeMillis()
-      txDetailsOpt <- lnd
-        .getTransactions(height.toInt)
-        .map(_.find(_.txId == txId))
+      txDetailsOpt <- bitcoind
+        .getTransaction(txId)
+        .map(Some(_))
         .recover(_ => None)
       getTxEnd = System.currentTimeMillis()
       _ = logger.info(
@@ -573,8 +587,10 @@ class InvoiceMonitor(
       }
 
       // Need to make sure we upsert the tx and txid even if this fails, so we can't call .get
-      chainFeeOpt = txDetailsOpt.map(_.totalFees)
-      profitOpt = txDetailsOpt.map(d => amount - d.totalFees)
+      // need to multiply by -1 because it is negative
+      chainFeeOpt = txDetailsOpt.flatMap(
+        _.fee.map(_.satoshis * Satoshis.fromLong(-1)))
+      profitOpt = chainFeeOpt.map(d => amount - d)
 
       dbWithTx = requestDb.copy(closed = true,
                                 txOpt = Some(transaction),
@@ -670,7 +686,7 @@ class InvoiceMonitor(
             val userTelegramF = res.telegramIdOpt
               .flatMap(telegramId =>
                 telegramHandlerOpt.map(
-                  _.handleTelegramUserPurchase(telegramId, details)))
+                  _.handleTelegramUserPurchase(telegramId, details.txid)))
               .getOrElse(Future.unit)
 
             lazy val action = for {
@@ -695,7 +711,8 @@ class InvoiceMonitor(
                     nostrOpt = nostrOpt,
                     message = message,
                     feeRate = feeRate,
-                    txDetails = details,
+                    txId = details.txid,
+                    chainFee = chainFeeOpt.getOrElse(Satoshis.zero),
                     totalProfit = profit,
                     totalChainFees = chainFees,
                     remainingInQueue = inQueue
@@ -1061,7 +1078,7 @@ class InvoiceMonitor(
           if (utxo.confirmations > 0) {
             Future.successful((utxo.outPointOpt.get, Vector.empty))
           } else {
-            config.bitcoindClient
+            bitcoind
               .getMemPoolAncestors(utxo.outPointOpt.get.txId)
               .map(t => (utxo.outPointOpt.get, t))
           }
@@ -1079,9 +1096,9 @@ class InvoiceMonitor(
           .foldLeft(Future.successful(())) { case (accF, txId) =>
             for {
               _ <- accF
-              tx <- config.bitcoindClient.getRawTransactionRaw(txId)
+              tx <- bitcoind.getRawTransactionRaw(txId)
               _ <- slipStreamClient.publishTx(tx.hex)
-              _ <- config.bitcoindClient.broadcastTransaction(tx)
+              _ <- bitcoind.broadcastTransaction(tx)
             } yield ()
           }
       })
@@ -1093,7 +1110,7 @@ class InvoiceMonitor(
       completed <- opReturnDAO.completed()
       items <- FutureUtil.foldLeftAsync(Vector.empty[OpReturnRequestDb],
                                         completed) { (acc, db) =>
-        config.bitcoindClient
+        bitcoind
           .getRawTransactionRaw(db.txIdOpt.get)
           .map(_ => acc)
           .recover(_ => {

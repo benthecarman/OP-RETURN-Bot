@@ -6,6 +6,7 @@ import com.github.scribejava.core.builder.ServiceBuilder
 import com.github.scribejava.core.model.OAuth1AccessToken
 import com.github.scribejava.core.oauth.OAuth10aService
 import com.typesafe.config.Config
+import controllers.OpReturnBitcoindClient
 import grizzled.slf4j.Logging
 import models._
 import org.bitcoins.commons.config._
@@ -19,7 +20,6 @@ import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config._
-import org.bitcoins.rpc.client.v24.BitcoindV24RpcClient
 import org.bitcoins.rpc.config.BitcoindAuthCredentials.PasswordBased
 import org.bitcoins.rpc.config.BitcoindInstanceRemote
 import org.scalastr.core.NostrPrivateKey
@@ -156,8 +156,8 @@ case class OpReturnBotAppConfig(
                            ))
   }
 
-  lazy val bitcoindClient: BitcoindV24RpcClient =
-    new BitcoindV24RpcClient(bitcoindInstance)
+  lazy val bitcoindClient: OpReturnBitcoindClient =
+    new OpReturnBitcoindClient(bitcoindInstance)
 
   lazy val telegramCreds: String =
     config.getStringOrElse(s"bitcoin-s.$moduleName.telegramCreds", "")

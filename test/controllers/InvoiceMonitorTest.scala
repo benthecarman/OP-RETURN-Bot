@@ -2,8 +2,10 @@ package controllers
 
 import config.OpReturnBotAppConfig
 import lnrpc.Invoice.InvoiceState.CANCELED
-import org.bitcoins.core.currency.{CurrencyUnits, Satoshis}
+import org.bitcoins.core.currency.{Bitcoins, CurrencyUnits, Satoshis}
+import org.bitcoins.core.protocol.transaction.TransactionOutput
 import org.bitcoins.core.script.ScriptType
+import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.testkit.BitcoinSTestAppConfig.tmpDir
 import org.bitcoins.testkit.async.TestAsyncUtil
 import org.bitcoins.testkit.fixtures.DualLndFixture
@@ -30,9 +32,11 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process an invoice" in { param =>
-    val (_, lndA, _) = param
+    val (b, lndA, _) = param
+    val bitcoind = new OpReturnBitcoindClient(b.instance)
+
     val monitor =
-      new InvoiceMonitor(lndA, None, ArrayBuffer.empty)
+      new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
 
     monitor.startSubscription()
 
@@ -44,7 +48,12 @@ class InvoiceMonitorTest extends DualLndFixture {
         telegramId = None,
         nostrKey = None,
         dvmEvent = None)
+
+      startBal <- bitcoind.getBalance
+
       (invoiceDb, requestDb) <- monitor.onInvoicePaid(invDb, reqDb, None)
+
+      bal <- bitcoind.getBalance
     } yield {
       assert(invoiceDb.invoice == invDb.invoice)
       assert(invoiceDb.opReturnRequestId == requestDb.id.get)
@@ -54,13 +63,16 @@ class InvoiceMonitorTest extends DualLndFixture {
       assert(requestDb.txIdOpt.isDefined)
       assert(requestDb.txOpt.isDefined)
       assert(requestDb.chainFeeOpt.isDefined)
+      assert(startBal - bal == requestDb.chainFeeOpt.get)
     }
   }
 
   it must "process a paid invoice" in { param =>
-    val (bitcoind, lndA, lndB) = param
+    val (b, lndA, lndB) = param
+    val bitcoind = new OpReturnBitcoindClient(b.instance)
+
     val monitor =
-      new InvoiceMonitor(lndA, None, ArrayBuffer.empty)
+      new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
 
     monitor.startSubscription()
 
@@ -118,9 +130,11 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process a paid address" in { param =>
-    val (bitcoind, lndA, _) = param
+    val (b, lndA, lndB) = param
+    val bitcoind = new OpReturnBitcoindClient(b.instance)
+
     val monitor =
-      new InvoiceMonitor(lndA, None, ArrayBuffer.empty)
+      new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
 
     monitor.startTxSubscription()
 
@@ -128,11 +142,18 @@ class InvoiceMonitorTest extends DualLndFixture {
       mempool <- bitcoind.getRawMemPool
       _ = assert(mempool.isEmpty)
 
+      startBal <- bitcoind.getBalance
+
       (onchainDb, reqDb) <- monitor.createAddress(
         message = ByteVector("hello world".getBytes("UTF-8")),
         noTwitter = true)
 
-      _ <- bitcoind.sendToAddress(onchainDb.address, onchainDb.expectedAmount)
+      _ <- lndB.sendOutputs(
+        Vector(
+          TransactionOutput(onchainDb.expectedAmount,
+                            onchainDb.address.scriptPubKey)),
+        SatoshisPerVirtualByte.fromLong(1),
+        spendUnconfirmed = false)
       _ <- TestAsyncUtil.awaitConditionF(() =>
         bitcoind.getRawMemPool.map(_.size == 1))
 
@@ -150,6 +171,10 @@ class InvoiceMonitorTest extends DualLndFixture {
 
       hash <- bitcoind.getRawMemPool.map(_.head)
       tx <- bitcoind.getRawTransactionRaw(hash)
+
+      _ <- bitcoind.generate(1)
+
+      bal <- bitcoind.getBalance
     } yield {
       assert(tx.outputs.exists(_.value == Satoshis.zero))
       assert(
@@ -163,15 +188,20 @@ class InvoiceMonitorTest extends DualLndFixture {
           assert(reqDb.txIdOpt.contains(hash))
           assert(reqDb.txOpt.contains(tx))
           assert(reqDb.chainFeeOpt.isDefined)
+
+          // expected balance is our starting balance minus the chain fee,
+          // plus the 100 bitcoins maturing from mining blocks
+          val expectedBal = startBal + Bitcoins(100) - reqDb.chainFeeOpt.get
+          assert(bal.satoshis == expectedBal)
         case None => fail("invoice not found")
       }
 
       onchainOpt match {
-        case Some(onchainDb) =>
-          assert(onchainDb.address == onchainDb.address)
-          assert(onchainDb.expectedAmount == onchainDb.expectedAmount)
-          assert(onchainDb.txid.contains(paymentTxId))
-          assert(onchainDb.amountPaid.contains(onchainDb.expectedAmount))
+        case Some(db) =>
+          assert(db.address == onchainDb.address)
+          assert(db.expectedAmount == onchainDb.expectedAmount)
+          assert(db.txid.contains(paymentTxId))
+          assert(db.amountPaid.contains(onchainDb.expectedAmount))
         case None => fail("onchain address not found")
       }
 
@@ -188,9 +218,11 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process a paid address from unified" in { param =>
-    val (bitcoind, lndA, _) = param
+    val (b, lndA, _) = param
+    val bitcoind = new OpReturnBitcoindClient(b.instance)
+
     val monitor =
-      new InvoiceMonitor(lndA, None, ArrayBuffer.empty)
+      new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
 
     monitor.startSubscription()
     monitor.startTxSubscription()
@@ -263,9 +295,11 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process an unhandled address" in { param =>
-    val (bitcoind, lndA, _) = param
+    val (b, lndA, _) = param
+    val bitcoind = new OpReturnBitcoindClient(b.instance)
+
     val monitor =
-      new InvoiceMonitor(lndA, None, ArrayBuffer.empty)
+      new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
 
     for {
       mempool <- bitcoind.getRawMemPool
@@ -335,9 +369,11 @@ class InvoiceMonitorTest extends DualLndFixture {
   }
 
   it must "process a unhandled invoice" in { param =>
-    val (bitcoind, lndA, lndB) = param
+    val (b, lndA, lndB) = param
+    val bitcoind = new OpReturnBitcoindClient(b.instance)
+
     val monitor =
-      new InvoiceMonitor(lndA, None, ArrayBuffer.empty)
+      new InvoiceMonitor(lndA, bitcoind, None, ArrayBuffer.empty)
 
     for {
       mempool <- bitcoind.getRawMemPool

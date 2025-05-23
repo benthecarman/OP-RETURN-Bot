@@ -11,11 +11,10 @@ import com.bot4s.telegram.methods.SetMyCommands
 import com.bot4s.telegram.models.{BotCommand, Message}
 import config.OpReturnBotAppConfig
 import models._
-import org.bitcoins.commons.jsonmodels.lnd.TxDetails
 import org.bitcoins.core.currency._
 import org.bitcoins.core.util.{StartStopAsync, TimeUtil}
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
-import org.bitcoins.crypto.Sha256Digest
+import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
 import org.scalastr.core.{NostrNoteId, NostrPublicKey}
 import scodec.bits.ByteVector
 import sttp.capabilities.akka.AkkaStreams
@@ -263,11 +262,12 @@ class TelegramHandler(controller: Controller)(implicit
       nostrOpt: Option[Sha256Digest],
       message: String,
       feeRate: SatoshisPerVirtualByte,
-      txDetails: TxDetails,
+      txId: DoubleSha256DigestBE,
+      chainFee: CurrencyUnit,
       totalProfit: CurrencyUnit,
       totalChainFees: CurrencyUnit,
       remainingInQueue: Int): Future[Unit] = {
-    val profit = amount - txDetails.totalFees
+    val profit = amount - chainFee
 
     val deliveryMethod = if (requestDb.nostrKey.isDefined) {
       "Nostr"
@@ -305,14 +305,14 @@ class TelegramHandler(controller: Controller)(implicit
          |Message: $message
          |Delivery: $deliveryMethod
          |id: $requestId
-         |tx: https://mempool.space/tx/${txDetails.txId.hex}
+         |tx: https://mempool.space/tx/${txId.hex}
          |tweet: $tweetLine
          |nostr: $nostrLine
          |$nonStd
          |
          |fee rate: $feeRate
          |invoice amount: ${printAmount(amount)}
-         |tx fee: ${printAmount(txDetails.totalFees)}
+         |tx fee: ${printAmount(chainFee)}
          |profit: ${printAmount(profit)}
          |
          |total chain fees: ${printAmount(totalChainFees)}
@@ -325,12 +325,12 @@ class TelegramHandler(controller: Controller)(implicit
 
   def handleTelegramUserPurchase(
       telegramId: Long,
-      txDetails: TxDetails): Future[Unit] = {
+      txId: DoubleSha256DigestBE): Future[Unit] = {
     val telegramMsg =
       s"""
          |OP_RETURN Created!
          |
-         |https://mempool.space/tx/${txDetails.txId.hex}
+         |https://mempool.space/tx/${txId.hex}
          |""".stripMargin
 
     sendTelegramMessage(telegramMsg, telegramId.toString)
