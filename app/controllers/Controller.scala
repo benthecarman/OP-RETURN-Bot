@@ -104,22 +104,18 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     for {
       wallets <- invoiceMonitor.bitcoind.listWallets
       _ <-
-        if (wallets.contains(config.sendingWalletName)) {
-          invoiceMonitor.bitcoind.loadWallet(config.sendingWalletName)
-        } else {
+        if (!wallets.contains(config.sendingWalletName)) {
           invoiceMonitor.bitcoind.createWallet(config.sendingWalletName,
                                                avoidReuse = true,
                                                descriptors = true)
-        }
+        } else Future.unit
 
       _ <-
-        if (wallets.contains(config.receivingWalletName)) {
-          invoiceMonitor.bitcoind.loadWallet(config.receivingWalletName)
-        } else {
+        if (!wallets.contains(config.receivingWalletName)) {
           invoiceMonitor.bitcoind.createWallet(config.receivingWalletName,
                                                avoidReuse = true,
                                                descriptors = true)
-        }
+        } else Future.unit
     } yield ()
 
     telegramHandler.start()
