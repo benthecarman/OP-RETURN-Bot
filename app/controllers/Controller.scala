@@ -6,12 +6,15 @@ import com.google.zxing.qrcode.QRCodeWriter
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging
 import models._
+import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
+import org.bitcoins.feeprovider.MempoolSpaceProvider
+import org.bitcoins.feeprovider.MempoolSpaceTarget.FastestFeeTarget
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnurl.json.LnURLJsonModels._
 import org.scalastr.core.NostrEvent
@@ -89,6 +92,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   lazy val invoiceMonitor =
     new InvoiceMonitor(lnd,
                        config.bitcoindClient,
+                       MempoolSpaceProvider(FastestFeeTarget, MainNet, None),
                        Some(telegramHandler),
                        recentTransactions)
 
