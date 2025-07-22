@@ -285,13 +285,18 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       return Future.successful(None)
     }
 
+    val link =
+      if (message.getBytes.length > 80)
+        s"https://benpool.space/tx/${txId.hex}"
+      else s"https://mempool.space/tx/${txId.hex}"
+
     val content =
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
          |
          |$message
          |
-         |https://mempool.space/tx/${txId.hex}
+         |$link
          |""".stripMargin
 
     val tags = npubOpt.orElse(NostrPublicKey.fromStringOpt(message)) match {

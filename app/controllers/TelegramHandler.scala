@@ -305,7 +305,7 @@ class TelegramHandler(controller: Controller)(implicit
          |Message: $message
          |Delivery: $deliveryMethod
          |id: $requestId
-         |tx: https://mempool.space/tx/${txId.hex}
+         |tx: https://benpool.space/tx/${txId.hex}
          |tweet: $tweetLine
          |nostr: $nostrLine
          |$nonStd
@@ -324,12 +324,18 @@ class TelegramHandler(controller: Controller)(implicit
 
   def handleTelegramUserPurchase(
       telegramId: Long,
-      txId: DoubleSha256DigestBE): Future[Unit] = {
+      txId: DoubleSha256DigestBE,
+      isNonStd: Boolean): Future[Unit] = {
+    val link =
+      if (isNonStd)
+        s"https://benpool.space/tx/${txId.hex}"
+      else s"https://mempool.space/tx/${txId.hex}"
+
     val telegramMsg =
       s"""
          |OP_RETURN Created!
          |
-         |https://mempool.space/tx/${txId.hex}
+         |$link
          |""".stripMargin
 
     sendTelegramMessage(telegramMsg, telegramId.toString)
