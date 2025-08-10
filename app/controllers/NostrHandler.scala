@@ -292,8 +292,6 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
 
     val content =
       s"""
-         |🔔 🔔 NEW OP_RETURN 🔔 🔔
-         |
          |$message
          |
          |$link

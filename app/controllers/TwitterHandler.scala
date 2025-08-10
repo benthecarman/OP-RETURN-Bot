@@ -76,8 +76,6 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
 
       val tweet =
         s"""
-           |🔔 🔔 NEW OP_RETURN 🔔 🔔
-           |
            |$usedMessage
            |
            |$link
