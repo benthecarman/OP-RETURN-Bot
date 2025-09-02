@@ -822,6 +822,8 @@ class InvoiceMonitor(
       _ <- {
         val telegramF = txDetailsOpt match {
           case Some(details) =>
+            logger.info("Sending telegram notification...")
+
             val userTelegramF = res.telegramIdOpt
               .flatMap(telegramId =>
                 telegramHandlerOpt.map(
