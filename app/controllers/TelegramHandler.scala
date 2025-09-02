@@ -299,10 +299,16 @@ class TelegramHandler(controller: Controller)(implicit
       case None        => "Hidden"
     }
 
+    val truncatedMsg = if (message.length > 3_000) {
+      message.take(3_000) + "..."
+    } else {
+      message
+    }
+
     val telegramMsg =
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
-         |Message: $message
+         |Message: $truncatedMsg
          |Delivery: $deliveryMethod
          |id: $requestId
          |tx: https://benpool.space/tx/${txId.hex}
