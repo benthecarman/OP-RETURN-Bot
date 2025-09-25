@@ -963,7 +963,7 @@ class InvoiceMonitor(
         // Add fee if no tweet
         val noTwitterFee = if (noTwitter) Satoshis(1000) else Satoshis.zero
         // add fee if non standard transaction
-        val noStdFee = if (messageSize > 80) Satoshis(10000) else Satoshis.zero
+        val noStdFee = if (messageSize > 80) Satoshis(1000) else Satoshis.zero
 
         // tx fee + app fee (1337) + twitter fee + non standard fee
         val sats =
