@@ -109,16 +109,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       wallets <- invoiceMonitor.bitcoind.listWallets
       _ <-
         if (!wallets.contains(config.sendingWalletName)) {
-          invoiceMonitor.bitcoind.createWallet(config.sendingWalletName,
-                                               avoidReuse = true,
-                                               descriptors = true)
+          invoiceMonitor.bitcoind.loadWallet(config.sendingWalletName)
         } else Future.unit
 
       _ <-
         if (!wallets.contains(config.receivingWalletName)) {
-          invoiceMonitor.bitcoind.createWallet(config.receivingWalletName,
-                                               avoidReuse = true,
-                                               descriptors = true)
+          invoiceMonitor.bitcoind.loadWallet(config.receivingWalletName)
         } else Future.unit
     } yield ()
 
