@@ -675,6 +675,9 @@ class InvoiceMonitor(
 
     logger.info(s"Received $amount!")
 
+    // Start price fetch early so it runs in parallel with tx creation
+    val btcPriceF = priceFetcher.fetchPrice()
+
     val createTxF = for {
       transaction <- outpoint match {
         case Some((outpoint, prevout)) =>
@@ -728,7 +731,7 @@ class InvoiceMonitor(
         _.fee.map(_.satoshis * Satoshis.fromLong(-1)))
       profitOpt = chainFeeOpt.map(d => amount - d)
 
-      btcPrice <- priceFetcher.fetchPrice()
+      btcPrice <- btcPriceF
 
       dbWithTx = requestDb.copy(closed = true,
                                 txOpt = Some(transaction),
@@ -850,6 +853,7 @@ class InvoiceMonitor(
                     action)
                   tweetOpt <- tweetF
                   nostrOpt <- nostrF
+                  btcPrice <- btcPriceF
                   _ <- handler.handleTelegram(
                     requestId = requestDb.id.get,
                     amount = amount,
@@ -863,7 +867,8 @@ class InvoiceMonitor(
                     chainFee = chainFeeOpt.getOrElse(Satoshis.zero),
                     totalProfit = profit,
                     totalChainFees = chainFees,
-                    remainingInQueue = inQueue
+                    remainingInQueue = inQueue,
+                    btcPriceCents = btcPrice
                   )
                 } yield ()
               }

@@ -266,7 +266,8 @@ class TelegramHandler(controller: Controller)(implicit
       chainFee: CurrencyUnit,
       totalProfit: CurrencyUnit,
       totalChainFees: CurrencyUnit,
-      remainingInQueue: Int): Future[Unit] = {
+      remainingInQueue: Int,
+      btcPriceCents: Long): Future[Unit] = {
     val profit = amount - chainFee
 
     val deliveryMethod = if (requestDb.nostrKey.isDefined) {
@@ -305,6 +306,16 @@ class TelegramHandler(controller: Controller)(implicit
       message
     }
 
+    val btcPriceLine = if (btcPriceCents > 0) {
+      val btcPriceUsd = btcPriceCents.toDouble / 100.0
+      val profitUsd = profit.satoshis.toLong.toDouble / 100000000.0 * btcPriceUsd
+      val totalProfitUsd = totalProfit.satoshis.toLong.toDouble / 100000000.0 * btcPriceUsd
+      s"""
+         |BTC price: $$${intFormatter.format(btcPriceCents / 100)}
+         |profit (USD): $${"%.4f".format(profitUsd)}
+         |total profit (USD): $${"%.2f".format(totalProfitUsd)}""".stripMargin
+    } else ""
+
     val telegramMsg =
       s"""
          |🔔 🔔 NEW OP_RETURN 🔔 🔔
@@ -319,6 +330,7 @@ class TelegramHandler(controller: Controller)(implicit
          |invoice amount: ${printAmount(amount)}
          |tx fee: ${printAmount(chainFee)}
          |profit: ${printAmount(profit)}
+         |$btcPriceLine
          |
          |total chain fees: ${printAmount(totalChainFees)}
          |total profit: ${printAmount(totalProfit)}
