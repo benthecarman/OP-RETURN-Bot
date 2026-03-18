@@ -32,6 +32,7 @@ case class OpReturnRequestDb(
     profitOpt: Option[CurrencyUnit],
     chainFeeOpt: Option[CurrencyUnit],
     vsize: Option[Long],
+    btcPrice: Long,
     closed: Boolean
 ) extends DbRowAutoInc[OpReturnRequestDb] {
 
@@ -343,6 +344,7 @@ case class OpReturnRequestDAO()(implicit
     def profitOpt: Rep[Option[CurrencyUnit]] = column("profit")
     def chainFeeOpt: Rep[Option[CurrencyUnit]] = column("chain_fee")
     def vsize: Rep[Option[Long]] = column("vsize")
+    def btcPrice: Rep[Long] = column("btc_price")
     def closed: Rep[Boolean] = column("closed")
 
     def * : ProvenShape[OpReturnRequestDb] =
@@ -360,6 +362,7 @@ case class OpReturnRequestDAO()(implicit
        profitOpt,
        chainFeeOpt,
        vsize,
+       btcPrice,
        closed).<>(OpReturnRequestDb.tupled, OpReturnRequestDb.unapply)
   }
 }

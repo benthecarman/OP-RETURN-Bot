@@ -29,13 +29,14 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.net.{URL, URLDecoder}
 import javax.imageio.ImageIO
-import javax.inject.Inject
+import javax.inject.{Inject, Singleton}
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
+@Singleton
 class Controller @Inject() (cc: MessagesControllerComponents)
     extends MessagesAbstractController(cc)
     with Logging {

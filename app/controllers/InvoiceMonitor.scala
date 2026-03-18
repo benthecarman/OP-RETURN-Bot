@@ -218,6 +218,7 @@ class InvoiceMonitor(
   val nip5DAO: Nip5DAO = Nip5DAO()
 
   val esplora = new EsploraClient(MempoolSpaceEsploraSite(MainNet), None)
+  val priceFetcher = new BtcPriceFetcher()
 
   def startBlockSubscription(): Future[Done] = {
     lnd.chainClient
@@ -727,12 +728,15 @@ class InvoiceMonitor(
         _.fee.map(_.satoshis * Satoshis.fromLong(-1)))
       profitOpt = chainFeeOpt.map(d => amount - d)
 
+      btcPrice <- priceFetcher.fetchPrice()
+
       dbWithTx = requestDb.copy(closed = true,
                                 txOpt = Some(transaction),
                                 txIdOpt = Some(txId),
                                 vsize = Some(transaction.vsize),
                                 profitOpt = profitOpt,
-                                chainFeeOpt = chainFeeOpt)
+                                chainFeeOpt = chainFeeOpt,
+                                btcPrice = btcPrice)
 
       res <- opReturnDAO.update(dbWithTx)
       _ = logger.info(s"Successfully saved tx: ${txId.hex} to database")
@@ -1013,7 +1017,8 @@ class InvoiceMonitor(
             chainFeeOpt = None,
             time = TimeUtil.currentEpochSecond,
             messageBytes = message,
-            vsize = None
+            vsize = None,
+            btcPrice = 0
           )
 
         val action = for {
@@ -1057,7 +1062,8 @@ class InvoiceMonitor(
             chainFeeOpt = None,
             time = TimeUtil.currentEpochSecond,
             messageBytes = message,
-            vsize = None
+            vsize = None,
+            btcPrice = 0
           )
 
         val action = for {
@@ -1103,7 +1109,8 @@ class InvoiceMonitor(
             chainFeeOpt = None,
             time = TimeUtil.currentEpochSecond,
             messageBytes = message,
-            vsize = None
+            vsize = None,
+            btcPrice = 0
           )
 
         val action = for {
@@ -1171,7 +1178,8 @@ class InvoiceMonitor(
               chainFeeOpt = None,
               time = TimeUtil.currentEpochSecond,
               messageBytes = ByteVector(message.getBytes),
-              vsize = None
+              vsize = None,
+              btcPrice = 0
             )
 
           val action = nip5DAO.getPublicKeyAction(name).flatMap {

@@ -1,0 +1,1 @@
+ALTER TABLE op_return_requests ADD COLUMN btc_price INTEGER NOT NULL DEFAULT 0;
