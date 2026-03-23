@@ -9,9 +9,7 @@ import play.api.libs.json.Json
 
 import scala.concurrent._
 
-class BtcPriceFetcher()(implicit
-    system: ActorSystem,
-    ec: ExecutionContext)
+class BtcPriceFetcher()(implicit system: ActorSystem, ec: ExecutionContext)
     extends Logging {
 
   private val http = Http(system)
