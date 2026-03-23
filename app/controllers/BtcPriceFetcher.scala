@@ -29,7 +29,7 @@ class BtcPriceFetcher()(implicit
         val json = Json.parse(body)
         val priceStr = (json \ "data" \ "amount").as[String]
         val dollars = BigDecimal(priceStr)
-        (dollars * 100).toLongExact
+        (dollars * 100).setScale(0, BigDecimal.RoundingMode.HALF_UP).toLong
       }
       .recover { case ex =>
         logger.error(s"Failed to fetch BTC price: ${ex.getMessage}")
