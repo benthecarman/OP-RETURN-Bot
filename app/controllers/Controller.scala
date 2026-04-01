@@ -28,6 +28,7 @@ import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.net.{URL, URLDecoder}
+import java.security.MessageDigest
 import javax.imageio.ImageIO
 import javax.inject.{Inject, Singleton}
 import scala.collection._
@@ -670,7 +671,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             case None =>
               Future.successful(BadRequest("Failed to parse JSON"))
             case Some(event) =>
-              if (event.key == sys.env.getOrElse("ORB_ADMIN_KEY", "")) {
+              val adminKey = sys.env.getOrElse("ORB_ADMIN_KEY", "")
+              if (
+                adminKey.nonEmpty && MessageDigest.isEqual(
+                  event.key.getBytes("UTF-8"),
+                  adminKey.getBytes("UTF-8"))
+              ) {
                 logger.info(s"Received wallet notify event: ${event.txid}")
 
                 val txId = DoubleSha256DigestBE(event.txid)
@@ -685,7 +691,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
                 Future.successful(Ok("OK"))
               } else {
-                Future.successful(Unauthorized(s"Invalid key ${event.key}"))
+                Future.successful(Unauthorized("Unauthorized"))
               }
           }
         case None =>
