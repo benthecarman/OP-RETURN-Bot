@@ -307,31 +307,37 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       widthStr: String,
       heightStr: String): Action[AnyContent] = {
     Action.async { _ =>
-      val width = widthStr.toInt
-      val height = heightStr.toInt
+      val width = Try(widthStr.toInt).getOrElse(300)
+      val height = Try(heightStr.toInt).getOrElse(300)
 
-      val qrCodeWriter = new QRCodeWriter()
-      val bitMatrix =
-        qrCodeWriter.encode(string, BarcodeFormat.QR_CODE, width, height)
-      val qrCodeImage =
-        new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
-      val graphics = qrCodeImage.createGraphics()
-      graphics.setColor(Color.WHITE)
-      graphics.fillRect(0, 0, width, height)
-      graphics.setColor(Color.BLACK)
-      for (x <- 0 until width) {
-        for (y <- 0 until height) {
-          if (bitMatrix.get(x, y)) {
-            graphics.fillRect(x, y, 1, 1)
+      if (width <= 0 || width > 1000 || height <= 0 || height > 1000) {
+        Future.successful(
+          BadRequest("Width and height must be between 1 and 1000"))
+      } else {
+
+        val qrCodeWriter = new QRCodeWriter()
+        val bitMatrix =
+          qrCodeWriter.encode(string, BarcodeFormat.QR_CODE, width, height)
+        val qrCodeImage =
+          new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        val graphics = qrCodeImage.createGraphics()
+        graphics.setColor(Color.WHITE)
+        graphics.fillRect(0, 0, width, height)
+        graphics.setColor(Color.BLACK)
+        for (x <- 0 until width) {
+          for (y <- 0 until height) {
+            if (bitMatrix.get(x, y)) {
+              graphics.fillRect(x, y, 1, 1)
+            }
           }
         }
+
+        val byteArrayOutputStream = new ByteArrayOutputStream()
+        ImageIO.write(qrCodeImage, "png", byteArrayOutputStream)
+        val qrCodeByteArray = byteArrayOutputStream.toByteArray
+
+        Future.successful(Ok(qrCodeByteArray).as("image/png"))
       }
-
-      val byteArrayOutputStream = new ByteArrayOutputStream()
-      ImageIO.write(qrCodeImage, "png", byteArrayOutputStream)
-      val qrCodeByteArray = byteArrayOutputStream.toByteArray
-
-      Future.successful(Ok(qrCodeByteArray).as("image/png"))
     }
   }
 
