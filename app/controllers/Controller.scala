@@ -196,7 +196,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             "Access-Control-Allow-Origin" -> "*",
             "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
             "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-            "Access-Control-Allow-Credentials" -> "true"
+            "Access-Control-Allow-Credentials" -> "false"
           )
 
       }
@@ -271,7 +271,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                   "Access-Control-Allow-Origin" -> "*",
                   "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
                   "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-                  "Access-Control-Allow-Credentials" -> "true"
+                  "Access-Control-Allow-Credentials" -> "false"
                 )
               }
             case None =>
@@ -284,7 +284,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                   "Access-Control-Allow-Origin" -> "*",
                   "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
                   "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-                  "Access-Control-Allow-Credentials" -> "true"
+                  "Access-Control-Allow-Credentials" -> "false"
                 )
               }
           }
@@ -296,7 +296,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
               "Access-Control-Allow-Origin" -> "*",
               "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
               "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-              "Access-Control-Allow-Credentials" -> "true"
+              "Access-Control-Allow-Credentials" -> "false"
             ))
       }
     }
@@ -560,7 +560,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             "Access-Control-Allow-Origin" -> "*",
             "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
             "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-            "Access-Control-Allow-Credentials" -> "true"
+            "Access-Control-Allow-Credentials" -> "false"
           )
         }
       }
@@ -594,7 +594,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
             "Access-Control-Allow-Origin" -> "*",
             "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
             "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-            "Access-Control-Allow-Credentials" -> "true"
+            "Access-Control-Allow-Credentials" -> "false"
           )
         }
       }
