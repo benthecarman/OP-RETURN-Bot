@@ -308,8 +308,10 @@ class TelegramHandler(controller: Controller)(implicit
 
     val btcPriceLine = if (btcPriceCents > 0) {
       val btcPriceUsd = btcPriceCents.toDouble / 100.0
-      val profitUsd = profit.satoshis.toLong.toDouble / 100000000.0 * btcPriceUsd
-      val totalProfitUsd = totalProfit.satoshis.toLong.toDouble / 100000000.0 * btcPriceUsd
+      val profitUsd =
+        profit.satoshis.toLong.toDouble / 100000000.0 * btcPriceUsd
+      val totalProfitUsd =
+        totalProfit.satoshis.toLong.toDouble / 100000000.0 * btcPriceUsd
       s"""
          |BTC price: $$${intFormatter.format(btcPriceCents / 100)}
          |profit (USD): $${"%.4f".format(profitUsd)}
