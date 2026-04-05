@@ -314,8 +314,8 @@ class TelegramHandler(controller: Controller)(implicit
         totalProfit.satoshis.toLong.toDouble / 100000000.0 * btcPriceUsd
       s"""
          |BTC price: $$${intFormatter.format(btcPriceCents / 100)}
-         |profit (USD): $${"%.4f".format(profitUsd)}
-         |total profit (USD): $${"%.2f".format(totalProfitUsd)}""".stripMargin
+         |profit (USD): $$${"%,.4f".format(profitUsd)}
+         |total profit (USD): $$${"%,.2f".format(totalProfitUsd)}""".stripMargin
     } else ""
 
     val telegramMsg =
