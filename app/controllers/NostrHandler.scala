@@ -285,10 +285,7 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       return Future.successful(None)
     }
 
-    val link =
-      if (message.getBytes.length > 80)
-        s"https://benpool.space/tx/${txId.hex}"
-      else s"https://mempool.space/tx/${txId.hex}"
+    val link = s"https://mempool.space/tx/${txId.hex}"
 
     val content =
       s"""

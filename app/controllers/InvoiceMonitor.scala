@@ -747,10 +747,7 @@ class InvoiceMonitor(
       // send if nostr
       _ <- res.nostrKey match {
         case Some(nostrKey) =>
-          val link =
-            if (message.getBytes.length > 80)
-              s"https://benpool.space/tx/${txId.hex}"
-            else s"https://mempool.space/tx/${txId.hex}"
+          val link = s"https://mempool.space/tx/${txId.hex}"
           val msg =
             s"""
                |OP_RETURN Created!
@@ -834,10 +831,7 @@ class InvoiceMonitor(
             val userTelegramF = res.telegramIdOpt
               .flatMap(telegramId =>
                 telegramHandlerOpt.map(
-                  _.handleTelegramUserPurchase(
-                    telegramId,
-                    details.txid,
-                    requestDb.messageBytes.length > 80)))
+                  _.handleTelegramUserPurchase(telegramId, details.txid)))
               .getOrElse(Future.unit)
 
             lazy val action = for {

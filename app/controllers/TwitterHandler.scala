@@ -69,10 +69,7 @@ trait TwitterHandler extends Logging { self: InvoiceMonitor =>
     FutureUtil.makeAsync { () =>
       val usedMessage = config.censorMessage(message)
 
-      val link =
-        if (message.getBytes.length > 80)
-          s"https://benpool.space/tx/${txId.hex}"
-        else s"https://mempool.space/tx/${txId.hex}"
+      val link = s"https://mempool.space/tx/${txId.hex}"
 
       val tweet =
         s"""

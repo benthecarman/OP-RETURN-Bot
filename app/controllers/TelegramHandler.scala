@@ -324,7 +324,7 @@ class TelegramHandler(controller: Controller)(implicit
          |Message: $truncatedMsg
          |Delivery: $deliveryMethod
          |id: $requestId
-         |tx: https://benpool.space/tx/${txId.hex}
+         |tx: https://mempool.space/tx/${txId.hex}
          |tweet: $tweetLine
          |nostr: $nostrLine
          |$nonStd
@@ -344,12 +344,8 @@ class TelegramHandler(controller: Controller)(implicit
 
   def handleTelegramUserPurchase(
       telegramId: Long,
-      txId: DoubleSha256DigestBE,
-      isNonStd: Boolean): Future[Unit] = {
-    val link =
-      if (isNonStd)
-        s"https://benpool.space/tx/${txId.hex}"
-      else s"https://mempool.space/tx/${txId.hex}"
+      txId: DoubleSha256DigestBE): Future[Unit] = {
+    val link = s"https://mempool.space/tx/${txId.hex}"
 
     val telegramMsg =
       s"""

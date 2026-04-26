@@ -11,9 +11,5 @@
 
         <p>Transaction ID:</p>
 
-        @if(warning) {
-            <label><a href="https://benpool.space/tx/@txid.hex">@txid.hex</a></label>
-        } else {
-            <label><a href="https://mempool.space/tx/@txid.hex">@txid.hex</a></label>
-        }
+        <label><a href="https://mempool.space/tx/@txid.hex">@txid.hex</a></label>
     }
