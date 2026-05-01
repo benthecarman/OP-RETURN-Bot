@@ -1,8 +1,8 @@
 package controllers
 
-import akka.Done
-import akka.actor.ActorSystem
-import akka.stream.scaladsl.Sink
+import org.apache.pekko.Done
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.stream.scaladsl.Sink
 import chainrpc.BlockEpoch
 import config.OpReturnBotAppConfig
 import grizzled.slf4j.Logging

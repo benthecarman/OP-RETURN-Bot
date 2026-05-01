@@ -1,6 +1,6 @@
 package controllers
 
-import akka.actor.ActorSystem
+import org.apache.pekko.actor.ActorSystem
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import config.OpReturnBotAppConfig
@@ -46,7 +46,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   implicit lazy val system: ActorSystem = {
     val system = ActorSystem("op-return-bot")
-    system.log.info("Akka logger started")
+    system.log.info("Pekko logger started")
     system
   }
   implicit lazy val ec: ExecutionContext = system.dispatcher

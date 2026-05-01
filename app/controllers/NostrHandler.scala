@@ -1,8 +1,8 @@
 package controllers
 
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.client.RequestBuilding.Post
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
+import org.apache.pekko.http.scaladsl.Http
+import org.apache.pekko.http.scaladsl.client.RequestBuilding.Post
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity}
 import grizzled.slf4j.Logging
 import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.crypto.ExtKeyVersion.SegWitMainNetPriv

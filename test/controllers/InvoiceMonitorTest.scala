@@ -1,6 +1,6 @@
 package controllers
 
-import akka.actor.ActorSystem
+import org.apache.pekko.actor.ActorSystem
 import com.typesafe.config.{Config, ConfigFactory}
 import config.OpReturnBotAppConfig
 import lnrpc.Invoice.InvoiceState.CANCELED

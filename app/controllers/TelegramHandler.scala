@@ -1,8 +1,8 @@
 package controllers
 
-import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.client.RequestBuilding.Get
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.http.scaladsl.Http
+import org.apache.pekko.http.scaladsl.client.RequestBuilding.Get
 import com.bot4s.telegram.api.RequestHandler
 import com.bot4s.telegram.api.declarative.Commands
 import com.bot4s.telegram.clients.FutureSttpClient
@@ -17,9 +17,9 @@ import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.crypto.{DoubleSha256DigestBE, Sha256Digest}
 import org.scalastr.core.{NostrNoteId, NostrPublicKey}
 import scodec.bits.ByteVector
-import sttp.capabilities.akka.AkkaStreams
+import sttp.capabilities.pekko.PekkoStreams
 import sttp.client3.SttpBackend
-import sttp.client3.akkahttp.AkkaHttpBackend
+import sttp.client3.pekkohttp.PekkoHttpBackend
 
 import java.net.URLEncoder
 import java.text.NumberFormat
@@ -49,8 +49,8 @@ class TelegramHandler(controller: Controller)(implicit
   private val myTelegramId = config.telegramId
   private val telegramCreds = config.telegramCreds
 
-  implicit private val backend: SttpBackend[Future, AkkaStreams] =
-    AkkaHttpBackend.usingActorSystem(system)
+  implicit private val backend: SttpBackend[Future, PekkoStreams] =
+    PekkoHttpBackend.usingActorSystem(system)
 
   override val client: RequestHandler[Future] = new FutureSttpClient(
     telegramCreds)

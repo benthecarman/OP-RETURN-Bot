@@ -6,9 +6,9 @@ import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 
-val bitcoinsV = "1.9.7-412-195cfbd2-SNAPSHOT"
-val scalastrV = "0.0.0-77-b957faa6-SNAPSHOT"
-val akkaV = "2.6.20"
+val bitcoinsV = "1.9.12"
+val scalastrV = "0.0.0-79-9629ff78-SNAPSHOT"
+val pekkoV = "1.0.2"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
@@ -35,14 +35,14 @@ lazy val root = project
       "org.bitcoin-s" %% "bitcoin-s-esplora" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-bitcoind-rpc" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-stream" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-actor-typed" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-serialization-jackson" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-slf4j" % pekkoV withSources () withJavadoc (),
       "com.google.zxing" % "core" % "3.5.1" withSources () withJavadoc (),
       "com.github.scribejava" % "scribejava-apis" % "8.3.3",
-      "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.3",
-      "com.bot4s" %% "telegram-akka" % "5.6.1",
+      "com.softwaremill.sttp.client3" %% "pekko-http-backend" % "3.9.0",
+      "com.bot4s" %% "telegram-core" % "5.6.1",
       "ch.qos.logback" % "logback-classic" % "1.2.11",
       "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
     ),
