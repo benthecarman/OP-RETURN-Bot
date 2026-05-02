@@ -11,6 +11,7 @@ val scalastrV = "0.0.0-79-9629ff78-SNAPSHOT"
 val pekkoV = "1.4.0"
 val pekkoHttpV = "1.0.1"
 val jacksonV = "2.20.2"
+val logbackV = "1.5.32"
 
 ThisBuild / scalaVersion := "2.13.18"
 
@@ -60,6 +61,7 @@ lazy val root = project
       guice,
       "org.scalatestplus.play" %% "scalatestplus-play" % "6.0.0" % Test,
       "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-app-commons" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
       "org.scalastr" %% "client" % scalastrV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
@@ -75,12 +77,12 @@ lazy val root = project
       "com.github.scribejava" % "scribejava-apis" % "8.3.3",
       "com.softwaremill.sttp.client3" %% "pekko-http-backend" % "3.9.0",
       "com.bot4s" %% "telegram-core" % "5.6.1",
-      "ch.qos.logback" % "logback-classic" % "1.2.11",
+      "ch.qos.logback" % "logback-classic" % logbackV,
       "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
       "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV
     ),
     dependencyOverrides ++= Seq(
-      "ch.qos.logback" % "logback-classic" % "1.2.11",
+//      "ch.qos.logback" % "logback-classic" % "1.2.11",
 //      "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
     ),
     scalacOptions ++= Seq(

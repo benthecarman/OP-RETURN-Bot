@@ -14,15 +14,17 @@ import org.bitcoins.core.script.ScriptType
 import org.bitcoins.core.wallet.fee.SatoshisPerVirtualByte
 import org.bitcoins.feeprovider.ConstantFeeRateProvider
 import org.bitcoins.lnd.rpc.LndRpcClient
+import org.bitcoins.rpc.client.common.BitcoindRpcClient
 import org.bitcoins.rpc.config.{BitcoindConfig, BitcoindInstanceLocal}
 import org.bitcoins.rpc.util.RpcUtil
 import org.bitcoins.testkit.BitcoinSTestAppConfig.tmpDir
 import org.bitcoins.testkit.async.TestAsyncUtil
 import org.bitcoins.testkit.fixtures.BitcoinSFixture
 import org.bitcoins.testkit.lnd.{LndRpcTestClient, LndRpcTestUtil}
+import org.bitcoins.testkit.rpc.BitcoindRpcTestUtil
 import org.bitcoins.testkit.rpc.BitcoindRpcTestUtil.writtenConfig
 import org.bitcoins.testkit.util.{BitcoindRpcTestClient, FileUtil}
-import org.scalatest.FutureOutcome
+import org.scalatest.{BeforeAndAfterEach, FutureOutcome}
 import scodec.bits.ByteVector
 
 import java.io.File
@@ -34,14 +36,19 @@ import scala.concurrent.duration.DurationInt
 import scala.util.Properties
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
-class InvoiceMonitorTest extends BitcoinSFixture {
+class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
 
   override type FixtureParam =
     (OpReturnBitcoindClient, LndRpcClient, LndRpcClient)
 
   final val sendingWalletName = "sending"
   final val receivingWalletName = "receiving"
-  final val miningWalletName = "mining"
+
+  // we can use the other wallet name when we have
+  // https://github.com/bitcoin-s/bitcoin-s/pull/6298
+  // as of now we can't pass a custom bitcoind wallet name to
+  // LndRpcTestUtil.fundLnNodes, so we have to use the default wallet for mining
+  final val miningWalletName = BitcoindRpcClient.DEFAULT_WALLET_NAME
 
   def createNodePair(
       bitcoind: OpReturnBitcoindClient,
@@ -81,8 +88,9 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       (client, otherClient) <- clientsF
 
       _ <- LndRpcTestUtil.connectLNNodes(client, otherClient)
+      _ = println(s"Done connecting nodes")
       _ <- LndRpcTestUtil.fundLNNodes(bitcoind, client, otherClient)
-
+      _ = println(s"Done funding nodes")
       _ <- AsyncUtil.awaitConditionF(() => isSynced)
       _ <- AsyncUtil.awaitConditionF(() => isFunded)
 
@@ -91,7 +99,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
                                       n2 = otherClient,
                                       amt = channelSize,
                                       pushAmt = channelPushAmt)
-
+      _ = println(s"Done opening channel")
       _ <- TestAsyncUtil.nonBlockingSleep(2.seconds)
     } yield (client, otherClient)
   }
@@ -106,7 +114,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       .asScala
       .toList
       .filter(f => Files.isDirectory(f))
-    val filtered = fileList.filter(f => f.toString.contains("29.0"))
+    val filtered = fileList.filter(f => f.toString.contains("30.2"))
 
     if (filtered.isEmpty)
       throw new RuntimeException(
@@ -127,6 +135,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
   override def withFixture(test: OneArgAsyncTest): FutureOutcome = {
     makeDependentFixture[FixtureParam](
       () => {
+        println(s"Setting up fixture")
         val uri = new URI("http://localhost:" + RpcUtil.randomPort)
         val rpcUri = new URI("http://localhost:" + RpcUtil.randomPort)
         val configFile =
@@ -151,22 +160,21 @@ class InvoiceMonitorTest extends BitcoinSFixture {
 
         for {
           _ <- bitcoind.start()
-          _ <- bitcoind
+          createWalletResult <- bitcoind
             .createWallet(miningWalletName,
                           avoidReuse = true,
                           descriptors = true)
-            .map(_ => ())
-            .recover(_ => ())
-          address <- bitcoind.getNewAddress
+
+          _ = println(s"Create wallet result=$createWalletResult")
+          address <- bitcoind.getNewAddress(miningWalletName)
           _ <- bitcoind.generateToAddress(blocks = 101, address)
           (lndA, lndB) <- createNodePair(bitcoind)
-
+          _ = println(s"Done creating lnd nodes")
           _ <- bitcoind
             .createWallet(sendingWalletName,
                           avoidReuse = true,
                           descriptors = true)
             .map(_ => ())
-            .recover(_ => ())
 
           addr <- bitcoind.getNewAddress(sendingWalletName)
           _ <- bitcoind.sendToAddress(addr,
@@ -178,15 +186,16 @@ class InvoiceMonitorTest extends BitcoinSFixture {
                           avoidReuse = true,
                           descriptors = true)
             .map(_ => ())
-            .recover(_ => ())
-
           addr <- bitcoind.getNewAddress(receivingWalletName)
           _ <- bitcoind.sendToAddress(addr,
                                       fundAmt,
                                       walletName = miningWalletName)
 
           _ <- bitcoind.generateToAddress(blocks = 1, address)
-        } yield (bitcoind, lndA, lndB)
+        } yield {
+          println(s"Done setting up fixture")
+          (bitcoind, lndA, lndB)
+        }
       },
       { param =>
         val (b, lndA, lndB) = param
@@ -210,14 +219,17 @@ class InvoiceMonitorTest extends BitcoinSFixture {
   implicit val config: OpReturnBotAppConfig =
     OpReturnBotAppConfig(tmpDir(), Vector(walletNameConfig))
 
-  before {
+  override def beforeEach(): Unit = {
+    logger.info(s"beforeEach()")
     val startF = config.start()
     startF.failed.foreach(_.printStackTrace())
     Await.result(startF, 10.seconds)
   }
 
-  after {
-    val f = Future { config.clean() }
+  override def afterEach(): Unit = {
+    println(s"afterEach()")
+    config.clean()
+    val f = config.stop()
     Await.result(f, 10.seconds)
   }
 

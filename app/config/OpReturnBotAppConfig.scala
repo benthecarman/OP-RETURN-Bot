@@ -258,7 +258,9 @@ case class OpReturnBotAppConfig(
 
   }
 
-  override def stop(): Future[Unit] = Future.unit
+  override def stop(): Future[Unit] = {
+    super.stop()
+  }
 
   override lazy val dbPath: Path = baseDatadir
 
