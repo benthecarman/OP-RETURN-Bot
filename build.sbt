@@ -8,25 +8,57 @@ import scala.concurrent.duration.DurationInt
 
 val bitcoinsV = "1.9.12"
 val scalastrV = "0.0.0-79-9629ff78-SNAPSHOT"
-val pekkoV = "1.0.2"
+val pekkoV = "1.4.0"
+val pekkoHttpV = "1.0.1"
+val jacksonV = "2.20.2"
+
+ThisBuild / scalaVersion := "2.13.18"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 
 resolvers +=
   "Sonatype OSS Snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots"
 
+lazy val lnurl = project
+  .in(file("lnurl"))
+  .settings(scalacOptions += "-Xsource:3")
+  .settings(
+    name := "op-return-bot-lnurl",
+    libraryDependencies ++= Seq(
+      "org.bitcoin-s" %% "bitcoin-s-core" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-app-commons" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-async-utils" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-tor" % bitcoinsV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-actor" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-stream" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-http" % pekkoHttpV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-slf4j" % pekkoV withSources () withJavadoc ()
+    )
+  )
+
+
+lazy val lnurlTest = project
+  .in(file("lnurl-test"))
+  .settings(scalacOptions += "-Xsource:3")
+  .settings(
+    name := "op-return-bot-lnurl-test",
+    libraryDependencies ++= Seq(
+      "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc ()
+    )
+  )
+  .dependsOn(lnurl)
+
 lazy val root = project
   .in(file("."))
   .enablePlugins(PlayScala, DebianPlugin)
+  .dependsOn(lnurl)
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
-    scalaVersion := "2.13.18",
     maintainer := "benthecarman",
     libraryDependencies ++= Seq(
       guice,
-      "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
-      "org.bitcoin-s" %% "bitcoin-s-lnurl" % bitcoinsV withSources () withJavadoc (),
+      "org.scalatestplus.play" %% "scalatestplus-play" % "6.0.0" % Test,
       "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
       "org.scalastr" %% "client" % scalastrV withSources () withJavadoc (),
@@ -44,11 +76,12 @@ lazy val root = project
       "com.softwaremill.sttp.client3" %% "pekko-http-backend" % "3.9.0",
       "com.bot4s" %% "telegram-core" % "5.6.1",
       "ch.qos.logback" % "logback-classic" % "1.2.11",
-      "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
+      "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
+      "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV
     ),
     dependencyOverrides ++= Seq(
       "ch.qos.logback" % "logback-classic" % "1.2.11",
-      "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
+//      "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
     ),
     scalacOptions ++= Seq(
       "-feature",

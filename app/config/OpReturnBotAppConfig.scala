@@ -7,11 +7,11 @@ import com.github.scribejava.core.model.OAuth1AccessToken
 import com.github.scribejava.core.oauth.OAuth10aService
 import com.typesafe.config.Config
 import controllers.OpReturnBitcoindClient
-import grizzled.slf4j.Logging
+import grizzled.slf4j.{Logger, Logging}
 import models._
 import org.bitcoins.commons.config._
 import org.bitcoins.commons.util.NativeProcessFactory
-import org.bitcoins.core.hd.HDPurposes
+import org.bitcoins.core.hd.HDPurpose
 import org.bitcoins.core.wallet.keymanagement.KeyManagerParams
 import org.bitcoins.crypto.{AesPassword, SchnorrPublicKey}
 import org.bitcoins.db._
@@ -21,7 +21,7 @@ import org.bitcoins.keymanager.config.KeyManagerAppConfig
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config._
 import org.bitcoins.rpc.config.BitcoindAuthCredentials.PasswordBased
-import org.bitcoins.rpc.config.BitcoindInstanceRemote
+import org.bitcoins.rpc.config.{BitcoindInstanceRemote, BitcoindRpcAppConfig}
 import org.scalastr.core.NostrPrivateKey
 import scodec.bits.ByteVector
 
@@ -44,8 +44,7 @@ case class OpReturnBotAppConfig(
     override val configOverrides: Vector[Config])(implicit system: ActorSystem)
     extends DbAppConfig
     with JdbcProfileComponent[OpReturnBotAppConfig]
-    with DbManagement
-    with Logging {
+    with DbManagement {
   implicit val ec: ExecutionContextExecutor = system.dispatcher
   override val moduleName: String = OpReturnBotAppConfig.moduleName
   override type ConfigType = OpReturnBotAppConfig
@@ -138,22 +137,13 @@ case class OpReturnBotAppConfig(
     config.getString(s"bitcoin-s.bitcoind.rpcUri")
   }
 
-  private lazy val bitcoindRpcUser: String = {
-    config.getString(s"bitcoin-s.bitcoind.auth.user")
-  }
-
-  private lazy val bitcoindRpcPassword: String = {
-    config.getString(s"bitcoin-s.bitcoind.auth.password")
-  }
+  private val bitcoindRpcAppConfig = BitcoindRpcAppConfig.fromDatadir(directory)
 
   private lazy val bitcoindInstance: BitcoindInstanceRemote = {
-    BitcoindInstanceRemote(network,
-                           new URI(bitcoindUri),
-                           new URI(bitcoindRpcUri),
-                           PasswordBased(
-                             bitcoindRpcUser,
-                             bitcoindRpcPassword
-                           ))
+    BitcoindInstanceRemote(
+      network,
+      new URI(bitcoindUri),
+      new URI(bitcoindRpcUri))(system, bitcoindRpcAppConfig)
   }
 
   lazy val receivingWalletName: String = {
@@ -208,7 +198,7 @@ case class OpReturnBotAppConfig(
   }
 
   lazy val kmParams: KeyManagerParams =
-    KeyManagerParams(seedPath, HDPurposes.SegWit, network)
+    KeyManagerParams(seedPath, HDPurpose.SegWit, network)
 
   lazy val aesPasswordOpt: Option[AesPassword] = kmConf.aesPasswordOpt
   lazy val bip39PasswordOpt: Option[String] = kmConf.bip39PasswordOpt
@@ -259,23 +249,20 @@ case class OpReturnBotAppConfig(
 
   override def start(): Future[Unit] = {
     logger.info(s"Initializing setup")
+    super.start().map { _ =>
+      val numMigrations = migrate().migrationsExecuted
+      logger.info(s"Applied $numMigrations")
 
-    if (Files.notExists(baseDatadir)) {
-      Files.createDirectories(baseDatadir)
+      initialize()
     }
 
-    val numMigrations = migrate().migrationsExecuted
-    logger.info(s"Applied $numMigrations")
-
-    initialize()
-    Future.unit
   }
 
   override def stop(): Future[Unit] = Future.unit
 
   override lazy val dbPath: Path = baseDatadir
 
-  override val allTables: List[TableQuery[Table[_]]] =
+  override lazy val allTables: List[TableQuery[Table[_]]] =
     List(OpReturnRequestDAO()(ec, this).table)
 }
 

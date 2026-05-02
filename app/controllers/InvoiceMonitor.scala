@@ -44,7 +44,7 @@ import org.bitcoins.crypto._
 import org.bitcoins.esplora.{EsploraClient, MempoolSpaceEsploraSite}
 import org.bitcoins.feeprovider._
 import org.bitcoins.lnd.rpc.{LndRpcClient, LndUtils}
-import org.bitcoins.rpc.client.v24.BitcoindV24RpcClient
+import org.bitcoins.rpc.client.common.BitcoindRpcClient
 import org.bitcoins.rpc.config.BitcoindInstance
 import org.scalastr.core._
 import play.api.libs.json._
@@ -62,7 +62,7 @@ object OpReturnMonitor {
 class OpReturnBitcoindClient(override val instance: BitcoindInstance)(implicit
     actorSystem: ActorSystem,
     config: OpReturnBotAppConfig)
-    extends BitcoindV24RpcClient(instance) {
+    extends BitcoindRpcClient(instance) {
 
   def createSpk(messageBytes: ByteVector): ScriptPubKey = {
     val asm = OP_RETURN +: BitcoinScriptUtil.calculatePushOp(
@@ -106,18 +106,17 @@ class OpReturnBitcoindClient(override val instance: BitcoindInstance)(implicit
 
       baseTx = BaseTransaction(
         version = Int32.two,
-        inputs = Seq(
+        inputs = Vector(
           TransactionInput(TransactionOutPoint(prevOut.txid,
                                                UInt32(prevOut.vout)),
                            ScriptSignature.empty,
                            TransactionConstants.disableRBFSequence)),
-        outputs = Seq(changeOutput, TransactionOutput(Satoshis.zero, spk)),
+        outputs = Vector(changeOutput, TransactionOutput(Satoshis.zero, spk)),
         lockTime = UInt32(106)
       )
 
-      signed <- this.signRawTransactionWithWallet(
-        baseTx,
-        Some(config.sendingWalletName))
+      signed <- this.signRawTransactionWithWallet(baseTx,
+                                                  config.sendingWalletName)
       _ =
         if (signed.complete) {
           logger.info("Transaction signed successfully")
@@ -153,17 +152,16 @@ class OpReturnBitcoindClient(override val instance: BitcoindInstance)(implicit
 
       baseTx: Transaction = BaseTransaction(
         version = Int32.two,
-        inputs = Seq(
+        inputs = Vector(
           TransactionInput(outpoint,
                            ScriptSignature.empty,
                            TransactionConstants.disableRBFSequence)),
-        outputs = Seq(changeOutput, TransactionOutput(Satoshis.zero, spk)),
+        outputs = Vector(changeOutput, TransactionOutput(Satoshis.zero, spk)),
         lockTime = UInt32(106)
       )
 
-      signed <- this.signRawTransactionWithWallet(
-        baseTx,
-        Some(config.receivingWalletName))
+      signed <- this.signRawTransactionWithWallet(baseTx,
+                                                  config.receivingWalletName)
       _ =
         if (signed.complete) {
           logger.info("Transaction signed successfully")
@@ -708,7 +706,7 @@ class InvoiceMonitor(
 
       getTxStart = System.currentTimeMillis()
       txDetailsOpt <- bitcoind
-        .getTransaction(txId, walletNameOpt = Some(walletName))
+        .getTransaction(txId, walletName = walletName)
         .map(Some(_))
         .recover(_ => None)
       getTxEnd = System.currentTimeMillis()

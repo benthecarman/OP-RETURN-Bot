@@ -16,7 +16,7 @@ import org.scalastr.core._
 import play.api.libs.json._
 import scodec.bits.ByteVector
 
-import java.net.URL
+import java.net.URI
 import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, Future}
@@ -32,9 +32,11 @@ trait NostrHandler extends Logging { self: InvoiceMonitor =>
       about = Some("Store a message forever in the bitcoin blockchain"),
       nip05 = Some("_@opreturnbot.com"),
       lud16 = Some("me@opreturnbot.com"),
-      website = Some(new URL("https://opreturnbot.com")),
-      picture =
-        Some(new URL("https://opreturnbot.com/assets/images/op-return-bot.png"))
+      website = Some(URI.create("https://opreturnbot.com").toURL),
+      picture = Some(
+        URI
+          .create("https://opreturnbot.com/assets/images/op-return-bot.png")
+          .toURL)
     )
 
     val event = NostrEvent.build(

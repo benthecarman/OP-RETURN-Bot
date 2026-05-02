@@ -27,7 +27,7 @@ import slick.dbio.DBIOAction
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
-import java.net.{URL, URLDecoder}
+import java.net.{URI, URLDecoder}
 import java.security.MessageDigest
 import javax.imageio.ImageIO
 import javax.inject.{Inject, Singleton}
@@ -210,7 +210,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val hash = CryptoUtil.sha256(ByteVector(metadata.getBytes("UTF-8"))).hex
 
       val url =
-        new URL(s"https://opreturnbot.com/lnurlp/$hash?user=$user")
+        URI.create(s"https://opreturnbot.com/lnurlp/$hash?user=$user").toURL
 
       val response =
         LnURLPayResponse(

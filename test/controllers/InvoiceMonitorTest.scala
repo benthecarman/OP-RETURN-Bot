@@ -168,10 +168,10 @@ class InvoiceMonitorTest extends BitcoinSFixture {
             .map(_ => ())
             .recover(_ => ())
 
-          addr <- bitcoind.getNewAddress(Some(sendingWalletName))
+          addr <- bitcoind.getNewAddress(sendingWalletName)
           _ <- bitcoind.sendToAddress(addr,
                                       fundAmt,
-                                      walletNameOpt = Some(miningWalletName))
+                                      walletName = miningWalletName)
 
           _ <- bitcoind
             .createWallet(receivingWalletName,
@@ -180,10 +180,10 @@ class InvoiceMonitorTest extends BitcoinSFixture {
             .map(_ => ())
             .recover(_ => ())
 
-          addr <- bitcoind.getNewAddress(Some(receivingWalletName))
+          addr <- bitcoind.getNewAddress(receivingWalletName)
           _ <- bitcoind.sendToAddress(addr,
                                       fundAmt,
-                                      walletNameOpt = Some(miningWalletName))
+                                      walletName = miningWalletName)
 
           _ <- bitcoind.generateToAddress(blocks = 1, address)
         } yield (bitcoind, lndA, lndB)
@@ -217,7 +217,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
   }
 
   after {
-    val f = config.dropAll().map(_ => config.clean())
+    val f = Future { config.clean() }
     Await.result(f, 10.seconds)
   }
 
@@ -249,11 +249,9 @@ class InvoiceMonitorTest extends BitcoinSFixture {
 
       bal <- bitcoind.getBalance(sendingWalletName)
 
-      hash <- bitcoind.getRawMemPool.map(_.head)
+      hash <- bitcoind.getRawMemPool().map(_.txids.head)
       tx <- bitcoind.getRawTransactionRaw(hash)
-      txDetails <- bitcoind.getTransaction(hash,
-                                           walletNameOpt =
-                                             Some(sendingWalletName))
+      txDetails <- bitcoind.getTransaction(hash, walletName = sendingWalletName)
     } yield {
       assert(invoiceDb.invoice == invDb.invoice)
       assert(invoiceDb.opReturnRequestId == requestDb.id.get)
@@ -286,7 +284,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
     assert(message.length > 80)
 
     for {
-      mempool <- bitcoind.getRawMemPool
+      mempool <- bitcoind.getRawMemPool().map(_.txids)
       _ = assert(mempool.isEmpty)
 
       (invDb, reqDb) <- monitor.createInvoice(
@@ -304,11 +302,9 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       bal <- bitcoind.getBalance(sendingWalletName)
       report <- monitor.createReport(None)
 
-      hash <- bitcoind.getRawMemPool.map(_.head)
+      hash <- bitcoind.getRawMemPool().map(_.txids.head)
       tx <- bitcoind.getRawTransactionRaw(hash)
-      txDetails <- bitcoind.getTransaction(hash,
-                                           walletNameOpt =
-                                             Some(sendingWalletName))
+      txDetails <- bitcoind.getTransaction(hash, walletName = sendingWalletName)
     } yield {
       assert(invoiceDb.invoice == invDb.invoice)
       assert(invoiceDb.opReturnRequestId == requestDb.id.get)
@@ -336,7 +332,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
     monitor.startSubscription()
 
     for {
-      mempool <- bitcoind.getRawMemPool
+      mempool <- bitcoind.getRawMemPool().map(_.txids)
       _ = assert(mempool.isEmpty)
 
       (invDb, reqDb) <- monitor.createInvoice(
@@ -350,9 +346,9 @@ class InvoiceMonitorTest extends BitcoinSFixture {
 
       _ <- lndB.sendPayment(invoice, 60.seconds)
       _ <- TestAsyncUtil.awaitConditionF(() =>
-        bitcoind.getRawMemPool.map(_.size == 1))
+        bitcoind.getRawMemPool().map(_.txids.size == 1))
 
-      hash <- bitcoind.getRawMemPool.map(_.head)
+      hash <- bitcoind.getRawMemPool().map(_.txids.head)
       tx <- bitcoind.getRawTransactionRaw(hash)
 
       _ <- TestAsyncUtil.awaitConditionF(() =>
@@ -402,7 +398,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
     val spk = bitcoind.createSpk(messageBytes)
 
     for {
-      mempool <- bitcoind.getRawMemPool
+      mempool <- bitcoind.getRawMemPool().map(_.txids)
       _ = assert(mempool.isEmpty)
 
       startBal <- bitcoind.getBalance(sendingWalletName)
@@ -418,9 +414,9 @@ class InvoiceMonitorTest extends BitcoinSFixture {
         SatoshisPerVirtualByte.fromLong(1),
         spendUnconfirmed = false)
       _ <- TestAsyncUtil.awaitConditionF(() =>
-        bitcoind.getRawMemPool.map(_.size == 1))
+        bitcoind.getRawMemPool().map(_.txids.size == 1))
 
-      paymentTxId <- bitcoind.getRawMemPool.map(_.head)
+      paymentTxId <- bitcoind.getRawMemPool().map(_.txids.head)
 
       // simulate walletnotify call
       paymentTx <- bitcoind.getRawTransactionRaw(paymentTxId)
@@ -433,18 +429,17 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       onchainOpt <- monitor.onChainDAO.read(onchainDb.address)
       report <- monitor.createReport(None)
 
-      hash <- bitcoind.getRawMemPool.map(_.last)
+      hash <- bitcoind.getRawMemPool().map(_.txids.last)
       tx <- bitcoind.getRawTransactionRaw(hash)
 
-      mineAddr <- bitcoind.getNewAddress(Some(miningWalletName))
+      mineAddr <- bitcoind.getNewAddress(miningWalletName)
       _ <- bitcoind.generateToAddress(1, mineAddr)
 
       bal <- bitcoind.getBalance(sendingWalletName)
       recvBal <- bitcoind.getBalance(receivingWalletName)
 
       txDetails <- bitcoind.getTransaction(hash,
-                                           walletNameOpt =
-                                             Some(receivingWalletName))
+                                           walletName = receivingWalletName)
     } yield {
       assert(tx.outputs.exists(o =>
         o.value == Satoshis.zero && o.scriptPubKey == spk))
@@ -507,7 +502,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
     monitor.startTxSubscription()
 
     for {
-      mempool <- bitcoind.getRawMemPool
+      mempool <- bitcoind.getRawMemPool().map(_.txids)
       _ = assert(mempool.isEmpty)
 
       (invDb, onchainDb, reqDb) <- monitor.createUnified(
@@ -521,12 +516,12 @@ class InvoiceMonitorTest extends BitcoinSFixture {
         SatoshisPerVirtualByte.fromLong(1),
         spendUnconfirmed = false)
       _ <- TestAsyncUtil.awaitConditionF(() =>
-        bitcoind.getRawMemPool.map(_.size == 1))
+        bitcoind.getRawMemPool().map(_.txids.size == 1))
 
-      paymentTxId <- bitcoind.getRawMemPool.map(_.head)
+      paymentTxId <- bitcoind.getRawMemPool().map(_.txids.head)
 
       // mine a block to trigger the op_return
-      mineAddr <- bitcoind.getNewAddress(Some(miningWalletName))
+      mineAddr <- bitcoind.getNewAddress(miningWalletName)
       _ <- bitcoind.generateToAddress(1, mineAddr)
       // simulate walletnotify call
       paymentTx <- bitcoind.getRawTransactionRaw(paymentTxId)
@@ -539,7 +534,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       onchainOpt <- monitor.onChainDAO.read(onchainDb.address)
       report <- monitor.createReport(None)
 
-      hash <- bitcoind.getRawMemPool.map(_.head)
+      hash <- bitcoind.getRawMemPool().map(_.txids.head)
       tx <- bitcoind.getRawTransactionRaw(hash)
 
       inv <- lndA.lookupInvoice(invDb.invoice.lnTags.paymentHash)
@@ -589,7 +584,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       new InvoiceMonitor(lndA, bitcoind, feeProvider, None, ArrayBuffer.empty)
 
     for {
-      mempool <- bitcoind.getRawMemPool
+      mempool <- bitcoind.getRawMemPool().map(_.txids)
       _ = assert(mempool.isEmpty)
 
       (invDb, onchainDb, reqDb) <- monitor.createUnified(
@@ -603,12 +598,12 @@ class InvoiceMonitorTest extends BitcoinSFixture {
         SatoshisPerVirtualByte.fromLong(1),
         spendUnconfirmed = false)
       _ <- TestAsyncUtil.awaitConditionF(() =>
-        bitcoind.getRawMemPool.map(_.size == 1))
+        bitcoind.getRawMemPool().map(_.txids.size == 1))
 
-      paymentTxId <- bitcoind.getRawMemPool.map(_.head)
+      paymentTxId <- bitcoind.getRawMemPool().map(_.txids.head)
 
       // mine a block to trigger the op_return
-      mineAddr <- bitcoind.getNewAddress(Some(miningWalletName))
+      mineAddr <- bitcoind.getNewAddress(miningWalletName)
       _ <- bitcoind.generateToAddress(1, mineAddr)
 
       num <- monitor.processUnhandledRequests(None, liftMempoolLimit = false)
@@ -621,12 +616,12 @@ class InvoiceMonitorTest extends BitcoinSFixture {
         onchainOpt.exists(_.amountPaid.contains(onchainDb.expectedAmount)))
 
       _ <- TestAsyncUtil.awaitConditionF(() =>
-        bitcoind.getRawMemPool.map(_.nonEmpty))
+        bitcoind.getRawMemPool().map(_.txids.nonEmpty))
 
       findOpt <- monitor.opReturnDAO.read(reqDb.id.get)
       report <- monitor.createReport(None)
 
-      hash <- bitcoind.getRawMemPool.map(_.head)
+      hash <- bitcoind.getRawMemPool().map(_.txids.head)
       tx <- bitcoind.getRawTransactionRaw(hash)
 
       inv <- lndA.lookupInvoice(invDb.invoice.lnTags.paymentHash)
@@ -676,7 +671,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       new InvoiceMonitor(lndA, bitcoind, feeProvider, None, ArrayBuffer.empty)
 
     for {
-      mempool <- bitcoind.getRawMemPool
+      mempool <- bitcoind.getRawMemPool().map(_.txids)
       _ = assert(mempool.isEmpty)
 
       (invDb, reqDb) <- monitor.createInvoice(
@@ -693,7 +688,7 @@ class InvoiceMonitorTest extends BitcoinSFixture {
       num <- monitor.processUnhandledRequests(None, liftMempoolLimit = false)
       _ = assert(num == 1)
 
-      hash <- bitcoind.getRawMemPool.map(_.head)
+      hash <- bitcoind.getRawMemPool().map(_.txids.head)
       tx <- bitcoind.getRawTransactionRaw(hash)
 
       _ <- TestAsyncUtil.awaitConditionF(() =>
