@@ -37,7 +37,7 @@
     <logger name="org.bitcoins" level="DEBUG"/>
     <logger name="com.gargoylesoftware.htmlunit.javascript" level="OFF"/>
     <logger name="slick" level="OFF"/>
-    <logger name="io.netty" level="OFF"/>
+    <logger name="io.grpc" level="OFF"/>
     <logger name="org.apache" level="OFF"/>
 
     <root level="DEBUG">

@@ -58,12 +58,12 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
     val actorSystemA =
       ActorSystem.create("bitcoin-s-lnd-test-" + FileUtil.randomDirName)
     val clientA = LndRpcTestClient
-      .fromSbtDownload(Some(bitcoind), Some("v0.19.0-beta"))(actorSystemA)
+      .fromSbtDownload(Some(bitcoind), Some("v0.20.1-beta"))(actorSystemA)
 
     val actorSystemB =
       ActorSystem.create("bitcoin-s-lnd-test-" + FileUtil.randomDirName)
     val clientB = LndRpcTestClient
-      .fromSbtDownload(Some(bitcoind), Some("v0.19.0-beta"))(actorSystemB)
+      .fromSbtDownload(Some(bitcoind), Some("v0.20.1-beta"))(actorSystemB)
 
     val clientsF = for {
       a <- clientA.start()
@@ -228,7 +228,14 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     println(s"afterEach()")
-    config.clean()
+    val cleanResult = config.clean()
+    println(
+      s"""cleanResult:
+         |  database       = ${cleanResult.database}
+         |  schemasCleaned = ${cleanResult.schemasCleaned}
+         |  schemasDropped = ${cleanResult.schemasDropped}
+         |  warnings       = ${cleanResult.warnings}""".stripMargin
+    )
     val f = config.stop()
     Await.result(f, 10.seconds)
   }
