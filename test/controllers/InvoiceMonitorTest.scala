@@ -49,6 +49,8 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
   // as of now we can't pass a custom bitcoind wallet name to
   // LndRpcTestUtil.fundLnNodes, so we have to use the default wallet for mining
   final val miningWalletName = BitcoindRpcClient.DEFAULT_WALLET_NAME
+  private val lndVersionOpt = Some("v0.20.1-beta")
+  private val bitcoindVersion = "29.0"
 
   def createNodePair(
       bitcoind: OpReturnBitcoindClient,
@@ -58,12 +60,12 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
     val actorSystemA =
       ActorSystem.create("bitcoin-s-lnd-test-" + FileUtil.randomDirName)
     val clientA = LndRpcTestClient
-      .fromSbtDownload(Some(bitcoind), Some("v0.20.1-beta"))(actorSystemA)
+      .fromSbtDownload(Some(bitcoind), lndVersionOpt)(actorSystemA)
 
     val actorSystemB =
       ActorSystem.create("bitcoin-s-lnd-test-" + FileUtil.randomDirName)
     val clientB = LndRpcTestClient
-      .fromSbtDownload(Some(bitcoind), Some("v0.20.1-beta"))(actorSystemB)
+      .fromSbtDownload(Some(bitcoind), lndVersionOpt)(actorSystemB)
 
     val clientsF = for {
       a <- clientA.start()
@@ -88,9 +90,7 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
       (client, otherClient) <- clientsF
 
       _ <- LndRpcTestUtil.connectLNNodes(client, otherClient)
-      _ = println(s"Done connecting nodes")
       _ <- LndRpcTestUtil.fundLNNodes(bitcoind, client, otherClient)
-      _ = println(s"Done funding nodes")
       _ <- AsyncUtil.awaitConditionF(() => isSynced)
       _ <- AsyncUtil.awaitConditionF(() => isFunded)
 
@@ -99,7 +99,6 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
                                       n2 = otherClient,
                                       amt = channelSize,
                                       pushAmt = channelPushAmt)
-      _ = println(s"Done opening channel")
       _ <- TestAsyncUtil.nonBlockingSleep(2.seconds)
     } yield (client, otherClient)
   }
@@ -114,11 +113,11 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
       .asScala
       .toList
       .filter(f => Files.isDirectory(f))
-    val filtered = fileList.filter(f => f.toString.contains("30.2"))
+    val filtered = fileList.filter(f => f.toString.contains(bitcoindVersion))
 
     if (filtered.isEmpty)
       throw new RuntimeException(
-        s"bitcoind v29.0 is not installed in $binaryDirectory. Run `sbt downloadBitcoind`")
+        s"bitcoind v${bitcoindVersion} is not installed in $binaryDirectory. Run `sbt downloadBitcoind`")
 
     // might be multiple versions downloaded for
     // each major version, i.e. 0.16.2 and 0.16.3
@@ -135,7 +134,6 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
   override def withFixture(test: OneArgAsyncTest): FutureOutcome = {
     makeDependentFixture[FixtureParam](
       () => {
-        println(s"Setting up fixture")
         val uri = new URI("http://localhost:" + RpcUtil.randomPort)
         val rpcUri = new URI("http://localhost:" + RpcUtil.randomPort)
         val configFile =
@@ -160,16 +158,13 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
 
         for {
           _ <- bitcoind.start()
-          createWalletResult <- bitcoind
+          _ <- bitcoind
             .createWallet(miningWalletName,
                           avoidReuse = true,
                           descriptors = true)
-
-          _ = println(s"Create wallet result=$createWalletResult")
           address <- bitcoind.getNewAddress(miningWalletName)
           _ <- bitcoind.generateToAddress(blocks = 101, address)
           (lndA, lndB) <- createNodePair(bitcoind)
-          _ = println(s"Done creating lnd nodes")
           _ <- bitcoind
             .createWallet(sendingWalletName,
                           avoidReuse = true,
@@ -193,7 +188,6 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
 
           _ <- bitcoind.generateToAddress(blocks = 1, address)
         } yield {
-          println(s"Done setting up fixture")
           (bitcoind, lndA, lndB)
         }
       },
@@ -220,22 +214,13 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
     OpReturnBotAppConfig(tmpDir(), Vector(walletNameConfig))
 
   override def beforeEach(): Unit = {
-    logger.info(s"beforeEach()")
     val startF = config.start()
     startF.failed.foreach(_.printStackTrace())
     Await.result(startF, 10.seconds)
   }
 
   override def afterEach(): Unit = {
-    println(s"afterEach()")
-    val cleanResult = config.clean()
-    println(
-      s"""cleanResult:
-         |  database       = ${cleanResult.database}
-         |  schemasCleaned = ${cleanResult.schemasCleaned}
-         |  schemasDropped = ${cleanResult.schemasDropped}
-         |  warnings       = ${cleanResult.warnings}""".stripMargin
-    )
+    val _ = config.clean()
     val f = config.stop()
     Await.result(f, 10.seconds)
   }

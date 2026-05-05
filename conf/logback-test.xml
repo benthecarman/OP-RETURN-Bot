@@ -34,13 +34,13 @@
 
     <logger name="play" level="INFO"/>
     <logger name="application" level="DEBUG"/>
-    <logger name="org.bitcoins" level="DEBUG"/>
+    <logger name="org.bitcoins" level="OFF"/>
     <logger name="com.gargoylesoftware.htmlunit.javascript" level="OFF"/>
     <logger name="slick" level="OFF"/>
     <logger name="io.grpc" level="OFF"/>
     <logger name="org.apache" level="OFF"/>
 
-    <root level="DEBUG">
+    <root level="INFO">
         <appender-ref ref="ASYNC"/>
         <appender-ref ref="FILE"/>
     </root>

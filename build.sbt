@@ -15,8 +15,6 @@ val logbackV = "1.5.32"
 
 ThisBuild / scalaVersion := "2.13.18"
 
-resolvers += Resolver.sonatypeRepo("snapshots")
-
 resolvers +=
   "Sonatype OSS Snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots"
 
@@ -82,6 +80,7 @@ lazy val root = project
       "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV
     ),
     dependencyOverrides ++= Seq(
+      //leaving these for now, depending on how you build to deploy the app you may need these?
 //      "ch.qos.logback" % "logback-classic" % "1.2.11",
 //      "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
     ),
