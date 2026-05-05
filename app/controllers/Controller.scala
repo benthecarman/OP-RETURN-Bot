@@ -38,25 +38,21 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 @Singleton
-class Controller @Inject() (cc: MessagesControllerComponents)
-    extends MessagesAbstractController(cc)
+class Controller @Inject() (
+    cc: MessagesControllerComponents,
+    injectedSystem: ActorSystem,
+    injectedConfig: OpReturnBotAppConfig
+) extends MessagesAbstractController(cc)
     with Logging {
 
   import controllers.Forms._
 
-  implicit lazy val system: ActorSystem = {
-    val system = ActorSystem("op-return-bot")
-    system.log.info("Pekko logger started")
-    system
-  }
+  implicit lazy val system: ActorSystem = injectedSystem
   implicit lazy val ec: ExecutionContext = system.dispatcher
 
-  implicit lazy val config: OpReturnBotAppConfig =
-    OpReturnBotAppConfig.fromDefaultDatadir()
+  implicit lazy val config: OpReturnBotAppConfig = injectedConfig
 
   lazy val lnd: LndRpcClient = config.lndRpcClient
-
-  val startF: Future[Unit] = config.start()
 
   val uriErrorString = "Error: try again"
   var uri: String = uriErrorString
@@ -81,8 +77,7 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   private val postUrl = routes.Controller.createRequest
 
   private val recentTransactions: ArrayBuffer[DoubleSha256DigestBE] = {
-    val f = startF.flatMap(_ => opReturnDAO.lastFiveCompleted())
-    val res = Await.result(f, 30.seconds)
+    val res = Await.result(opReturnDAO.lastFiveCompleted(), 30.seconds)
     mutable.ArrayBuffer[DoubleSha256DigestBE]().addAll(res)
   }
 
@@ -103,28 +98,51 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       "Sending and receiving wallets must be different")
   }
 
-  startF.map { _ =>
-    setURI()
-
-    // Load or create bitcoind wallets
-    for {
+  private val controllerStartupF: Future[Unit] = {
+    val walletInitF = for {
+      _ <- setURI()
       wallets <- invoiceMonitor.bitcoind.listWallets
       _ <-
         if (!wallets.contains(config.sendingWalletName)) {
-          invoiceMonitor.bitcoind.loadWallet(config.sendingWalletName)
+          invoiceMonitor.bitcoind
+            .loadWallet(config.sendingWalletName)
+            .map(_ => ())
         } else Future.unit
-
       _ <-
         if (!wallets.contains(config.receivingWalletName)) {
-          invoiceMonitor.bitcoind.loadWallet(config.receivingWalletName)
+          invoiceMonitor.bitcoind
+            .loadWallet(config.receivingWalletName)
+            .map(_ => ())
         } else Future.unit
     } yield ()
 
-    telegramHandler.start()
-    val _ = invoiceMonitor.startSubscription()
-    val _ = invoiceMonitor.startBlockSubscription()
-    invoiceMonitor.setNostrMetadata()
-    invoiceMonitor.listenForDMs()
+    walletInitF.map { _ =>
+      telegramHandler.start().failed.foreach { err =>
+        logger.error("Failed to start Telegram handler", err)
+      }
+
+      invoiceMonitor.startSubscription().failed.foreach { err =>
+        logger.error("Failed to start invoice subscription", err)
+      }
+
+      invoiceMonitor.startBlockSubscription().failed.foreach { err =>
+        logger.error("Failed to start block subscription", err)
+      }
+
+      invoiceMonitor.setNostrMetadata().failed.foreach { err =>
+        logger.error("Failed to set Nostr metadata", err)
+      }
+
+      invoiceMonitor.listenForDMs().failed.foreach { err =>
+        logger.error("Failed to start Nostr DM listener", err)
+      }
+
+      ()
+    }
+  }
+
+  controllerStartupF.failed.foreach { err =>
+    logger.error("Failed to initialize controller services", err)
   }
 
   def notFound(route: String): Action[AnyContent] = {
