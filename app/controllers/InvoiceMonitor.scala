@@ -533,9 +533,18 @@ class InvoiceMonitor(
   }
 
   def createReceiveAddress(): Future[BitcoinAddress] = {
-    bitcoind.getNewAddress(OpReturnMonitor.ADDRESS_LABEL,
-                           Bech32m,
-                           config.receivingWalletName)
+    bitcoind
+      .getNewAddress(OpReturnMonitor.ADDRESS_LABEL,
+                     Bech32m,
+                     config.receivingWalletName)
+      .map { address =>
+        require(
+          address.networkParameters == config.network,
+          s"bitcoind returned an address on ${address.networkParameters}, " +
+            s"but expected ${config.network}. Check bitcoind's network config."
+        )
+        address
+      }
   }
 
   protected def createFakeInvoice(
@@ -987,7 +996,14 @@ class InvoiceMonitor(
 
       lnd
         .addInvoice(hash, sats.satoshis, expiry)
-        .map(t => (t.invoice, feeRate))
+        .map { t =>
+          require(
+            t.invoice.network.network == config.network,
+            s"lnd returned an invoice on ${t.invoice.network.network}, " +
+              s"but expected ${config.network}. Check lnd's network config."
+          )
+          (t.invoice, feeRate)
+        }
     }
   }
 
