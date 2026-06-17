@@ -17,10 +17,10 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>/home/ben/.op-return-bot/logs/op-return-bot.log</file>
+        <file>${HOME}/.op-return-bot/logs/op-return-bot-test.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- rollover daily -->
-            <fileNamePattern>/home/ben/.op-return-bot/logs/op-return-bot-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${HOME}/.op-return-bot/logs/op-return-bot-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
 
             <!-- each file should be at most 100MB, keep 2 days of history, and at most 2GB in the archive -->
             <maxFileSize>10MB</maxFileSize>
@@ -34,8 +34,11 @@
 
     <logger name="play" level="INFO"/>
     <logger name="application" level="DEBUG"/>
-
+    <logger name="org.bitcoins" level="OFF"/>
     <logger name="com.gargoylesoftware.htmlunit.javascript" level="OFF"/>
+    <logger name="slick" level="OFF"/>
+    <logger name="io.grpc" level="OFF"/>
+    <logger name="org.apache" level="OFF"/>
 
     <root level="INFO">
         <appender-ref ref="ASYNC"/>

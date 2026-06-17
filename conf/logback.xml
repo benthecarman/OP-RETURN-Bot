@@ -17,10 +17,10 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>/home/ben/.op-return-bot/logs/op-return-bot.log</file>
+        <file>${HOME}/.op-return-bot/logs/op-return-bot.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- rollover daily -->
-            <fileNamePattern>/home/ben/.op-return-bot/logs/op-return-bot-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${HOME}/.op-return-bot/logs/op-return-bot-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
 
             <!-- each file should be at most 100MB, keep 2 days of history, and at most 2GB in the archive -->
             <maxFileSize>10MB</maxFileSize>
