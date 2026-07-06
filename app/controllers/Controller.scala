@@ -156,12 +156,12 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       if (uri == uriErrorString) {
         setURI().map { _ =>
-          Ok(views.html.connect(uri, invoiceMonitor.nostrPubKey))
+          Ok(views.html.connect(uri))
             .withHeaders(("Onion-Location", onionAddr))
         }
       } else {
         Future.successful(
-          Ok(views.html.connect(uri, invoiceMonitor.nostrPubKey))
+          Ok(views.html.connect(uri))
             .withHeaders(("Onion-Location", onionAddr)))
       }
     }

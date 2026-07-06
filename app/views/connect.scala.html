@@ -1,5 +1,4 @@
-@import org.bitcoins.crypto.SchnorrPublicKey
-@(uri: String, pubkey: SchnorrPublicKey)(implicit request: MessagesRequestHeader)
+@(uri: String)(implicit request: MessagesRequestHeader)
 
 @main("Connect") {
 
@@ -26,11 +25,9 @@
                     }</span></a>
                 </li>
                 <li>
-                    <a style="width: 300px" href="https://astral.ninja/@{
-                        pubkey.hex
-                    }" class="btn btn-primary tra-hover">
-                        <i class="fa fa-paper-plane" aria-hidden="true" style="padding-right: 22px"></i><span>&nbsp;@{
-                        "@OP-RETURN-Bot"
+                    <a style="width: 300px" href="https://t.me/OP_RETURN_BOT" class="btn btn-primary tra-hover">
+                        <i class="fab fa-telegram" aria-hidden="true" style="padding-right: 22px"></i><span>&nbsp;@{
+                        "@OP_RETURN_BOT"
                     }</span></a>
                 </li>
                 <li>
