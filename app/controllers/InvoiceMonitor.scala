@@ -937,8 +937,8 @@ class InvoiceMonitor(
       message: ByteVector,
       noTwitter: Boolean): Future[(CurrencyUnit, SatoshisPerVirtualByte)] = {
     require(
-      message.length <= 90_000,
-      "OP_Return message received was too long, must be less than 90,000 bytes")
+      MessageLimits.isAllowed(message),
+      MessageLimits.TooLongError)
 
     val rateF = fetchFeeRate()
     val heightF = lnd.getInfo.map(_.blockHeight.toLong)

@@ -86,7 +86,7 @@ class McpController @Inject() (
               "properties" -> Json.obj(
                 "message" -> Json.obj(
                   "type" -> "string",
-                  "description" -> "The message to write (max 80 bytes)"
+                  "description" -> MessageLimits.Description
                 ),
                 "noTwitter" -> Json.obj(
                   "type" -> "boolean",
@@ -105,7 +105,7 @@ class McpController @Inject() (
               "properties" -> Json.obj(
                 "message" -> Json.obj(
                   "type" -> "string",
-                  "description" -> "The message to write (max 80 bytes)"
+                  "description" -> MessageLimits.Description
                 ),
                 "noTwitter" -> Json.obj(
                   "type" -> "boolean",

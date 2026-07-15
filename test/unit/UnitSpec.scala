@@ -1,6 +1,6 @@
 package unit
 
-import controllers.Forms
+import controllers.{Forms, MessageLimits}
 import org.scalatestplus.play.PlaySpec
 import play.api.data.FormError
 import play.api.mvc._
@@ -37,6 +37,22 @@ class UnitSpec extends PlaySpec {
       val request = boundForm.value.get
 
       request.message must equal("foo")
+    }
+
+    "accept a message at the maximum byte size" in {
+      val message = "a" * MessageLimits.MaxBytes.toInt
+      val boundForm = Forms.opReturnRequestForm.bind(Map("message" -> message))
+
+      boundForm.hasErrors mustBe false
+    }
+
+    "reject a message over the maximum byte size" in {
+      val message = "a" * (MessageLimits.MaxBytes.toInt + 1)
+      val boundForm = Forms.opReturnRequestForm.bind(Map("message" -> message))
+
+      boundForm.hasErrors mustBe true
+      boundForm.error("message").map(_.message) mustBe Some(
+        MessageLimits.TooLongError)
     }
 
   }

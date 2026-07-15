@@ -12,7 +12,7 @@
       properties: {
         message: {
           type: "string",
-          description: "The message to write (max 80 bytes)",
+          description: "The message to write (max 99,000 bytes)",
         },
         noTwitter: {
           type: "boolean",
@@ -51,7 +51,7 @@
       properties: {
         message: {
           type: "string",
-          description: "The message to write (max 80 bytes)",
+          description: "The message to write (max 99,000 bytes)",
         },
         noTwitter: {
           type: "boolean",
