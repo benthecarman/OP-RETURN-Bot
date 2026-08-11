@@ -936,9 +936,7 @@ class InvoiceMonitor(
   private def getPaymentParams(
       message: ByteVector,
       noTwitter: Boolean): Future[(CurrencyUnit, SatoshisPerVirtualByte)] = {
-    require(
-      MessageLimits.isAllowed(message),
-      MessageLimits.TooLongError)
+    require(MessageLimits.isAllowed(message), MessageLimits.TooLongError)
 
     val rateF = fetchFeeRate()
     val heightF = lnd.getInfo.map(_.blockHeight.toLong)
@@ -1160,7 +1158,7 @@ class InvoiceMonitor(
 
   def createNip5Unified(name: String, publicKey: NostrPublicKey): Future[
     (InvoiceDb, OnChainPaymentDb, OpReturnRequestDb)] = {
-    if (takenNames.contains(name)) {
+    if (takenNames.exists(_.equalsIgnoreCase(name))) {
       Future.failed(
         new IllegalArgumentException(s"Cannot create invoice for NIP-05 $name"))
     } else {
@@ -1197,12 +1195,12 @@ class InvoiceMonitor(
               btcPrice = 0
             )
 
-          val action = nip5DAO.getPublicKeyAction(name).flatMap {
-            case Some(key) =>
-              val nostrKey = NostrPublicKey(key)
-              DBIO.failed(new IllegalArgumentException(
-                s"Cannot create invoice for NIP-05 $name, already exists for key $nostrKey"))
-            case None =>
+          val action = nip5DAO.nameExistsAction(name).flatMap {
+            case true =>
+              DBIO.failed(
+                new IllegalArgumentException(
+                  s"Cannot create invoice for NIP-05 $name, already exists"))
+            case false =>
               for {
                 createdReq <- opReturnDAO.createAction(requestDb)
                 onchainDb = OnChainPaymentDb(
@@ -1225,7 +1223,8 @@ class InvoiceMonitor(
               } yield (createdInv, createdOnChain, createdReq)
           }
 
-          invoiceDAO.safeDatabase.run(action)
+          import invoiceDAO.profile.api._
+          invoiceDAO.safeDatabase.run(action.transactionally)
         }
     }
   }

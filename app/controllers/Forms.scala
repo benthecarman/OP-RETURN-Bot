@@ -27,9 +27,12 @@ object Forms {
 
   val nip5RequestForm: Form[Nip5Request] = Form(
     mapping(
-      "name" -> nonEmptyText.verifying(
-        "Name was too long, max length is 10 characters",
-        _.getBytes.length <= 10),
+      "name" -> nonEmptyText
+        .verifying("Name was too long, max length is 10 characters",
+                   _.getBytes.length <= 10)
+        .verifying(
+          "Name can only contain lowercase letters, numbers, '-', '_' and '.'",
+          _.matches("[a-z0-9._-]+")),
       "pubkey" -> text.verifying(str =>
         NostrPublicKey.fromStringT(str).isSuccess)
     )(Nip5Request.apply)(Nip5Request.unapply)

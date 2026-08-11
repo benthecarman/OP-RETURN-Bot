@@ -10,7 +10,6 @@ import org.bitcoins.core.config.MainNet
 import org.bitcoins.core.currency._
 import org.bitcoins.core.protocol.ln.LnInvoice
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
-import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.feeprovider.MempoolSpaceProvider
@@ -203,6 +202,20 @@ class Controller @Inject() (cc: MessagesControllerComponents)
     }
   }
 
+  private val minSendable: MilliSatoshis = MilliSatoshis(Satoshis.one)
+  private val maxSendable: MilliSatoshis = MilliSatoshis(Bitcoins.one)
+
+  private def lnurlError(reason: String): Future[Result] = {
+    val error = Json.obj("status" -> "ERROR", "reason" -> reason)
+    Future.successful(
+      BadRequest(error).withHeaders(
+        "Access-Control-Allow-Origin" -> "*",
+        "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+        "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+        "Access-Control-Allow-Credentials" -> "false"
+      ))
+  }
+
   def getLnurlPay(user: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
       val metadata =
@@ -215,8 +228,8 @@ class Controller @Inject() (cc: MessagesControllerComponents)
       val response =
         LnURLPayResponse(
           callback = url,
-          maxSendable = MilliSatoshis(Bitcoins.one),
-          minSendable = MilliSatoshis(Satoshis.one),
+          maxSendable = maxSendable,
+          minSendable = minSendable,
           metadata = metadata,
           nostrPubkey = Some(invoiceMonitor.nostrPubKey),
           allowsNostr = Some(true)
@@ -235,44 +248,52 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def lnurlPay(meta: String): Action[AnyContent] = {
     Action.async { implicit request: MessagesRequest[AnyContent] =>
-      request.getQueryString("amount") match {
-        case Some(amountStr) =>
-          val amount = MilliSatoshis(amountStr.toLong)
+      val amountOpt = request
+        .getQueryString("amount")
+        .flatMap(str => Try(MilliSatoshis(str.toLong)).toOption)
 
+      amountOpt match {
+        case Some(amount) if amount >= minSendable && amount <= maxSendable =>
           request.getQueryString("nostr") match {
             case Some(eventStr) =>
               logger.info("Receiving zap request!")
               // nostr zap
-              val (_, decoded) = Try {
+              val eventT = Try {
                 val decoded = URLDecoder.decode(eventStr, "UTF-8")
                 val event = Json.parse(decoded).as[NostrEvent]
                 (event, decoded)
-              }.getOrElse {
+              }.orElse(Try {
                 val event = Json.parse(eventStr).as[NostrEvent]
                 (event, eventStr)
-              }
+              })
 
-              val hash = CryptoUtil.sha256(decoded)
-              val myKey = invoiceMonitor.nostrPubKey
+              eventT match {
+                case Success((event, decoded))
+                    if NostrEvent.isValidZapRequest(event, amount, None) =>
+                  val hash = CryptoUtil.sha256(decoded)
+                  val myKey = invoiceMonitor.nostrPubKey
 
-              for {
-                invoice <- lnd.addInvoice(hash, amount, 86400)
-                db = ZapDb(rHash = invoice.rHash.hash,
-                           invoice = invoice.invoice,
-                           myKey = myKey,
-                           amount = amount,
-                           request = decoded,
-                           noteId = None,
-                           time = TimeUtil.currentEpochSecond)
-                _ <- zapDAO.create(db)
-              } yield {
-                val response = LnURLPayInvoice(invoice.invoice, None)
-                Ok(Json.toJson(response)).withHeaders(
-                  "Access-Control-Allow-Origin" -> "*",
-                  "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
-                  "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-                  "Access-Control-Allow-Credentials" -> "false"
-                )
+                  for {
+                    invoice <- lnd.addInvoice(hash, amount, 86400)
+                    db = ZapDb(rHash = invoice.rHash.hash,
+                               invoice = invoice.invoice,
+                               myKey = myKey,
+                               amount = amount,
+                               request = decoded,
+                               noteId = None,
+                               time = TimeUtil.currentEpochSecond)
+                    _ <- zapDAO.create(db)
+                  } yield {
+                    val response = LnURLPayInvoice(invoice.invoice, None)
+                    Ok(Json.toJson(response)).withHeaders(
+                      "Access-Control-Allow-Origin" -> "*",
+                      "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
+                      "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
+                      "Access-Control-Allow-Credentials" -> "false"
+                    )
+                  }
+                case _ =>
+                  lnurlError("Invalid zap request")
               }
             case None =>
               // normal lnurl-pay
@@ -288,16 +309,11 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                 )
               }
           }
+        case Some(_) =>
+          lnurlError(
+            s"Amount out of range, min ${minSendable.toLong} msat, max ${maxSendable.toLong} msat")
         case None =>
-          val error =
-            Json.obj("status" -> "ERROR", "reason" -> "no amount given")
-          Future.successful(
-            BadRequest(error).withHeaders(
-              "Access-Control-Allow-Origin" -> "*",
-              "Access-Control-Allow-Methods" -> "OPTIONS, GET, POST, PUT, DELETE, HEAD",
-              "Access-Control-Allow-Headers" -> "Accept, Content-Type, Origin, X-Json, X-Prototype-Version, X-Requested-With",
-              "Access-Control-Allow-Credentials" -> "false"
-            ))
+          lnurlError("no valid amount given")
       }
     }
   }
@@ -505,25 +521,6 @@ class Controller @Inject() (cc: MessagesControllerComponents)
                   }
               }
           }
-      }
-    }
-  }
-
-  def publishTransaction(txHex: String): Action[AnyContent] = {
-    Try(Transaction.fromHex(txHex)) match {
-      case Failure(exception) =>
-        Action { implicit request: MessagesRequest[AnyContent] =>
-          BadRequest(exception.getMessage)
-        }
-      case Success(tx) => publishTransaction(tx)
-    }
-  }
-
-  def publishTransaction(tx: Transaction): Action[AnyContent] = {
-    Action.async { implicit request: MessagesRequest[AnyContent] =>
-      lnd.publishTransaction(tx).map {
-        case Some(error) => BadRequest(error)
-        case None        => Ok(tx.txIdBE.hex)
       }
     }
   }

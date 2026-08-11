@@ -41,6 +41,14 @@ case class Nip5DAO()(implicit
       ts: Vector[Nip5Db]): Query[Nip5Table, Nip5Db, Seq] =
     findByPrimaryKeys(ts.map(_.opReturnRequestId))
 
+  /** Checks if the name is taken by any registration, paid or not.
+    * Case-insensitive, NIP-05 names are lowercase by spec.
+    */
+  def nameExistsAction(
+      name: String): DBIOAction[Boolean, NoStream, Effect.Read] = {
+    table.filter(_.name.toLowerCase === name.toLowerCase).exists.result
+  }
+
   def getPublicKeyAction(name: String): DBIOAction[Option[SchnorrPublicKey],
                                                    NoStream,
                                                    Effect.Read] = {
