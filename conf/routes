@@ -35,6 +35,7 @@ OPTIONS     /mcp                             controllers.McpController.mcpOption
 GET         /sitemap.xml                     controllers.WellKnownController.sitemap
 GET         /auth.md                         controllers.WellKnownController.authMd
 GET         /.well-known/api-catalog         controllers.WellKnownController.apiCatalog
+GET         /.well-known/oauth-protected-resource  controllers.WellKnownController.oauthProtectedResource
 GET         /.well-known/agent-skills/index.json      controllers.WellKnownController.agentSkillsIndex
 GET         /.well-known/agent-skills/:name/SKILL.md  controllers.WellKnownController.agentSkill(name)
 

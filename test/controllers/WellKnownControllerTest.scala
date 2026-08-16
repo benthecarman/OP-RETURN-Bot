@@ -42,6 +42,16 @@ class WellKnownControllerTest extends PlaySpec {
       (linkset \ "anchor").as[String] mustBe "https://opreturnbot.com/"
     }
 
+    "serve protected resource metadata with no authorization servers" in {
+      val result = controller.oauthProtectedResource(FakeRequest())
+
+      status(result) mustBe OK
+      contentType(result) mustBe Some("application/json")
+      val json = contentAsJson(result)
+      (json \ "resource").as[String] mustBe "https://opreturnbot.com/"
+      (json \ "authorization_servers").as[Seq[String]] mustBe empty
+    }
+
     "serve an agent skills index with a matching digest" in {
       val indexResult = controller.agentSkillsIndex(FakeRequest())
 

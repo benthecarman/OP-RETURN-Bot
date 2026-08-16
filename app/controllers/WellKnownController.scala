@@ -68,4 +68,16 @@ class WellKnownController @Inject() (cc: ControllerComponents)
       NotFound
     }
   }
+
+  /** RFC 9728 Protected Resource Metadata. The service is unauthenticated, so
+    * the authorization server list is explicitly empty.
+    */
+  def oauthProtectedResource: Action[AnyContent] = Action {
+    val metadata = Json.obj(
+      "resource" -> "https://opreturnbot.com/",
+      "resource_name" -> "OP_RETURN Bot",
+      "authorization_servers" -> Json.arr()
+    )
+    Ok(metadata).as("application/json")
+  }
 }

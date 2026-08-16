@@ -64,6 +64,8 @@ object AgentContent {
       |  https://github.com/benthecarman/OP-RETURN-Bot/blob/master/docs/API.md
       |- MCP discovery document: /.well-known/mcp.json
       |- Agent Skills index: /.well-known/agent-skills/index.json
+      |- OAuth Protected Resource Metadata (no authorization servers):
+      |  /.well-known/oauth-protected-resource
       |- Contact: https://github.com/benthecarman/OP-RETURN-Bot/issues
       |""".stripMargin
 
