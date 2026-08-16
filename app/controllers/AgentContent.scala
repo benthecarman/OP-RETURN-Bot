@@ -32,14 +32,29 @@ object AgentContent {
       |""".stripMargin
 
   val authMd: String =
-    """# Authentication
+    """# OP_RETURN Bot auth.md
+      |
+      |OP_RETURN Bot writes messages to the Bitcoin blockchain via OP_RETURN
+      |outputs.
+      |
+      |## Authentication
       |
       |OP_RETURN Bot does not use authentication. There are no API keys, no
       |OAuth, and no bearer tokens. All REST API and MCP endpoints are public.
+      |No registration is required.
+      |
+      |## Payment
       |
       |Payment replaces authentication: a request to create an OP_RETURN returns
       |a Lightning invoice (or a unified Lightning + on-chain payment request).
       |The message is written to the blockchain after the invoice is paid.
+      |
+      |## Links
+      |
+      |- REST API documentation:
+      |  https://github.com/benthecarman/OP-RETURN-Bot/blob/master/docs/API.md
+      |- MCP discovery document: /.well-known/mcp.json
+      |- Agent Skills index: /.well-known/agent-skills/index.json
       |""".stripMargin
 
   val skillMd: String =
