@@ -41,13 +41,22 @@ object AgentContent {
       |
       |OP_RETURN Bot does not use authentication. There are no API keys, no
       |OAuth, and no bearer tokens. All REST API and MCP endpoints are public.
-      |No registration is required.
+      |
+      |## Agent registration
+      |
+      |No agent registration is required, and no registration flows are
+      |supported: there is no `/agent/identity` endpoint and the service does
+      |not accept `identity_assertion`, `service_auth`, or `anonymous`
+      |registration types. The service never issues credentials, so there are
+      |no scopes to request. Agents can call every endpoint anonymously, with
+      |no constraints.
       |
       |## Payment
       |
-      |Payment replaces authentication: a request to create an OP_RETURN returns
-      |a Lightning invoice (or a unified Lightning + on-chain payment request).
-      |The message is written to the blockchain after the invoice is paid.
+      |Payment replaces authentication and registration: a request to create an
+      |OP_RETURN returns a Lightning invoice (or a unified Lightning +
+      |on-chain payment request). The message is written to the blockchain
+      |after the invoice is paid.
       |
       |## Links
       |
@@ -55,6 +64,7 @@ object AgentContent {
       |  https://github.com/benthecarman/OP-RETURN-Bot/blob/master/docs/API.md
       |- MCP discovery document: /.well-known/mcp.json
       |- Agent Skills index: /.well-known/agent-skills/index.json
+      |- Contact: https://github.com/benthecarman/OP-RETURN-Bot/issues
       |""".stripMargin
 
   val skillMd: String =
