@@ -34,6 +34,10 @@ class McpController @Inject() (
   def discovery: Action[AnyContent] = Action {
     val json = Json.obj(
       "name" -> "OP_RETURN Bot",
+      "serverInfo" -> Json.obj(
+        "name" -> "OP_RETURN Bot",
+        "version" -> "1.0.0"
+      ),
       "description" -> "Write messages to the Bitcoin blockchain via OP_RETURN outputs",
       "url" -> "https://opreturnbot.com/mcp",
       "transport" -> Json.obj(

@@ -31,6 +31,13 @@ GET         /.well-known/mcp.json            controllers.McpController.discovery
 POST        /mcp                             controllers.McpController.mcp
 OPTIONS     /mcp                             controllers.McpController.mcpOptions
 
+# Agent-facing metadata
+GET         /sitemap.xml                     controllers.WellKnownController.sitemap
+GET         /auth.md                         controllers.WellKnownController.authMd
+GET         /.well-known/api-catalog         controllers.WellKnownController.apiCatalog
+GET         /.well-known/agent-skills/index.json      controllers.WellKnownController.agentSkillsIndex
+GET         /.well-known/agent-skills/:name/SKILL.md  controllers.WellKnownController.agentSkill(name)
+
 # Map static resources from the /public folder to the /assets URL path
 GET         /assets/*file                    controllers.Assets.versioned(path="/public", file: Asset)
 

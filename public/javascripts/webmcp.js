@@ -3,7 +3,24 @@
 
   var mc = navigator.modelContext;
 
-  mc.addTool({
+  // registerTool is the current WebMCP draft API; addTool was used by
+  // earlier polyfills.
+  var register = mc.registerTool
+    ? mc.registerTool.bind(mc)
+    : mc.addTool
+      ? mc.addTool.bind(mc)
+      : null;
+  if (!register) return;
+
+  function addTool(tool) {
+    // "execute" is the current draft field, "handler" was used by earlier
+    // polyfills; supply both.
+    tool.execute = tool.execute || tool.handler;
+    tool.handler = tool.handler || tool.execute;
+    register(tool);
+  }
+
+  addTool({
     name: "create_op_return",
     description:
       "Create a Lightning invoice to write an OP_RETURN message on the Bitcoin blockchain",
@@ -22,7 +39,7 @@
       },
       required: ["message"],
     },
-    handler: function (args) {
+    execute: function (args) {
       var body = new URLSearchParams();
       body.append("message", args.message);
       if (args.noTwitter) body.append("noTwitter", "true");
@@ -42,7 +59,7 @@
     },
   });
 
-  mc.addTool({
+  addTool({
     name: "create_unified_payment",
     description:
       "Create a unified payment (Lightning + on-chain) for an OP_RETURN message",
@@ -61,7 +78,7 @@
       },
       required: ["message"],
     },
-    handler: function (args) {
+    execute: function (args) {
       var body = new URLSearchParams();
       body.append("message", args.message);
       if (args.noTwitter) body.append("noTwitter", "true");
@@ -83,7 +100,7 @@
     },
   });
 
-  mc.addTool({
+  addTool({
     name: "check_payment_status",
     description:
       "Check the payment and broadcast status of an OP_RETURN request",
@@ -97,7 +114,7 @@
       },
       required: ["rHash"],
     },
-    handler: function (args) {
+    execute: function (args) {
       return fetch("/api/status/" + encodeURIComponent(args.rHash))
         .then(function (r) {
           return r.text();
@@ -108,7 +125,7 @@
     },
   });
 
-  mc.addTool({
+  addTool({
     name: "view_message",
     description:
       "View the OP_RETURN message for a confirmed transaction",
@@ -122,7 +139,7 @@
       },
       required: ["txId"],
     },
-    handler: function (args) {
+    execute: function (args) {
       return fetch("/api/view/" + encodeURIComponent(args.txId))
         .then(function (r) {
           return r.text();

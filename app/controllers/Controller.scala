@@ -88,6 +88,13 @@ class Controller @Inject() (cc: MessagesControllerComponents)
   final val onionAddr =
     "http://opreturnqfd4qdv745xy6ncwvogbtxddttqkqkp5gipby6uytzpxwzqd.onion"
 
+  // RFC 8288 Link header pointing agents at machine-readable resources.
+  // Combined into one header value because Play stores headers as a Map.
+  final val linkHeader =
+    "</.well-known/mcp.json>; rel=\"service-desc\", " +
+      "<https://github.com/benthecarman/OP-RETURN-Bot/blob/master/docs/API.md>; rel=\"service-doc\", " +
+      "</.well-known/api-catalog>; rel=\"api-catalog\""
+
   private val telegramHandler = new TelegramHandler(this)
 
   lazy val invoiceMonitor =
@@ -135,11 +142,20 @@ class Controller @Inject() (cc: MessagesControllerComponents)
 
   def index: Action[AnyContent] = {
     Action { implicit request: MessagesRequest[AnyContent] =>
-      // Pass an unpopulated form to the template
-      Ok(
-        views.html
-          .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
-        .withHeaders(("Onion-Location", onionAddr))
+      // Content negotiation: agents can ask for the homepage as markdown
+      if (request.accepts("text/markdown") && !request.accepts("text/html")) {
+        Ok(AgentContent.indexMarkdown)
+          .as("text/markdown; charset=utf-8")
+          .withHeaders(("Onion-Location", onionAddr),
+                       ("Link", linkHeader),
+                       ("Vary", "Accept"))
+      } else {
+        // Pass an unpopulated form to the template
+        Ok(
+          views.html
+            .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
+          .withHeaders(("Onion-Location", onionAddr), ("Link", linkHeader))
+      }
     }
   }
 
