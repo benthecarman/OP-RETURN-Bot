@@ -12,6 +12,7 @@ binaries/eclair
 dist/*
 target/
 target/*
+/result
 lib_managed/
 src_managed/
 project/boot/

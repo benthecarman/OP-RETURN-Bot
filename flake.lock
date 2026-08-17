@@ -1,0 +1,100 @@
+{
+  "nodes": {
+    "bitcoin-s-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1708353438,
+        "narHash": "sha256-DXjgnEP32YD8mbBmAs1dE4tqKn4MUpE90hvAXzPdCF8=",
+        "owner": "bitcoin-s",
+        "repo": "bitcoin-s",
+        "rev": "195cfbd27336328eac5c80dfb02cf7e8c09cbb90",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bitcoin-s",
+        "repo": "bitcoin-s",
+        "rev": "195cfbd27336328eac5c80dfb02cf7e8c09cbb90",
+        "type": "github"
+      }
+    },
+    "flake-utils": {
+      "locked": {
+        "lastModified": 1667395993,
+        "narHash": "sha256-nuEHfE/LcWyuSWnS8t12N1wc105Qtau+/OdUAjtQ0rA=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "5aed5285a952e0b949eb3ba02c12fa4fcfef535f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1786943417,
+        "narHash": "sha256-b4qgjdFtlz5TAZ1Hi7DFJeqX3sjaDUnrwr9OO+O1rM0=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "0dd31db7e6dbf9ce05697c4545f6fe01accec994",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-26.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "bitcoin-s-src": "bitcoin-s-src",
+        "nixpkgs": "nixpkgs",
+        "sbt-derivation": "sbt-derivation",
+        "scalastr-src": "scalastr-src"
+      }
+    },
+    "sbt-derivation": {
+      "inputs": {
+        "flake-utils": "flake-utils",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1698464090,
+        "narHash": "sha256-Pnej7WZIPomYWg8f/CZ65sfW85IfIUjYhphMMg7/LT0=",
+        "owner": "zaninime",
+        "repo": "sbt-derivation",
+        "rev": "6762cf2c31de50efd9ff905cbcc87239995a4ef9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "zaninime",
+        "repo": "sbt-derivation",
+        "type": "github"
+      }
+    },
+    "scalastr-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1741468768,
+        "narHash": "sha256-WO6nMgA5OkaRblaQgqV64lsZNxjGwvXBCGXTjUhEMgE=",
+        "owner": "benthecarman",
+        "repo": "scalastr",
+        "rev": "b957faa6407f511cd05c22ced225c5f15455d62a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "benthecarman",
+        "repo": "scalastr",
+        "rev": "b957faa6407f511cd05c22ced225c5f15455d62a",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
