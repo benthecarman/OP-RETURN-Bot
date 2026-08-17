@@ -82,6 +82,27 @@ bitcoin-s {
 }
 ```
 
+You can store a non-secret configuration in Nix. Use `configText` instead of
+`configFile`:
+
+```nix
+services.op-return-bot = {
+  enable = true;
+  configText = ''
+    include classpath("application.conf")
+
+    bitcoin-s {
+      network = mainnet
+      bitcoind.uri = "http://127.0.0.1:8333"
+      bitcoind.rpcUri = "http://127.0.0.1:8332"
+    }
+  '';
+};
+```
+
+Nix stores `configText` in the Nix store. Local users can read this content.
+Use `configFile` for passwords, tokens, macaroons, and private keys.
+
 If a reverse proxy serves the site, keep the default loopback address. If
 remote clients must connect to the port, set `openFirewall = true`.
 

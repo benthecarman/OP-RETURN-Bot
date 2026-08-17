@@ -7,6 +7,13 @@
 }:
 let
   cfg = config.services.op-return-bot;
+  configPath =
+    if cfg.configText != null then
+      toString (pkgs.writeText "op-return-bot.conf" cfg.configText)
+    else if cfg.configFile != null then
+      cfg.configFile
+    else
+      "/dev/null";
 in
 {
   options.services.op-return-bot = {
@@ -20,11 +27,26 @@ in
     };
 
     configFile = lib.mkOption {
-      type = lib.types.str;
+      type = lib.types.nullOr lib.types.str;
+      default = null;
       example = "/run/secrets/op-return-bot.conf";
       description = ''
         The absolute path to the HOCON configuration file.
         Use a runtime secret path to keep credentials out of the Nix store.
+      '';
+    };
+
+    configText = lib.mkOption {
+      type = lib.types.nullOr lib.types.lines;
+      default = null;
+      example = ''
+        include classpath("application.conf")
+
+        bitcoin-s.network = mainnet
+      '';
+      description = ''
+        The HOCON configuration that Nix writes to the Nix store.
+        Do not use this option for private credentials.
       '';
     };
 
@@ -75,7 +97,14 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = lib.hasPrefix "/" cfg.configFile;
+        assertion = (cfg.configFile != null) != (cfg.configText != null);
+        message = ''
+          Set exactly one of services.op-return-bot.configFile or
+          services.op-return-bot.configText.
+        '';
+      }
+      {
+        assertion = cfg.configFile == null || lib.hasPrefix "/" cfg.configFile;
         message = "services.op-return-bot.configFile must be an absolute path.";
       }
       {
@@ -103,7 +132,7 @@ in
       wantedBy = [ "multi-user.target" ];
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
-      unitConfig.ConditionPathExists = cfg.configFile;
+      unitConfig.ConditionPathExists = configPath;
 
       serviceConfig = {
         Type = "simple";
@@ -117,7 +146,7 @@ in
         ];
         ExecStart = lib.escapeShellArgs ([
           (lib.getExe cfg.package)
-          "-Dconfig.file=${cfg.configFile}"
+          "-Dconfig.file=${configPath}"
           "-Dhttp.address=${cfg.address}"
           "-Dhttp.port=${toString cfg.port}"
           "-Dpidfile.path=/run/op-return-bot/play.pid"
