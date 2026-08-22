@@ -97,7 +97,15 @@
                 "$out/libexec/op-return-bot/bin/op-return-bot" \
                 "$out/bin/op-return-bot" \
                 --set JAVA_HOME "${pkgs.jdk11_headless}" \
-                --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.jdk11_headless ]}"
+                --prefix PATH : "${
+                  pkgs.lib.makeBinPath [
+                    pkgs.jdk11_headless
+                    pkgs.coreutils
+                    pkgs.gawk
+                    pkgs.gnugrep
+                    pkgs.gnused
+                  ]
+                }"
 
               runHook postInstall
             '';
