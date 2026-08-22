@@ -1,6 +1,7 @@
 package controllers
 
 import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.pattern.after
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import config.OpReturnBotAppConfig
@@ -69,6 +70,17 @@ class Controller @Inject() (
   val onChainDAO: OnChainPaymentDAO = OnChainPaymentDAO()
   val nip5DAO: Nip5DAO = Nip5DAO()
   val zapDAO: ZapDAO = ZapDAO()
+
+  private val paymentStatusRetryDelay = 750.millis
+
+  private def waitForTxId(
+      rHash: Sha256Digest): Future[Option[DoubleSha256DigestBE]] = {
+    after(paymentStatusRetryDelay, system.scheduler) {
+      invoiceDAO
+        .findOpReturnRequestByRHash(rHash)
+        .map(_.flatMap(_._2.txIdOpt))
+    }
+  }
 
   // The URL to the request.  You can call this directly from the template, but it
   // can be more convenient to leave the template completely stateless i.e. all
@@ -488,30 +500,33 @@ class Controller @Inject() (
 
           opReturnDAO.safeDatabase
             .run(action)
-            .map {
+            .flatMap {
               case None =>
-                BadRequest("Invoice not from OP_RETURN Bot")
+                Future.successful(BadRequest("Invoice not from OP_RETURN Bot"))
               case Some((onChainOpt, invoiceDb, requestDb)) =>
-                requestDb.txIdOpt match {
-                  case Some(txId) =>
-                    Redirect(routes.Controller.success(txId.hex))
-                  case None =>
-                    if (invoiceDb.paid) {
-                      Ok(views.html.pending())
-                    } else {
-                      onChainOpt match {
-                        case None =>
-                          Ok(
-                            views.html.showInvoice(requestDb.getMessage,
-                                                   invoiceDb.invoice))
-                        case Some(onChain) =>
-                          val unified = createUnifiedAddr(onChain, invoiceDb)
-                          Ok(
-                            views.html.showUnified(requestDb.getMessage,
-                                                   invoiceDb.rHash.hex,
-                                                   unified))
-                      }
+                PaymentStatus(invoiceDb.paid, requestDb.txIdOpt) match {
+                  case PaymentStatus.Complete(_) =>
+                    Future.successful(
+                      Redirect(routes.Controller.success(hash.hex)))
+                  case PaymentStatus.Pending =>
+                    waitForTxId(hash).map {
+                      case Some(_) =>
+                        Redirect(routes.Controller.success(hash.hex))
+                      case None => Ok(views.html.pending())
                     }
+                  case PaymentStatus.Unpaid =>
+                    Future.successful(onChainOpt match {
+                      case None =>
+                        Ok(
+                          views.html.showInvoice(requestDb.getMessage,
+                                                 invoiceDb.invoice))
+                      case Some(onChain) =>
+                        val unified = createUnifiedAddr(onChain, invoiceDb)
+                        Ok(
+                          views.html.showUnified(requestDb.getMessage,
+                                                 invoiceDb.rHash.hex,
+                                                 unified))
+                    })
                 }
             }
       }
@@ -533,26 +548,31 @@ class Controller @Inject() (
             BadRequest(views.html
               .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
         case Success(rHash) =>
-          invoiceDAO.findOpReturnRequestByRHash(rHash).map {
+          invoiceDAO.findOpReturnRequestByRHash(rHash).flatMap {
             case None =>
-              BadRequest(views.html
-                .index(recentTransactions.toSeq, opReturnRequestForm, postUrl))
+              Future.successful(BadRequest(views.html
+                .index(recentTransactions.toSeq, opReturnRequestForm, postUrl)))
             case Some((invoiceDb, requestDb)) =>
-              requestDb.txIdOpt match {
-                case Some(txId) =>
-                  Ok(
-                    views.html.success(txId,
-                                       requestDb.messageBytes.length > 80))
-                case None =>
-                  if (invoiceDb.paid) {
-                    Ok(views.html.pending())
-                  } else {
+              PaymentStatus(invoiceDb.paid, requestDb.txIdOpt) match {
+                case PaymentStatus.Complete(txId) =>
+                  Future.successful(
+                    Ok(views.html.success(txId,
+                                          requestDb.messageBytes.length > 80)))
+                case PaymentStatus.Pending =>
+                  waitForTxId(rHash).map {
+                    case Some(txId) =>
+                      Ok(
+                        views.html.success(txId,
+                                           requestDb.messageBytes.length > 80))
+                    case None => Ok(views.html.pending())
+                  }
+                case PaymentStatus.Unpaid =>
+                  Future.successful(
                     BadRequest(
                       views.html
                         .index(recentTransactions.toSeq,
                                opReturnRequestForm,
-                               postUrl))
-                  }
+                               postUrl)))
               }
           }
       }
