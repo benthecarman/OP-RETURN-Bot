@@ -22,3 +22,13 @@ jobs:
         uses: sbt/setup-sbt@v1
       - name: Compile and Check Formatting
         run: sbt -Dsbt.supershell=false downloadBitcoind downloadLnd test:compile scalafmtCheckAll test
+
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Build Nix package
+        run: nix build .#default --no-link

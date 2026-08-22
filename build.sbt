@@ -11,6 +11,7 @@ val pekkoV = "1.4.0"
 val pekkoHttpV = "1.0.1"
 val jacksonV = "2.20.2"
 val logbackV = "1.5.32"
+val scalastrV = "0.1.0"
 
 ThisBuild / dependencyOverrides +=
   "org.flywaydb" % "flyway-core" % "9.22.3"
@@ -18,11 +19,6 @@ ThisBuild / excludeDependencies +=
   ExclusionRule("org.flywaydb", "flyway-database-postgresql")
 
 ThisBuild / scalaVersion := "2.13.18"
-
-lazy val scalastrClient = ProjectRef(
-  uri(
-    "https://github.com/benthecarman/scalastr.git#9629ff789663844f60d49ab8fc38622a55c66018"),
-  "client")
 
 lazy val lnurl = project
   .in(file("lnurl"))
@@ -56,7 +52,7 @@ lazy val lnurlTest = project
 lazy val root = project
   .in(file("."))
   .enablePlugins(PlayScala, DebianPlugin)
-  .dependsOn(lnurl, scalastrClient)
+  .dependsOn(lnurl)
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
@@ -80,6 +76,7 @@ lazy val root = project
       "com.github.scribejava" % "scribejava-apis" % "8.3.3",
       "com.softwaremill.sttp.client3" %% "pekko-http-backend" % "3.9.0",
       "com.bot4s" %% "telegram-core" % "5.6.1",
+      "org.scalastr" %% "client" % scalastrV withSources () withJavadoc (),
       "ch.qos.logback" % "logback-classic" % logbackV,
       "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
       "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV
