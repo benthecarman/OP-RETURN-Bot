@@ -73,7 +73,7 @@
                 );
             };
 
-            depsSha256 = "sha256-DsHqQ8zPo4rIIPNxVUeJaUJskQ15Hi0nU4TLEhsWMrI=";
+            depsSha256 = "sha256-ngY5zNHPVauwUfJnQFcmR9/NfIqPmknydJwLRHvTevg=";
             depsWarmupCommand = ''
               (
                 cd .nix-bitcoin-s
@@ -103,8 +103,6 @@
               sbt -Dsbt.supershell=false compile
             '';
             CI = "true";
-
-            patches = [ ./nix/production-build.patch ];
 
             nativeBuildInputs = [
               pkgs.git

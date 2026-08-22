@@ -6,14 +6,34 @@ import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 
-val bitcoinsV = "1.9.7-412-195cfbd2-SNAPSHOT"
-val scalastrV = "0.0.0-77-b957faa6-SNAPSHOT"
 val akkaV = "2.6.20"
 
-resolvers += Resolver.sonatypeRepo("snapshots")
-
-resolvers +=
-  "Sonatype OSS Snapshots" at "https://s01.oss.sonatype.org/content/repositories/snapshots"
+// These published dependencies were transitive dependencies of the vendored
+// bitcoin-s and scala-str snapshots. Keep them managed so sbt can resolve and
+// update their normal transitive dependency graphs.
+val vendoredTransitiveDependencies = Seq(
+  "com.lightbend.akka.grpc" %% "akka-grpc-runtime" % "2.1.6",
+  "com.lihaoyi" %% "ujson" % "3.1.4",
+  "com.lihaoyi" %% "upickle" % "3.1.4",
+  "com.thesamet.scalapb" %% "scalapb-runtime" % "0.11.11",
+  "com.typesafe" % "config" % "1.4.3",
+  "com.typesafe.akka" %% "akka-discovery" % akkaV,
+  "com.typesafe.akka" %% "akka-http" % "10.2.10",
+  "com.typesafe.akka" %% "akka-http2-support" % "10.2.10",
+  "com.typesafe.play" %% "play-json" % "2.10.4",
+  "com.typesafe.slick" %% "slick" % "3.4.1",
+  "com.typesafe.slick" %% "slick-hikaricp" % "3.4.1",
+  "io.dropwizard.metrics" % "metrics-core" % "4.2.25",
+  "io.grpc" % "grpc-stub" % "1.48.1",
+  "io.monix" %% "monix-execution" % "3.4.1",
+  "org.bouncycastle" % "bcprov-jdk18on" % "1.77",
+  "org.clapper" %% "grizzled-slf4j" % "1.3.4",
+  "org.flywaydb" % "flyway-core" % "9.2.1",
+  "org.postgresql" % "postgresql" % "42.7.1",
+  "org.scijava" % "native-lib-loader" % "2.5.0",
+  "org.scodec" %% "scodec-bits" % "1.1.38",
+  "org.xerial" % "sqlite-jdbc" % "3.45.1.0"
+)
 
 lazy val root = project
   .in(file("."))
@@ -26,15 +46,6 @@ lazy val root = project
     libraryDependencies ++= Seq(
       guice,
       "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
-      "org.bitcoin-s" %% "bitcoin-s-lnurl" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
-      "org.scalastr" %% "client" % scalastrV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-key-manager" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-esplora" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-bitcoind-rpc" % bitcoinsV withSources () withJavadoc (),
-      "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
       "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
@@ -45,7 +56,7 @@ lazy val root = project
       "com.bot4s" %% "telegram-akka" % "5.6.1",
       "ch.qos.logback" % "logback-classic" % "1.2.11",
       "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
-    ),
+    ) ++ vendoredTransitiveDependencies,
     dependencyOverrides ++= Seq(
       "ch.qos.logback" % "logback-classic" % "1.2.11",
       "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
