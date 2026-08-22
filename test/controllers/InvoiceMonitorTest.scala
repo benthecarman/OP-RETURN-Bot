@@ -205,6 +205,7 @@ class InvoiceMonitorTest extends BitcoinSFixture with BeforeAndAfterEach {
   val walletNameConfig: Config = {
     ConfigFactory.parseString(
       s"""
+         |bitcoin-s.opreturnbot.db.connectionPool="disabled"
          |bitcoin-s.bitcoind.receivingWalletName=$receivingWalletName
          |bitcoin-s.bitcoind.sendingWalletName=$sendingWalletName
          |""".stripMargin)
