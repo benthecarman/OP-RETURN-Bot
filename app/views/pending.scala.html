@@ -1,11 +1,9 @@
-@()(implicit request: MessagesRequestHeader)
+@()
 
-@main("Success") {
+@main("Payment received", Some(2)) {
 
-<h1>Success!</h1>
+<h1>Payment received</h1>
 
-<p> Your invoice was successfully paid, sadly, OP_RETURN Bot is being overwhelmed with requests and is unable to process
-    your transaction at this time. </p>
-<p>Your transaction will be sent shortly, you do not need to take any other action</p>
-<p>You can refresh this page to see if the transaction was broadcast</p>
+<p>Your payment succeeded. The broadcast of your transaction is in progress.</p>
+<p>This page refreshes automatically until the transaction ID is available.</p>
 }
