@@ -64,7 +64,7 @@
                 );
             };
 
-            depsSha256 = "sha256-TdIEVEe83nEcO25XAxo/9VS366YzXN9QcPtTqFeu3Gs=";
+            depsSha256 = "sha256-/ZtRb21cVdTnEY24tk/J9jsJ7kSXGy0DVdQhOj/5V+8=";
             depsWarmupCommand = ''
               sbt -Dsbt.supershell=false compile
             '';
