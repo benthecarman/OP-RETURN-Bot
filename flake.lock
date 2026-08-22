@@ -1,22 +1,5 @@
 {
   "nodes": {
-    "bitcoin-s-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1708353438,
-        "narHash": "sha256-DXjgnEP32YD8mbBmAs1dE4tqKn4MUpE90hvAXzPdCF8=",
-        "owner": "bitcoin-s",
-        "repo": "bitcoin-s",
-        "rev": "195cfbd27336328eac5c80dfb02cf7e8c09cbb90",
-        "type": "github"
-      },
-      "original": {
-        "owner": "bitcoin-s",
-        "repo": "bitcoin-s",
-        "rev": "195cfbd27336328eac5c80dfb02cf7e8c09cbb90",
-        "type": "github"
-      }
-    },
     "flake-utils": {
       "locked": {
         "lastModified": 1667395993,
@@ -50,10 +33,8 @@
     },
     "root": {
       "inputs": {
-        "bitcoin-s-src": "bitcoin-s-src",
         "nixpkgs": "nixpkgs",
-        "sbt-derivation": "sbt-derivation",
-        "scalastr-src": "scalastr-src"
+        "sbt-derivation": "sbt-derivation"
       }
     },
     "sbt-derivation": {
@@ -74,23 +55,6 @@
       "original": {
         "owner": "zaninime",
         "repo": "sbt-derivation",
-        "type": "github"
-      }
-    },
-    "scalastr-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1741468768,
-        "narHash": "sha256-WO6nMgA5OkaRblaQgqV64lsZNxjGwvXBCGXTjUhEMgE=",
-        "owner": "benthecarman",
-        "repo": "scalastr",
-        "rev": "b957faa6407f511cd05c22ced225c5f15455d62a",
-        "type": "github"
-      },
-      "original": {
-        "owner": "benthecarman",
-        "repo": "scalastr",
-        "rev": "b957faa6407f511cd05c22ced225c5f15455d62a",
         "type": "github"
       }
     }

@@ -326,9 +326,7 @@ case class OpReturnRequestDAO()(implicit
   }
 
   class OpReturnRequestTable(tag: Tag)
-      extends TableAutoInc[OpReturnRequestDb](tag,
-                                              schemaName,
-                                              "op_return_requests") {
+      extends TableAutoInc(tag, schemaName, "op_return_requests") {
 
     def messageBytes: Rep[ByteVector] = column("message_bytes")
 

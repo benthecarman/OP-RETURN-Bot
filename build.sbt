@@ -6,60 +6,83 @@ import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 
-val akkaV = "2.6.20"
+val bitcoinsV = "1.9.12"
+val pekkoV = "1.4.0"
+val pekkoHttpV = "1.0.1"
+val jacksonV = "2.20.2"
+val logbackV = "1.5.32"
 
-// These published dependencies were transitive dependencies of the vendored
-// bitcoin-s and scala-str snapshots. Keep them managed so sbt can resolve and
-// update their normal transitive dependency graphs.
-val vendoredTransitiveDependencies = Seq(
-  "com.lightbend.akka.grpc" %% "akka-grpc-runtime" % "2.1.6",
-  "com.lihaoyi" %% "ujson" % "3.1.4",
-  "com.lihaoyi" %% "upickle" % "3.1.4",
-  "com.thesamet.scalapb" %% "scalapb-runtime" % "0.11.11",
-  "com.typesafe" % "config" % "1.4.3",
-  "com.typesafe.akka" %% "akka-discovery" % akkaV,
-  "com.typesafe.akka" %% "akka-http" % "10.2.10",
-  "com.typesafe.akka" %% "akka-http2-support" % "10.2.10",
-  "com.typesafe.play" %% "play-json" % "2.10.4",
-  "com.typesafe.slick" %% "slick" % "3.4.1",
-  "com.typesafe.slick" %% "slick-hikaricp" % "3.4.1",
-  "io.dropwizard.metrics" % "metrics-core" % "4.2.25",
-  "io.grpc" % "grpc-stub" % "1.48.1",
-  "io.monix" %% "monix-execution" % "3.4.1",
-  "org.bouncycastle" % "bcprov-jdk18on" % "1.77",
-  "org.clapper" %% "grizzled-slf4j" % "1.3.4",
-  "org.flywaydb" % "flyway-core" % "9.2.1",
-  "org.postgresql" % "postgresql" % "42.7.1",
-  "org.scijava" % "native-lib-loader" % "2.5.0",
-  "org.scodec" %% "scodec-bits" % "1.1.38",
-  "org.xerial" % "sqlite-jdbc" % "3.45.1.0"
-)
+ThisBuild / dependencyOverrides +=
+  "org.flywaydb" % "flyway-core" % "9.22.3"
+ThisBuild / excludeDependencies +=
+  ExclusionRule("org.flywaydb", "flyway-database-postgresql")
+
+ThisBuild / scalaVersion := "2.13.18"
+
+lazy val scalastrClient = ProjectRef(
+  uri(
+    "https://github.com/benthecarman/scalastr.git#9629ff789663844f60d49ab8fc38622a55c66018"),
+  "client")
+
+lazy val lnurl = project
+  .in(file("lnurl"))
+  .settings(scalacOptions += "-Xsource:3")
+  .settings(
+    name := "op-return-bot-lnurl",
+    libraryDependencies ++= Seq(
+      "org.bitcoin-s" %% "bitcoin-s-core" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-app-commons" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-async-utils" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-tor" % bitcoinsV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-actor" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-stream" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-http" % pekkoHttpV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-slf4j" % pekkoV withSources () withJavadoc ()
+    )
+  )
+
+
+lazy val lnurlTest = project
+  .in(file("lnurl-test"))
+  .settings(scalacOptions += "-Xsource:3")
+  .settings(
+    name := "op-return-bot-lnurl-test",
+    libraryDependencies ++= Seq(
+      "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc ()
+    )
+  )
+  .dependsOn(lnurl)
 
 lazy val root = project
   .in(file("."))
   .enablePlugins(PlayScala, DebianPlugin)
+  .dependsOn(lnurl, scalastrClient)
   .settings(
     name := "op-return-bot",
     version := "0.1.0",
-    scalaVersion := "2.13.10",
     maintainer := "benthecarman",
     libraryDependencies ++= Seq(
       guice,
-      "org.scalatestplus.play" %% "scalatestplus-play" % "5.1.0" % Test,
-      "com.typesafe.akka" %% "akka-stream" % akkaV withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-actor-typed" % akkaV withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-serialization-jackson" % akkaV withSources () withJavadoc (),
-      "com.typesafe.akka" %% "akka-slf4j" % akkaV withSources () withJavadoc (),
+      "org.scalatestplus.play" %% "scalatestplus-play" % "6.0.0" % Test,
+      "org.bitcoin-s" %% "bitcoin-s-lnd-rpc" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-app-commons" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-db-commons" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-fee-provider" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-key-manager" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-esplora" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-bitcoind-rpc" % bitcoinsV withSources () withJavadoc (),
+      "org.bitcoin-s" %% "bitcoin-s-testkit" % bitcoinsV % Test withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-stream" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-actor-typed" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-serialization-jackson" % pekkoV withSources () withJavadoc (),
+      "org.apache.pekko" %% "pekko-slf4j" % pekkoV withSources () withJavadoc (),
       "com.google.zxing" % "core" % "3.5.1" withSources () withJavadoc (),
       "com.github.scribejava" % "scribejava-apis" % "8.3.3",
-      "com.softwaremill.sttp.client3" %% "akka-http-backend" % "3.8.3",
-      "com.bot4s" %% "telegram-akka" % "5.6.1",
-      "ch.qos.logback" % "logback-classic" % "1.2.11",
-      "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
-    ) ++ vendoredTransitiveDependencies,
-    dependencyOverrides ++= Seq(
-      "ch.qos.logback" % "logback-classic" % "1.2.11",
-      "com.fasterxml.jackson.core" % "jackson-databind" % "2.11.4"
+      "com.softwaremill.sttp.client3" %% "pekko-http-backend" % "3.9.0",
+      "com.bot4s" %% "telegram-core" % "5.6.1",
+      "ch.qos.logback" % "logback-classic" % logbackV,
+      "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
+      "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV
     ),
     scalacOptions ++= Seq(
       "-feature",
@@ -95,7 +118,7 @@ TaskKeys.downloadLnd := {
     Files.createDirectories(binaryDir)
   }
 
-  val version = "0.19.0-beta"
+  val version = "0.21.1-beta"
 
   val (platform, suffix) =
     if (Properties.isLinux) ("linux-amd64", "tar.gz")
@@ -130,13 +153,13 @@ TaskKeys.downloadLnd := {
 
     val expectedHash =
       if (Properties.isLinux)
-        "d1003a4bfeef838fda3e0e970a81ed63a9ae6ae4e20ed0f46ad5f0cafc681e07"
+        "ccb077399d45220d00cfbc46219a2abc9be981a7318b16efb132273746243e01"
       else if (Properties.isMac && System.getProperty("os.arch") == "aarch64")
-        "bec913c4e64aa64c3556472298003791c806a1baa875480c6cfd305d126fd817"
+        "e7d4b360b819f4575a721c91c9da13825abb956fb39f38044af55901ce22e998"
       else if (Properties.isMac)
-        "65cd30eb686db546157bb960b0987a59f14a3286941d1cd9849559c7c1e725ae"
+        "f7af340370936aca5ddf4ba6ba878eb0652751584ba42275efdbfe24bcad6e66"
       else if (Properties.isWin)
-        "f015bdc513f7f09744cafc20ded5450ace4e64cb486efac736d3f0afc27e99c4"
+        "bf5d7266e98835f532b00be166b8d322ec9525f480b9628baedfd5503b07793e"
       else sys.error(s"Unsupported OS: ${Properties.osName}")
 
     val success = hash.equalsIgnoreCase(expectedHash)
